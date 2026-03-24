@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { loadConfig } from '../src/config'
 import { writeFileSync, unlinkSync, existsSync } from 'fs'
 import { resolve } from 'path'
@@ -9,7 +9,6 @@ afterEach(() => {
   if (existsSync(CONFIG_PATH)) {
     unlinkSync(CONFIG_PATH)
   }
-  delete process.env.DEPLOY_ENV
 })
 
 describe('loadConfig', () => {
@@ -23,7 +22,6 @@ describe('loadConfig', () => {
       infisical: {
         projectId: 'proj-123',
         paths: ['/ai/shared', '/ai/web'],
-        env: 'prod',
       },
       envFiles: ['.env.local', '.env.staging'],
       generate: {
@@ -35,36 +33,20 @@ describe('loadConfig', () => {
     const config = loadConfig()
     expect(config.infisical?.projectId).toBe('proj-123')
     expect(config.infisical?.paths).toEqual(['/ai/shared', '/ai/web'])
-    expect(config.infisical?.env).toBe('prod')
     expect(config.envFiles).toEqual(['.env.local', '.env.staging'])
     expect(config.generate?.out).toBe('public/__env.js')
   })
 
-  it('解析 $ENV_VAR 引用', () => {
-    process.env.DEPLOY_ENV = 'staging'
+  it('只有 paths 的最小配置', () => {
     writeFileSync(CONFIG_PATH, JSON.stringify({
       infisical: {
-        projectId: 'proj-123',
-        paths: ['/ai/shared'],
-        env: '$DEPLOY_ENV',
+        paths: ['/ai'],
       },
     }))
 
     const config = loadConfig()
-    expect(config.infisical?.env).toBe('staging')
-  })
-
-  it('$ENV_VAR 引用不存在时返回空字符串', () => {
-    writeFileSync(CONFIG_PATH, JSON.stringify({
-      infisical: {
-        projectId: 'proj-123',
-        paths: ['/'],
-        env: '$NONEXISTENT_VAR',
-      },
-    }))
-
-    const config = loadConfig()
-    expect(config.infisical?.env).toBe('')
+    expect(config.infisical?.paths).toEqual(['/ai'])
+    expect(config.infisical?.projectId).toBeUndefined()
   })
 
   it('JSON 格式错误不崩溃', () => {

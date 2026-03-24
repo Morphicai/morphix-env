@@ -7,7 +7,7 @@ import spawn from 'cross-spawn'
 import { writeFileSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 
-const VERSION = '0.3.0'
+const VERSION = '0.4.0'
 const DEFAULT_ENV_FILE = '.env.local'
 
 // ─── 参数解析 ─────────────────────────────────────────────
@@ -20,6 +20,7 @@ interface Args {
   verbose: boolean
   filter: string | null
   noInfisical: boolean
+  env: string | null
 }
 
 function parseArgs(argv: string[]): Args {
@@ -31,6 +32,7 @@ function parseArgs(argv: string[]): Args {
     verbose: false,
     filter: null,
     noInfisical: false,
+    env: null,
   }
 
   let i = 2 // skip node, script
@@ -56,6 +58,9 @@ function parseArgs(argv: string[]): Args {
     } else if (arg === '--filter') {
       i++
       if (argv[i]) args.filter = argv[i]
+    } else if (arg === '--env' || arg === '-e') {
+      i++
+      if (argv[i]) args.env = argv[i]
     } else if (arg === '--verbose' || arg === '-v') {
       args.verbose = true
     } else if (arg === '--no-infisical') {
@@ -99,7 +104,7 @@ function mergeWithConfig(args: Args, config: MxEnvConfig): Args {
 async function loadAllEnv(args: Args, config: MxEnvConfig) {
   // 1. Infisical 拉取（低优先级，不覆盖已有值）
   if (!args.noInfisical) {
-    const env = config.infisical?.env || process.env.DEPLOY_ENV || process.env.INFISICAL_ENV || 'dev'
+    const env = args.env || process.env.DEPLOY_ENV || process.env.INFISICAL_ENV || 'prod'
     const paths = config.infisical?.paths || ['/']
 
     // 优先尝试 Machine Identity（SDK）— Docker/CI 场景
@@ -256,8 +261,9 @@ Usage:
 Options:
   -f, --env-file <path>    Env file to load (default: .env.local, repeatable)
   -o, --out <path>         Output path for generate (default: public/__env.js)
+  -e, --env <name>         Infisical environment (dev/staging/prod), overrides config
   --filter <prefix>        Only include vars with this prefix
-  --no-infisical           Skip Infisical SDK fetch
+  --no-infisical           Skip Infisical fetch entirely
   -v, --verbose            Show loaded variable names
   --help, -h               Show this help
   --version                Show version
