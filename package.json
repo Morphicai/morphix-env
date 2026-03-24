@@ -1,5 +1,5 @@
 {
-  "name": "mx-env",
+  "name": "morphix-env",
   "version": "0.1.0",
   "description": "Environment variable toolkit — Infisical integration, local overrides, and client-side runtime injection for Next.js / Vite / Express.",
   "author": "MorphixAI <dev@morphixai.com>",
@@ -12,7 +12,7 @@
     "url": "https://github.com/Morphicai/mx-env/issues"
   },
   "bin": {
-    "mx-env": "./dist/cli.js"
+    "morphix-env": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsup src/cli.ts --format cjs --dts --clean",
