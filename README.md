@@ -26,7 +26,7 @@ npm install -D morphix-env
 ## Quick Start
 
 ```bash
-# Run a command with .env.local overrides
+# Run a command with env injection
 morphix-env run -- next dev
 
 # Generate client-side __env.js
@@ -36,6 +36,126 @@ morphix-env generate --out public/__env.js
 morphix-env inspect
 ```
 
+## How It Works
+
+### Core Flow
+
+```
+morphix-env run -- <command>
+│
+├─ 1. Read mx-env.config.json
+│
+├─ 2. Load Infisical secrets ──────────────────────────┐
+│     │                                                 │
+│     ├─ INFISICAL_CLIENT_ID exists?                    │
+│     │   ├─ Yes → SDK (Machine Identity) ── CI/Docker  │
+│     │   └─ No ──┐                                     │
+│     │           ├─ infisical CLI installed?            │
+│     │           │   ├─ Yes → CLI (user login) ── Local │
+│     │           │   └─ No → Skip                       │
+│     │                                                 │
+│     └─ Inject into process.env (does NOT overwrite)   │
+│                                                       │
+├─ 3. Load .env.local ─────────────────────────────────┐
+│     └─ Inject into process.env (OVERWRITES all)       │
+│                                                       │
+├─ 4. Generate __env.js (if configured)                 │
+│     └─ Extract NEXT_PUBLIC_* / VITE_* → write file    │
+│                                                       │
+└─ 5. Spawn child command                               │
+      └─ Inherits fully assembled process.env           │
+```
+
+### Priority (high → low)
+
+```
+┌─────────────────────────────────────────────────┐
+│  .env.local                     ← HIGHEST       │
+│  Always wins. Developer's local overrides.       │
+├─────────────────────────────────────────────────┤
+│  Infisical secrets              ← MEDIUM         │
+│  Pulled via SDK or CLI. Does not overwrite.      │
+├─────────────────────────────────────────────────┤
+│  process.env                    ← LOWEST         │
+│  Docker ENV, CI vars, shell exports.             │
+└─────────────────────────────────────────────────┘
+```
+
+### Authentication Flow
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                   morphix-env starts                      │
+│                         │                                 │
+│           INFISICAL_CLIENT_ID set?                        │
+│              /                  \                          │
+│           Yes                    No                       │
+│            │                      │                       │
+│    ┌───────▼────────┐    infisical CLI installed?         │
+│    │  SDK Auth       │       /            \                │
+│    │  (Machine ID)   │    Yes              No             │
+│    │                 │     │                │              │
+│    │  CI / Docker /  │  ┌──▼───────────┐   │              │
+│    │  Production     │  │ CLI Auth      │   ▼              │
+│    └────────┬────────┘  │ (User Login)  │  Skip            │
+│             │           │               │  Infisical       │
+│             │           │ Local Dev     │                  │
+│             │           └──────┬────────┘                  │
+│             │                  │                           │
+│             ▼                  ▼                           │
+│         Pull secrets from Infisical                       │
+│         Inject into process.env                           │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Local Development
+
+```
+Developer machine:
+  1. infisical login          ← one-time, session cached
+  2. pnpm dev                 ← morphix-env auto-detects CLI
+     └─ morphix-env run
+        ├─ infisical CLI pulls 69 secrets
+        ├─ .env.local overrides API_BASE_URL → localhost
+        └─ next dev starts with all vars
+```
+
+### CI / Docker
+
+```
+Container / CI runner:
+  ENV INFISICAL_CLIENT_ID=xxx
+  ENV INFISICAL_CLIENT_SECRET=xxx
+  ENV DEPLOY_ENV=prod
+
+  CMD morphix-env run -- node server.js
+      └─ morphix-env run
+         ├─ SDK pulls secrets (no CLI needed)
+         ├─ .env.local not present → skip
+         └─ server starts with prod vars
+```
+
+### `__env.js` — Client-Side Runtime Injection
+
+```
+Build phase (CI):
+  morphix-env run -- next build
+  ├─ NEXT_PUBLIC_* injected at build time → baked into JS bundle
+  └─ Works, but image is environment-specific
+
+Runtime injection (Docker, optional):
+  morphix-env run -- node server.js
+  ├─ morphix-env generates public/__env.js:
+  │    window.__ENV = {
+  │      "NEXT_PUBLIC_API_URL": "https://api.prod.example.com",
+  │      "NEXT_PUBLIC_APP_NAME": "MyApp"
+  │    };
+  │
+  ├─ Browser loads <script src="/__env.js"> before app
+  └─ App reads: window.__ENV?.NEXT_PUBLIC_API_URL
+     → One build, deploy to any environment
+```
+
 ## Commands
 
 ### `morphix-env run [options] -- <command>`
@@ -43,7 +163,7 @@ morphix-env inspect
 Load environment variables, then execute a command. The child process inherits all injected vars.
 
 ```bash
-# Basic: load .env.local, run dev server
+# Basic: load env, run dev server
 morphix-env run -- next dev --turbo -p 3004
 
 # Custom env file
@@ -56,46 +176,14 @@ morphix-env run --no-infisical -- npm start
 morphix-env run -v -- node server.js
 ```
 
-**Loading priority (high to low):**
-
-1. `.env.local` (or `--env-file`) — always wins
-2. Infisical secrets — pulled via SDK
-3. Existing `process.env` — Docker ENV, CI vars, etc.
-
 ### `morphix-env generate [options]`
 
-Extract public environment variables (`NEXT_PUBLIC_*`, `VITE_*`, `EXPO_PUBLIC_*`) and write them to a JS file for browser runtime injection.
+Extract public environment variables and write to a JS file for browser runtime injection.
 
 ```bash
-# Default: public/__env.js
-morphix-env generate
-
-# Custom output path (Vite projects)
-morphix-env generate --out dist/__env.js
-
-# Only include specific prefix
-morphix-env generate --filter NEXT_PUBLIC_
-```
-
-Output file content:
-
-```js
-window.__ENV={"NEXT_PUBLIC_API_URL":"https://api.example.com","NEXT_PUBLIC_APP_NAME":"MyApp"};
-```
-
-Load it in your HTML before your app bundle:
-
-```html
-<script src="/__env.js"></script>
-```
-
-Read in your app:
-
-```ts
-function getEnv(key: string, fallback = ''): string {
-  if (typeof window === 'undefined') return process.env[key] || fallback
-  return window.__ENV?.[key] || process.env[key] || fallback
-}
+morphix-env generate                              # → public/__env.js
+morphix-env generate --out dist/__env.js           # Vite projects
+morphix-env generate --filter NEXT_PUBLIC_          # Only Next.js vars
 ```
 
 ### `morphix-env inspect [options]`
@@ -115,19 +203,18 @@ morphix-env inspect -f .env.production
 | `--env-file <path>` | `-f` | Env file to load (default: `.env.local`, repeatable) |
 | `--out <path>` | `-o` | Output path for generate (default: `public/__env.js`) |
 | `--filter <prefix>` | | Only include vars with this prefix |
-| `--no-infisical` | | Skip Infisical SDK fetch |
+| `--no-infisical` | | Skip Infisical fetch entirely |
 | `--verbose` | `-v` | Show loaded variable names |
 
 ## Config File
 
-Create `morphix-env.config.json` in your project root to declare project-level settings. This file is committed to git.
+Create `mx-env.config.json` in your project root. Committed to git.
 
 ```json
 {
   "infisical": {
-    "projectId": "your-project-id",
-    "paths": ["/ai/shared", "/ai/web"],
-    "env": "$DEPLOY_ENV"
+    "paths": ["/ai"],
+    "env": "dev"
   },
   "envFiles": [".env.local"],
   "generate": {
@@ -137,56 +224,55 @@ Create `morphix-env.config.json` in your project root to declare project-level s
 }
 ```
 
-| Field | Description | Committed to git? |
-|-------|-------------|-------------------|
-| `infisical.projectId` | Infisical project ID | Yes — not a secret |
-| `infisical.paths` | Secret paths to pull | Yes — not a secret |
-| `infisical.env` | Environment name, supports `$VAR` references | Yes |
-| `envFiles` | Local override files to load | Yes |
-| `generate` | Client-side __env.js output config | Yes |
+### Config vs Environment Variables
 
-**Infisical authentication** is always via environment variables — never in the config file:
-
-| Env Var | Description |
-|---------|-------------|
-| `INFISICAL_CLIENT_ID` | Machine Identity client ID |
-| `INFISICAL_CLIENT_SECRET` | Machine Identity client secret |
-| `DEPLOY_ENV` | Environment name (`dev` / `staging` / `prod`) |
+```
+┌──────────────────────────────────────────────────────┐
+│  mx-env.config.json (committed to git)                │
+│  ├─ paths          → which secrets to pull            │
+│  ├─ env            → which environment                │
+│  ├─ envFiles       → which override files to load     │
+│  └─ generate       → __env.js output config           │
+│                                                       │
+│  These are PROJECT CONFIG, not secrets.                │
+├──────────────────────────────────────────────────────┤
+│  Environment Variables (NEVER committed)              │
+│  ├─ INFISICAL_CLIENT_ID      → Machine Identity       │
+│  ├─ INFISICAL_CLIENT_SECRET  → Machine Identity       │
+│  └─ DEPLOY_ENV               → prod / staging / dev   │
+│                                                       │
+│  These are CREDENTIALS, set in CI/Docker only.        │
+│  Local dev uses infisical CLI login instead.           │
+└──────────────────────────────────────────────────────┘
+```
 
 ## Usage Examples
 
 ### Next.js
 
-```json
+```jsonc
+// package.json
 {
   "scripts": {
     "dev": "morphix-env run -- next dev --turbo -p 3004",
     "build": "morphix-env run -- next build",
-    "start": "morphix-env run -- node server.js"
+    "start": "morphix-env run -- next start"
   }
 }
 ```
 
-`morphix-env.config.json`:
-
 ```json
+// mx-env.config.json
 {
-  "infisical": {
-    "projectId": "xxx",
-    "paths": ["/ai/shared", "/ai/web"],
-    "env": "$DEPLOY_ENV"
-  },
+  "infisical": { "paths": ["/ai"], "env": "dev" },
   "envFiles": [".env.local"],
-  "generate": {
-    "out": "public/__env.js",
-    "filter": "NEXT_PUBLIC_"
-  }
+  "generate": { "out": "public/__env.js", "filter": "NEXT_PUBLIC_" }
 }
 ```
 
 ### Vite (React / Vue / Ionic)
 
-```json
+```jsonc
 {
   "scripts": {
     "dev": "morphix-env run -- vite",
@@ -197,21 +283,14 @@ Create `morphix-env.config.json` in your project root to declare project-level s
 
 ```json
 {
-  "infisical": {
-    "projectId": "xxx",
-    "paths": ["/ai/shared", "/ai/shell"],
-    "env": "$DEPLOY_ENV"
-  },
-  "generate": {
-    "out": "dist/__env.js",
-    "filter": "VITE_"
-  }
+  "infisical": { "paths": ["/frontend"], "env": "dev" },
+  "generate": { "out": "dist/__env.js", "filter": "VITE_" }
 }
 ```
 
 ### Express API
 
-```json
+```jsonc
 {
   "scripts": {
     "dev": "morphix-env run -- tsx watch src/index.ts",
@@ -222,15 +301,12 @@ Create `morphix-env.config.json` in your project root to declare project-level s
 
 ```json
 {
-  "infisical": {
-    "projectId": "xxx",
-    "paths": ["/ai/shared", "/ai/api"],
-    "env": "$DEPLOY_ENV"
-  }
+  "infisical": { "paths": ["/ai"], "env": "dev" },
+  "envFiles": [".env.local"]
 }
 ```
 
-No `generate` field — server-side apps don't need `__env.js`.
+No `generate` — server-side apps don't need `__env.js`.
 
 ### Docker
 
@@ -240,7 +316,6 @@ WORKDIR /app
 COPY . .
 RUN pnpm install && pnpm build
 
-# Only these 3 vars needed at runtime
 ENV INFISICAL_CLIENT_ID=""
 ENV INFISICAL_CLIENT_SECRET=""
 ENV DEPLOY_ENV="prod"
@@ -249,27 +324,6 @@ CMD ["npx", "morphix-env", "run", "--", "node", "server.js"]
 ```
 
 No Infisical CLI binary needed in the image.
-
-### Local Development with Infisical CLI
-
-If you already use `infisical run` locally, morphix-env still adds value as the override layer:
-
-```json
-{
-  "dev": "infisical run --path=/ai --env=dev -- morphix-env run -- next dev",
-  "dev:local": "infisical run --path=/ai --env=dev -- morphix-env run -- next dev"
-}
-```
-
-`.env.local` overrides take effect on top of Infisical CLI injection.
-
-## How It Works
-
-1. Read `morphix-env.config.json` for project settings
-2. If `INFISICAL_CLIENT_ID` + `INFISICAL_CLIENT_SECRET` exist → fetch secrets via SDK, inject into `process.env` (does not overwrite existing vars)
-3. Read `.env.local` → inject into `process.env` (overwrites everything, highest priority)
-4. If `generate` is configured → write `__env.js` with public vars
-5. Spawn child command — it inherits the fully assembled `process.env`
 
 ## License
 
