@@ -1,37 +1,14 @@
-import { existsSync, readFileSync } from 'fs'
+import { existsSync } from 'fs'
 import { resolve } from 'path'
+import { config as dotenvConfig, parse as dotenvParse } from 'dotenv'
 
 /** 解析 .env 文件，返回 key-value 对象 */
 export function parseEnvFile(filePath: string): Record<string, string> {
   const absPath = resolve(filePath)
   if (!existsSync(absPath)) return {}
 
-  const vars: Record<string, string> = {}
-  const content = readFileSync(absPath, 'utf8')
-
-  for (const raw of content.split('\n')) {
-    const line = raw.trim()
-    // 跳过空行和注释
-    if (!line || line.startsWith('#')) continue
-
-    const eq = line.indexOf('=')
-    if (eq === -1) continue
-
-    const key = line.slice(0, eq).trim()
-    let value = line.slice(eq + 1).trim()
-
-    // 去除包裹的引号
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1)
-    }
-
-    vars[key] = value
-  }
-
-  return vars
+  const result = dotenvConfig({ path: absPath, override: false })
+  return result.parsed || {}
 }
 
 /**
@@ -42,10 +19,15 @@ export function loadEnvFiles(files: string[]): { key: string; source: string }[]
   const overrides: { key: string; source: string }[] = []
 
   for (const file of files) {
-    const vars = parseEnvFile(file)
-    for (const [key, value] of Object.entries(vars)) {
-      process.env[key] = value
-      overrides.push({ key, source: file })
+    const absPath = resolve(file)
+    if (!existsSync(absPath)) continue
+
+    // override: true 确保后文件覆盖前文件及已有 env
+    const result = dotenvConfig({ path: absPath, override: true })
+    if (result.parsed) {
+      for (const key of Object.keys(result.parsed)) {
+        overrides.push({ key, source: file })
+      }
     }
   }
 
