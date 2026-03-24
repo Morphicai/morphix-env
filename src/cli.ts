@@ -7,7 +7,7 @@ import spawn from 'cross-spawn'
 import { writeFileSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 
-const VERSION = '0.1.0'
+const VERSION = '0.2.0'
 const DEFAULT_ENV_FILE = '.env.local'
 
 // ─── 参数解析 ─────────────────────────────────────────────

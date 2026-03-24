@@ -1,15 +1,15 @@
 {
   "name": "morphix-env",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Environment variable toolkit — Infisical integration, local overrides, and client-side runtime injection for Next.js / Vite / Express.",
   "author": "MorphixAI <dev@morphixai.com>",
-  "homepage": "https://github.com/Morphicai/mx-env#readme",
+  "homepage": "https://github.com/Morphicai/morphix-env#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Morphicai/mx-env.git"
+    "url": "git+https://github.com/Morphicai/morphix-env.git"
   },
   "bugs": {
-    "url": "https://github.com/Morphicai/mx-env/issues"
+    "url": "https://github.com/Morphicai/morphix-env/issues"
   },
   "bin": {
     "morphix-env": "./dist/cli.js"
