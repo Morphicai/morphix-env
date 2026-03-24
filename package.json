@@ -1,7 +1,16 @@
 {
   "name": "mx-env",
   "version": "0.1.0",
-  "description": "MorphixAI environment variable toolkit — load overrides, generate client env, inspect config.",
+  "description": "Environment variable toolkit — Infisical integration, local overrides, and client-side runtime injection for Next.js / Vite / Express.",
+  "author": "MorphixAI <dev@morphixai.com>",
+  "homepage": "https://github.com/Morphicai/mx-env#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Morphicai/mx-env.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Morphicai/mx-env/issues"
+  },
   "bin": {
     "mx-env": "./dist/cli.js"
   },
@@ -9,7 +18,8 @@
     "build": "tsup src/cli.ts --format cjs --dts --clean",
     "dev": "tsup src/cli.ts --format cjs --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm build && pnpm test"
   },
   "files": [
     "dist"
@@ -17,10 +27,20 @@
   "keywords": [
     "env",
     "dotenv",
-    "cli",
-    "morphix"
+    "environment-variables",
+    "cross-env",
+    "infisical",
+    "secrets",
+    "runtime-env",
+    "nextjs",
+    "vite",
+    "docker",
+    "cli"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "@types/cross-spawn": "^6.0.6",
     "tsup": "^8.0.0",
