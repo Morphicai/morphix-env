@@ -21,10 +21,12 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@infisical/sdk": "^5.0.0"
+    "@infisical/sdk": "^5.0.0",
+    "cross-spawn": "^7.0.6"
   }
 }
