@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 import { loadEnvFiles, extractPublicVars, parseEnvFile } from './env'
-import { getInfisicalConfig, fetchInfisicalSecrets } from './infisical'
+import { getInfisicalConfig, fetchInfisicalSecrets, hasInfisicalCLI, fetchSecretsViaCLI } from './infisical'
 import { loadConfig, type MxEnvConfig } from './config'
 import spawn from 'cross-spawn'
 import { writeFileSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 
-const VERSION = '0.2.0'
+const VERSION = '0.3.0'
 const DEFAULT_ENV_FILE = '.env.local'
 
 // ─── 参数解析 ─────────────────────────────────────────────
@@ -97,15 +97,19 @@ function mergeWithConfig(args: Args, config: MxEnvConfig): Args {
 // ─── 核心流程：加载所有 env ──────────────────────────────────
 
 async function loadAllEnv(args: Args, config: MxEnvConfig) {
-  // 1. Infisical SDK 拉取（低优先级，不覆盖已有值）
+  // 1. Infisical 拉取（低优先级，不覆盖已有值）
   if (!args.noInfisical) {
+    const env = config.infisical?.env || process.env.DEPLOY_ENV || process.env.INFISICAL_ENV || 'dev'
+    const paths = config.infisical?.paths || ['/']
+
+    // 优先尝试 Machine Identity（SDK）— Docker/CI 场景
     const infisicalConfig = config.infisical
       ? {
           clientId: process.env.INFISICAL_CLIENT_ID || '',
           clientSecret: process.env.INFISICAL_CLIENT_SECRET || '',
           projectId: config.infisical.projectId,
-          environment: config.infisical.env || 'dev',
-          paths: config.infisical.paths || ['/'],
+          environment: env,
+          paths,
           siteUrl: config.infisical.siteUrl,
         }
       : getInfisicalConfig()
@@ -113,19 +117,32 @@ async function loadAllEnv(args: Args, config: MxEnvConfig) {
     if (infisicalConfig && infisicalConfig.clientId && infisicalConfig.clientSecret) {
       try {
         const count = await fetchInfisicalSecrets(infisicalConfig)
-        console.log(`[mx-env] Infisical: loaded ${count} secrets (${infisicalConfig.environment}: ${infisicalConfig.paths.join(', ')})`)
+        console.log(`[morphix-env] Infisical SDK: loaded ${count} secrets (${env}: ${paths.join(', ')})`)
       } catch (e: any) {
-        console.warn(`[mx-env] Infisical: failed - ${e.message}`)
+        console.warn(`[morphix-env] Infisical SDK: failed - ${e.message}`)
+      }
+    }
+    // Fallback: 尝试 infisical CLI（本地开发场景，用户手动 login）
+    else if (hasInfisicalCLI()) {
+      try {
+        const count = fetchSecretsViaCLI(env, paths)
+        if (count > 0) {
+          console.log(`[morphix-env] Infisical CLI: loaded ${count} secrets (${env}: ${paths.join(', ')})`)
+        } else {
+          console.log(`[morphix-env] Infisical CLI: no secrets found (run 'infisical login' first?)`)
+        }
+      } catch (e: any) {
+        console.warn(`[morphix-env] Infisical CLI: failed - ${e.message}`)
       }
     } else if (args.verbose) {
-      console.log('[mx-env] Infisical: skipped (no credentials)')
+      console.log('[morphix-env] Infisical: skipped (no SDK credentials, no CLI)')
     }
   }
 
   // 2. .env 文件覆盖（高优先级，强制覆盖）
   const overrides = loadEnvFiles(args.envFiles)
   if (overrides.length > 0) {
-    console.log(`[mx-env] Loaded ${overrides.length} overrides from ${args.envFiles.join(', ')}`)
+    console.log(`[morphix-env] Loaded ${overrides.length} overrides from ${args.envFiles.join(', ')}`)
     if (args.verbose) {
       for (const o of overrides) {
         console.log(`  ${o.key} (from ${o.source})`)
@@ -139,7 +156,7 @@ async function loadAllEnv(args: Args, config: MxEnvConfig) {
 /** mx-env run [options] -- <command> */
 async function cmdRun(args: Args, config: MxEnvConfig) {
   if (args.subArgs.length === 0) {
-    console.error('[mx-env] No command specified. Usage: mx-env run -- <command>')
+    console.error('[morphix-env] No command specified. Usage: mx-env run -- <command>')
     process.exit(1)
   }
 
@@ -157,7 +174,7 @@ async function cmdRun(args: Args, config: MxEnvConfig) {
   })
 
   if (result.error) {
-    console.error(`[mx-env] Failed to execute: ${cmd}`, result.error.message)
+    console.error(`[morphix-env] Failed to execute: ${cmd}`, result.error.message)
     process.exit(1)
   }
   process.exit(result.status ?? 1)
@@ -176,7 +193,7 @@ function generateClientEnv(outFile: string, filter: string | null) {
   const js = `window.__ENV=${JSON.stringify(vars)};`
   mkdirSync(dirname(outFile), { recursive: true })
   writeFileSync(outFile, js)
-  console.log(`[mx-env] Generated ${outFile} (${Object.keys(vars).length} client vars)`)
+  console.log(`[morphix-env] Generated ${outFile} (${Object.keys(vars).length} client vars)`)
 }
 
 /** mx-env generate [options] */
@@ -229,7 +246,7 @@ function cmdInspect(args: Args) {
 
 function showHelp() {
   console.log(`
-mx-env v${VERSION} — MorphixAI environment variable toolkit
+morphix-env v${VERSION} — MorphixAI environment variable toolkit
 
 Usage:
   mx-env run [options] -- <command>     Load env + exec command
@@ -300,7 +317,7 @@ async function main() {
       break
     default:
       if (args.command) {
-        console.error(`[mx-env] Unknown command: ${args.command}`)
+        console.error(`[morphix-env] Unknown command: ${args.command}`)
       }
       showHelp()
       process.exit(args.command ? 1 : 0)
@@ -308,6 +325,6 @@ async function main() {
 }
 
 main().catch(e => {
-  console.error('[mx-env] Fatal:', e.message)
+  console.error('[morphix-env] Fatal:', e.message)
   process.exit(1)
 })
