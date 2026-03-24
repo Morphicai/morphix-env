@@ -1,0 +1,30 @@
+{
+  "name": "mx-env",
+  "version": "0.1.0",
+  "description": "MorphixAI environment variable toolkit — load overrides, generate client env, inspect config.",
+  "bin": {
+    "mx-env": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup src/cli.ts --format cjs --dts --clean",
+    "dev": "tsup src/cli.ts --format cjs --watch",
+    "test": "node dist/cli.js --help"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "env",
+    "dotenv",
+    "cli",
+    "morphix"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@infisical/sdk": "^5.0.0"
+  }
+}
