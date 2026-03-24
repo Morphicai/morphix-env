@@ -3,7 +3,7 @@
 import { loadEnvFiles, extractPublicVars, parseEnvFile } from './env'
 import { getInfisicalConfig, fetchInfisicalSecrets } from './infisical'
 import { loadConfig, type MxEnvConfig } from './config'
-import { spawnSync } from 'child_process'
+import spawn from 'cross-spawn'
 import { writeFileSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 
@@ -151,10 +151,9 @@ async function cmdRun(args: Args, config: MxEnvConfig) {
   }
 
   const [cmd, ...cmdArgs] = args.subArgs
-  const result = spawnSync(cmd, cmdArgs, {
+  const result = spawn.sync(cmd, cmdArgs, {
     stdio: 'inherit',
     env: process.env,
-    shell: false,
   })
 
   if (result.error) {
