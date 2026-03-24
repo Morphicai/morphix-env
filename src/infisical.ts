@@ -1,4 +1,8 @@
 import { InfisicalSDK } from '@infisical/sdk'
+import { execSync } from 'child_process'
+import { existsSync, readFileSync } from 'fs'
+import { resolve } from 'path'
+import { parse as dotenvParse } from 'dotenv'
 
 export interface InfisicalConfig {
   clientId: string
@@ -10,8 +14,8 @@ export interface InfisicalConfig {
 }
 
 /**
- * 从环境变量中读取 Infisical 配置。
- * 如果缺少必要字段则返回 null（表示不使用 Infisical）。
+ * 从环境变量中读取 Infisical Machine Identity 配置。
+ * 如果缺少必要字段则返回 null。
  */
 export function getInfisicalConfig(): InfisicalConfig | null {
   const clientId = process.env.INFISICAL_CLIENT_ID
@@ -31,8 +35,7 @@ export function getInfisicalConfig(): InfisicalConfig | null {
 }
 
 /**
- * 从 Infisical 拉取 secrets 并注入 process.env。
- * 返回注入的变量数量。
+ * 通过 SDK（Machine Identity）拉取 secrets 并注入 process.env。
  */
 export async function fetchInfisicalSecrets(config: InfisicalConfig): Promise<number> {
   const client = new InfisicalSDK({
@@ -63,3 +66,60 @@ export async function fetchInfisicalSecrets(config: InfisicalConfig): Promise<nu
 
   return count
 }
+
+/**
+ * 检测本地是否有 infisical CLI 可用且已登录。
+ */
+function hasInfisicalCLI(): boolean {
+  try {
+    execSync('infisical --version', { stdio: 'pipe' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 读取项目 .infisical.json 获取 workspaceId（projectId）。
+ */
+function readInfisicalJson(): { workspaceId?: string } {
+  const filePath = resolve('.infisical.json')
+  if (!existsSync(filePath)) return {}
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * 通过 infisical CLI 拉取 secrets（本地开发场景）。
+ * 利用 CLI 的本地用户登录 session + .infisical.json 的 projectId。
+ */
+export function fetchSecretsViaCLI(
+  environment: string,
+  paths: string[]
+): number {
+  let count = 0
+
+  for (const secretPath of paths) {
+    try {
+      const output = execSync(
+        `infisical export --path=${secretPath} --env=${environment} --format=dotenv`,
+        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+      )
+
+      const vars = dotenvParse(output)
+      for (const [key, value] of Object.entries(vars)) {
+        process.env[key] = value
+        count++
+      }
+    } catch {
+      // 单个 path 失败不阻塞其他 path
+    }
+  }
+
+  return count
+}
+
+export { hasInfisicalCLI, readInfisicalJson }
