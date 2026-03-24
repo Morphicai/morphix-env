@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsup src/cli.ts --format cjs --dts --clean",
     "dev": "tsup src/cli.ts --format cjs --watch",
-    "test": "node dist/cli.js --help"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "files": [
     "dist"
@@ -23,7 +24,8 @@
   "devDependencies": {
     "@types/cross-spawn": "^6.0.6",
     "tsup": "^8.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.1"
   },
   "dependencies": {
     "@infisical/sdk": "^5.0.0",
