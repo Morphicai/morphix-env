@@ -9,6 +9,8 @@ export interface MxEnvConfig {
     projectId?: string
     paths: string[]
     siteUrl?: string
+    /** 自动为 Infisical 拉取的变量添加前缀（如 "VITE_"），已有该前缀的变量不会重复添加 */
+    envPrefix?: string
   }
   /** 要加载的 env 文件列表，默认 [".env.local"] */
   envFiles?: string[]

@@ -7,7 +7,7 @@ import spawn from 'cross-spawn'
 import { writeFileSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 
-const VERSION = '0.4.1'
+const VERSION = '0.5.0'
 const DEFAULT_ENV_FILE = '.env.local'
 
 // ─── 参数解析 ─────────────────────────────────────────────
@@ -125,10 +125,12 @@ async function loadAllEnv(args: Args, config: MxEnvConfig) {
         }
       : getInfisicalConfig()
 
+    const envPrefix = config.infisical?.envPrefix
+
     if (infisicalConfig && infisicalConfig.clientId && infisicalConfig.clientSecret) {
       try {
-        const count = await fetchInfisicalSecrets(infisicalConfig)
-        console.log(`[morphix-env] Infisical SDK: loaded ${count} secrets (${env}: ${paths.join(', ')})`)
+        const count = await fetchInfisicalSecrets(infisicalConfig, envPrefix)
+        console.log(`[morphix-env] Infisical SDK: loaded ${count} secrets (${env}: ${paths.join(', ')})${envPrefix ? ` [prefix: ${envPrefix}]` : ''}`)
       } catch (e: any) {
         console.warn(`[morphix-env] Infisical SDK: failed - ${e.message}`)
       }
@@ -136,9 +138,9 @@ async function loadAllEnv(args: Args, config: MxEnvConfig) {
     // Fallback: 尝试 infisical CLI（本地开发场景，用户手动 login）
     else if (hasInfisicalCLI()) {
       try {
-        const count = fetchSecretsViaCLI(env, paths)
+        const count = fetchSecretsViaCLI(env, paths, envPrefix)
         if (count > 0) {
-          console.log(`[morphix-env] Infisical CLI: loaded ${count} secrets (${env}: ${paths.join(', ')})`)
+          console.log(`[morphix-env] Infisical CLI: loaded ${count} secrets (${env}: ${paths.join(', ')})${envPrefix ? ` [prefix: ${envPrefix}]` : ''}`)
         } else {
           console.log(`[morphix-env] Infisical CLI: no secrets found (run 'infisical login' first?)`)
         }

@@ -35,10 +35,16 @@ export function getInfisicalConfig(): InfisicalConfig | null {
   }
 }
 
+/** 给 key 添加前缀，已有前缀的不重复添加 */
+function applyPrefix(key: string, prefix?: string): string {
+  if (!prefix) return key
+  return key.startsWith(prefix) ? key : prefix + key
+}
+
 /**
  * 通过 SDK（Machine Identity）拉取 secrets 并注入 process.env。
  */
-export async function fetchInfisicalSecrets(config: InfisicalConfig): Promise<number> {
+export async function fetchInfisicalSecrets(config: InfisicalConfig, envPrefix?: string): Promise<number> {
   const client = new InfisicalSDK({
     ...(config.siteUrl ? { siteUrl: config.siteUrl } : {}),
   })
@@ -60,7 +66,8 @@ export async function fetchInfisicalSecrets(config: InfisicalConfig): Promise<nu
     })
 
     for (const secret of result.secrets) {
-      process.env[secret.secretKey] = secret.secretValue
+      const key = applyPrefix(secret.secretKey, envPrefix)
+      process.env[key] = secret.secretValue
       count++
     }
   }
@@ -99,7 +106,8 @@ function readInfisicalJson(): { workspaceId?: string } {
  */
 export function fetchSecretsViaCLI(
   environment: string,
-  paths: string[]
+  paths: string[],
+  envPrefix?: string
 ): number {
   let count = 0
 
@@ -112,7 +120,7 @@ export function fetchSecretsViaCLI(
 
       const vars = dotenvParse(output)
       for (const [key, value] of Object.entries(vars)) {
-        process.env[key] = value
+        process.env[applyPrefix(key, envPrefix)] = value
         count++
       }
     } catch {
