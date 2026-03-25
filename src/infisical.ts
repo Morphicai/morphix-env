@@ -20,7 +20,8 @@ export interface InfisicalConfig {
 export function getInfisicalConfig(): InfisicalConfig | null {
   const clientId = process.env.INFISICAL_CLIENT_ID
   const clientSecret = process.env.INFISICAL_CLIENT_SECRET
-  const projectId = process.env.INFISICAL_PROJECT_ID
+  // projectId: 环境变量 > .infisical.json workspaceId
+  const projectId = process.env.INFISICAL_PROJECT_ID || readInfisicalJson().workspaceId
 
   if (!clientId || !clientSecret || !projectId) return null
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 import { loadEnvFiles, extractPublicVars, parseEnvFile } from './env'
-import { getInfisicalConfig, fetchInfisicalSecrets, hasInfisicalCLI, fetchSecretsViaCLI } from './infisical'
+import { getInfisicalConfig, fetchInfisicalSecrets, hasInfisicalCLI, fetchSecretsViaCLI, readInfisicalJson } from './infisical'
 import { loadConfig, type MxEnvConfig } from './config'
 import spawn from 'cross-spawn'
 import { writeFileSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 
-const VERSION = '0.4.0'
+const VERSION = '0.4.1'
 const DEFAULT_ENV_FILE = '.env.local'
 
 // ─── 参数解析 ─────────────────────────────────────────────
@@ -108,11 +108,17 @@ async function loadAllEnv(args: Args, config: MxEnvConfig) {
     const paths = config.infisical?.paths || ['/']
 
     // 优先尝试 Machine Identity（SDK）— Docker/CI 场景
+    // projectId 解析优先级: INFISICAL_PROJECT_ID > config.infisical.projectId > .infisical.json workspaceId
+    const resolvedProjectId: string = process.env.INFISICAL_PROJECT_ID
+      || config.infisical?.projectId
+      || readInfisicalJson().workspaceId
+      || ''
+
     const infisicalConfig = config.infisical
       ? {
           clientId: process.env.INFISICAL_CLIENT_ID || '',
           clientSecret: process.env.INFISICAL_CLIENT_SECRET || '',
-          projectId: config.infisical.projectId,
+          projectId: resolvedProjectId,
           environment: env,
           paths,
           siteUrl: config.infisical.siteUrl,
