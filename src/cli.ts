@@ -142,7 +142,8 @@ async function loadAllEnv(args: Args, config: MxEnvConfig) {
         if (count > 0) {
           console.log(`[morphix-env] Infisical CLI: loaded ${count} secrets (${env}: ${paths.join(', ')})${envPrefix ? ` [prefix: ${envPrefix}]` : ''}`)
         } else {
-          console.log(`[morphix-env] Infisical CLI: no secrets found (run 'infisical login' first?)`)
+          console.error(`[morphix-env] Infisical CLI: no secrets found for env="${env}" (run 'infisical login --env ${env}' first?)`)
+          throw new Error(`No secrets found for env="${env}". Ensure you are logged in: infisical login --env ${env}`)
         }
       } catch (e: any) {
         console.warn(`[morphix-env] Infisical CLI: failed - ${e.message}`)
