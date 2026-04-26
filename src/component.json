@@ -1,0 +1,35 @@
+{
+  "componentId": {
+    "scope": "morphix.foundation",
+    "name": "env",
+    "version": "0.5.2"
+  },
+  "propagate": false,
+  "extensions": {
+    "teambit.pkg/pkg": {
+      "packageJson": {
+        "bin": {
+          "morphix-env": "dist/cli.js"
+        },
+        "files": [
+          "dist"
+        ],
+        "main": "dist/index.js",
+        "types": "dist/index.d.ts",
+        "exports": {
+          ".": {
+            "require": "./dist/index.js",
+            "types": "./dist/index.d.ts"
+          }
+        }
+      }
+    },
+    "teambit.envs/envs": {},
+    "teambit.dependencies/dependency-resolver": {},
+    "teambit.component/dev-files": {},
+    "teambit.semantics/schema": {},
+    "teambit.preview/preview": {},
+    "teambit.compositions/compositions": {},
+    "teambit.docs/docs": {}
+  }
+}

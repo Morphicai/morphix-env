@@ -4,10 +4,19 @@ import { loadEnvFiles, extractPublicVars, parseEnvFile } from './env'
 import { getInfisicalConfig, fetchInfisicalSecrets, hasInfisicalCLI, fetchSecretsViaCLI, readInfisicalJson, isInfisicalLoggedIn } from './infisical'
 import { loadConfig, type MxEnvConfig } from './config'
 import spawn from 'cross-spawn'
-import { writeFileSync, mkdirSync } from 'fs'
-import { dirname } from 'path'
+import { writeFileSync, mkdirSync, readFileSync } from 'fs'
+import { dirname, resolve } from 'path'
 
-const VERSION = '0.5.0'
+function getVersion() {
+  try {
+    const packageJsonPath = resolve(__dirname, '..', 'package.json')
+    return JSON.parse(readFileSync(packageJsonPath, 'utf8')).version || '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
+
+const VERSION = getVersion()
 const DEFAULT_ENV_FILE = '.env.local'
 
 // ─── 参数解析 ─────────────────────────────────────────────

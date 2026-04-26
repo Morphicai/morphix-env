@@ -59,14 +59,14 @@ describe('mx-env run', () => {
   it('注入 .env.local 变量到子进程', () => {
     writeFileSync(join(TMP, '.env.local'), 'MXTEST_RUN=injected\n')
 
-    const out = run(['run', '--', 'node', '-e', 'console.log(process.env.MXTEST_RUN)'])
+    const out = run(['run', '--no-infisical', '--', 'node', '-e', 'console.log(process.env.MXTEST_RUN)'])
     expect(out).toContain('injected')
   })
 
   it('指定 --env-file', () => {
     writeFileSync(join(TMP, '.env.staging'), 'MXTEST_STAGE=from-staging\n')
 
-    const out = run(['run', '-f', '.env.staging', '--', 'node', '-e', 'console.log(process.env.MXTEST_STAGE)'])
+    const out = run(['run', '--no-infisical', '-f', '.env.staging', '--', 'node', '-e', 'console.log(process.env.MXTEST_STAGE)'])
     expect(out).toContain('from-staging')
   })
 
@@ -74,7 +74,7 @@ describe('mx-env run', () => {
     writeFileSync(join(TMP, '.env.local'), 'MXTEST_OVERRIDE=local-wins\n')
 
     const out = run(
-      ['run', '--', 'node', '-e', 'console.log(process.env.MXTEST_OVERRIDE)'],
+      ['run', '--no-infisical', '--', 'node', '-e', 'console.log(process.env.MXTEST_OVERRIDE)'],
       { MXTEST_OVERRIDE: 'original' }
     )
     expect(out).toContain('local-wins')
@@ -97,7 +97,7 @@ describe('mx-env run', () => {
   it('--verbose 显示变量名', () => {
     writeFileSync(join(TMP, '.env.local'), 'MXTEST_VERB=val\n')
 
-    const out = run(['run', '-v', '--', 'node', '-e', 'console.log("done")'])
+    const out = run(['run', '--no-infisical', '-v', '--', 'node', '-e', 'console.log("done")'])
     expect(out).toContain('MXTEST_VERB')
   })
 })
@@ -111,7 +111,7 @@ describe('mx-env generate', () => {
     const outFile = join(outDir, '__env.js')
 
     run(
-      ['generate', '-o', outFile],
+      ['generate', '--no-infisical', '-o', outFile],
       {
         NEXT_PUBLIC_MXTEST_GEN: 'gen-value',
         MXTEST_PRIVATE: 'should-not-appear',
@@ -129,7 +129,7 @@ describe('mx-env generate', () => {
     const outFile = join(TMP, 'filtered.js')
 
     run(
-      ['generate', '-o', outFile, '--filter', 'VITE_'],
+      ['generate', '--no-infisical', '-o', outFile, '--filter', 'VITE_'],
       {
         VITE_MXTEST_A: 'vite-val',
         NEXT_PUBLIC_MXTEST_B: 'next-val',
