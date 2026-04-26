@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { loadEnvFiles, extractPublicVars, parseEnvFile } from './env'
-import { getInfisicalConfig, fetchInfisicalSecrets, hasInfisicalCLI, fetchSecretsViaCLI, readInfisicalJson } from './infisical'
+import { getInfisicalConfig, fetchInfisicalSecrets, hasInfisicalCLI, fetchSecretsViaCLI, readInfisicalJson, isInfisicalLoggedIn } from './infisical'
 import { loadConfig, type MxEnvConfig } from './config'
 import spawn from 'cross-spawn'
 import { writeFileSync, mkdirSync } from 'fs'
@@ -132,24 +132,51 @@ async function loadAllEnv(args: Args, config: MxEnvConfig) {
         const count = await fetchInfisicalSecrets(infisicalConfig, envPrefix)
         console.log(`[morphix-env] Infisical SDK: loaded ${count} secrets (${env}: ${paths.join(', ')})${envPrefix ? ` [prefix: ${envPrefix}]` : ''}`)
       } catch (e: any) {
-        console.warn(`[morphix-env] Infisical SDK: failed - ${e.message}`)
+        failHardWithSdkError(e)
       }
     }
     // Fallback: 尝试 infisical CLI（本地开发场景，用户手动 login）
     else if (hasInfisicalCLI()) {
-      try {
-        const count = fetchSecretsViaCLI(env, paths, envPrefix)
-        if (count > 0) {
-          console.log(`[morphix-env] Infisical CLI: loaded ${count} secrets (${env}: ${paths.join(', ')})${envPrefix ? ` [prefix: ${envPrefix}]` : ''}`)
-        } else {
-          console.error(`[morphix-env] Infisical CLI: no secrets found for env="${env}" (run 'infisical login --env ${env}' first?)`)
-          throw new Error(`No secrets found for env="${env}". Ensure you are logged in: infisical login --env ${env}`)
+      // 进入 CLI 流程前先做登录态检查，避免后续每个 path 都报同一个错
+      if (!isInfisicalLoggedIn()) {
+        failNotLoggedIn(env)
+      }
+
+      const { count, errors } = fetchSecretsViaCLI(env, paths, envPrefix)
+      const notLoggedIn = errors.find((e) => e.kind === 'not-logged-in')
+      const noProject = errors.find((e) => e.kind === 'no-project')
+
+      if (notLoggedIn) {
+        failNotLoggedIn(env)
+      }
+      if (noProject) {
+        failNoProject(noProject.stderr)
+      }
+
+      if (count > 0) {
+        console.log(`[morphix-env] Infisical CLI: loaded ${count} secrets (${env}: ${paths.join(', ')})${envPrefix ? ` [prefix: ${envPrefix}]` : ''}`)
+        if (errors.length > 0 && args.verbose) {
+          for (const e of errors) {
+            console.warn(`[morphix-env] Infisical CLI: path "${e.path}" failed (${e.kind}): ${e.stderr.trim()}`)
+          }
         }
-      } catch (e: any) {
-        console.warn(`[morphix-env] Infisical CLI: failed - ${e.message}`)
+      } else {
+        // count=0 且没有可识别的登录/项目错误：要么所有 path 都没 secrets，要么是其他 CLI 错误
+        const otherErr = errors.find((e) => e.kind === 'other')
+        if (otherErr) {
+          console.error(`[morphix-env] Infisical CLI: failed for env="${env}", path="${otherErr.path}"`)
+          console.error(otherErr.stderr.trim())
+          process.exit(1)
+        }
+        // 真的就是没 secret，给个温和的告警，让 .env.local 兜底
+        console.warn(`[morphix-env] Infisical CLI: no secrets found for env="${env}" (paths: ${paths.join(', ')})`)
       }
     } else if (args.verbose) {
       console.log('[morphix-env] Infisical: skipped (no SDK credentials, no CLI)')
+    } else {
+      // 非 verbose 也要让用户知道走了"裸跑"路径，否则缺 env 时排查很痛苦
+      console.warn('[morphix-env] Infisical: skipped (no SDK credentials, no `infisical` CLI installed)')
+      console.warn('[morphix-env] Hint: install CLI with `brew install infisical/get-cli/infisical` and then `infisical login`')
     }
   }
 
@@ -163,6 +190,43 @@ async function loadAllEnv(args: Args, config: MxEnvConfig) {
       }
     }
   }
+}
+
+/** 未登录时打印明确指引并退出 */
+function failNotLoggedIn(env: string): never {
+  console.error('')
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  console.error('[morphix-env] Infisical 未登录或登录已过期')
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  console.error('')
+  console.error('  请运行下面的命令登录后重试：')
+  console.error('')
+  console.error('    infisical login')
+  console.error('')
+  console.error(`  当前环境: ${env}`)
+  console.error('')
+  console.error('  如未安装 CLI: brew install infisical/get-cli/infisical')
+  console.error('  CI / Docker：设置 INFISICAL_CLIENT_ID + INFISICAL_CLIENT_SECRET')
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  console.error('')
+  process.exit(1)
+}
+
+/** 项目未配置时打印指引 */
+function failNoProject(stderr: string): never {
+  console.error('')
+  console.error('[morphix-env] Infisical 项目未配置')
+  console.error('  缺少 .infisical.json 或 INFISICAL_PROJECT_ID 环境变量')
+  console.error('  在项目根运行: infisical init')
+  console.error('  原始错误: ' + stderr.trim())
+  process.exit(1)
+}
+
+/** SDK (Machine Identity) 错误 */
+function failHardWithSdkError(e: any): never {
+  console.error(`[morphix-env] Infisical SDK 认证失败: ${e?.message || e}`)
+  console.error('  检查 INFISICAL_CLIENT_ID / INFISICAL_CLIENT_SECRET / INFISICAL_PROJECT_ID 是否正确')
+  process.exit(1)
 }
 
 // ─── 命令实现 ─────────────────────────────────────────────

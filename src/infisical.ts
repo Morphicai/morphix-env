@@ -76,11 +76,26 @@ export async function fetchInfisicalSecrets(config: InfisicalConfig, envPrefix?:
 }
 
 /**
- * 检测本地是否有 infisical CLI 可用且已登录。
+ * 检测本地是否有 infisical CLI 可用。
  */
 function hasInfisicalCLI(): boolean {
   try {
     execSync('infisical --version', { stdio: 'pipe' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 检测 infisical CLI 当前是否已登录。
+ *
+ * `infisical user` 在已登录时返回当前账号信息，未登录时退出码非 0 且 stderr
+ * 通常包含 "Login expired" / "no login session" 等提示。
+ */
+export function isInfisicalLoggedIn(): boolean {
+  try {
+    execSync('infisical user', { stdio: 'pipe' })
     return true
   } catch {
     return false
@@ -100,16 +115,28 @@ function readInfisicalJson(): { workspaceId?: string } {
   }
 }
 
+/** infisical export 错误分类 */
+export type InfisicalCliErrorKind = 'not-logged-in' | 'no-project' | 'other'
+
+export interface InfisicalCliError {
+  kind: InfisicalCliErrorKind
+  path: string
+  stderr: string
+}
+
 /**
  * 通过 infisical CLI 拉取 secrets（本地开发场景）。
  * 利用 CLI 的本地用户登录 session + .infisical.json 的 projectId。
+ *
+ * 错误不再静默吞掉：捕获 stderr 后由调用方决定如何呈现（区分未登录 / 无项目 / 其他）。
  */
 export function fetchSecretsViaCLI(
   environment: string,
   paths: string[],
   envPrefix?: string
-): number {
+): { count: number; errors: InfisicalCliError[] } {
   let count = 0
+  const errors: InfisicalCliError[] = []
 
   for (const secretPath of paths) {
     try {
@@ -123,12 +150,30 @@ export function fetchSecretsViaCLI(
         process.env[applyPrefix(key, envPrefix)] = value
         count++
       }
-    } catch {
-      // 单个 path 失败不阻塞其他 path
+    } catch (e: any) {
+      const stderr = String(e?.stderr || e?.message || '')
+      const lower = stderr.toLowerCase()
+      let kind: InfisicalCliErrorKind = 'other'
+      if (
+        lower.includes('login expired') ||
+        lower.includes('no login session') ||
+        lower.includes('not logged in') ||
+        lower.includes('please login') ||
+        lower.includes('user is not logged')
+      ) {
+        kind = 'not-logged-in'
+      } else if (
+        lower.includes('workspaceid') ||
+        lower.includes('project id') ||
+        lower.includes('infisical.json')
+      ) {
+        kind = 'no-project'
+      }
+      errors.push({ kind, path: secretPath, stderr })
     }
   }
 
-  return count
+  return { count, errors }
 }
 
 export { hasInfisicalCLI, readInfisicalJson }
