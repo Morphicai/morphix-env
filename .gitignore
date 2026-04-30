@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env.local
+*.tgz
+
+# Bit
+.bit
+public
+# Bit files - generated during bit ws-config write command
+tsconfig.json
+.eslintrc.json
+.prettierrc.cjs
+# allow tsconfig from the env's config dir to be tracked
+!**/config/tsconfig.json
+node_modules

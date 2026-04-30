@@ -1,0 +1,65 @@
+{
+  "name": "morphix-env",
+  "version": "0.5.0",
+  "description": "Environment variable toolkit — Infisical integration, local overrides, and client-side runtime injection for Next.js / Vite / Express.",
+  "author": "MorphixAI <dev@morphixai.com>",
+  "homepage": "https://github.com/Morphicai/morphix-env#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Morphicai/morphix-env.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Morphicai/morphix-env/issues"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "morphix-env": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/cli.ts --format cjs --dts --clean",
+    "dev": "tsup src/index.ts src/cli.ts --format cjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm build && pnpm test"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "env",
+    "dotenv",
+    "environment-variables",
+    "cross-env",
+    "infisical",
+    "secrets",
+    "runtime-env",
+    "nextjs",
+    "vite",
+    "docker",
+    "cli"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.6.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.1"
+  },
+  "dependencies": {
+    "@infisical/sdk": "^5.0.0",
+    "cross-spawn": "^7.0.6",
+    "dotenv": "^17.3.1"
+  }
+}

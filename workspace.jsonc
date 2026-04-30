@@ -1,0 +1,33 @@
+/**
+ * this is the main configuration file of your bit workspace.
+ * for full documentation, please see: https://bit.dev/reference/workspace/workspace-json
+ **/{
+  "$schema": "https://static.bit.dev/teambit/schemas/schema.json",
+  "teambit.workspace/workspace": {
+    "name": "morphix-env",
+    "icon": "https://static.bit.dev/brands/bit-logo-min.png",
+    "defaultDirectory": "bit-components/{scope}/{name}",
+    "defaultScope": "morphix.foundation",
+    "resolveAspectsFromNodeModules": true,
+    "resolveEnvsFromRoots": true
+  },
+  "teambit.generator/generator": {
+    "envs": [
+      "bitdev.node/node-env"
+    ]
+  },
+  "teambit.dependencies/dependency-resolver": {
+    "allowScripts": {},
+    "rootComponents": true,
+    "policy": {
+      "dependencies": {},
+      "peerDependencies": {}
+    },
+    "externalPackageManager": true,
+    "rootComponent": false
+  },
+  "teambit.workspace/workspace-config-files": {
+    "enableWorkspaceConfigWrite": true,
+    "useDefaultDirectory": true
+  }
+}
