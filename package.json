@@ -24,7 +24,8 @@
     "prepublishOnly": "pnpm build && pnpm test"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs/logo.png"
   ],
   "keywords": [
     "env",

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.png" width="160" alt="morphix-env" />
+</p>
+
 # morphix-env
 
 `morphix-env` is a secret composition CLI for local development, CI, and agent-assisted workflows. It does not become another secret vault: Infisical, Doppler, macOS Keychain, dotenvx, and local files continue to own their values, authentication, access controls, rotation, and provider UI.
