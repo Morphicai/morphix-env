@@ -1,6 +1,6 @@
 {
   "name": "morphix-env",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Secret composition CLI — Infisical, Doppler, macOS Keychain, dotenvx, and local files stay value owners; composes them into one value-safe child environment and ships a built-in Agent Skill (mx-env skill install).",
   "author": "MorphixAI <dev@morphixai.com>",
   "homepage": "https://github.com/Morphicai/morphix-env#readme",
