@@ -50,9 +50,12 @@ describe('CLI basic', () => {
     expect(out).toContain('Usage:')
   })
 
-  it('--version 输出版本', () => {
+  it('--version 输出与 package.json 一致的版本', () => {
     const out = run(['--version'])
-    expect(out.trim()).toMatch(/^\d+\.\d+\.\d+$/)
+    const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as { version: string }
+    // Version is derived from package.json at build time; drift here means the
+    // published package reports a stale --version.
+    expect(out.trim()).toBe(manifest.version)
   })
 
   it('未知命令报错（exit code 1）', () => {

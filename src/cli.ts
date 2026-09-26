@@ -10,8 +10,9 @@ import { loadConfigLayers } from './config'
 import { launchEditor, startEditorServer } from './editor'
 import { extractPublicVars } from './env'
 import { StreamingRedactor } from './redaction'
+import pkg from '../package.json'
 
-const VERSION = '0.6.0'
+const VERSION = pkg.version
 
 interface Args {
   command: string
