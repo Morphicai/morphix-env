@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      npm-tag:
+        description: npm dist-tag (auto-detected from version if empty)
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve npm dist-tag
+        id: tag
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -n "${{ github.event.inputs.npm-tag }}" ]; then
+            TAG="${{ github.event.inputs.npm-tag }}"
+          elif [[ "$VERSION" == *-* ]]; then
+            TAG=beta
+          else
+            TAG=latest
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [ "v${{ steps.tag.outputs.version }}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version v${{ steps.tag.outputs.version }}" >&2
+            exit 1
+          fi
+      # prepublishOnly (pnpm build && pnpm test) runs automatically inside
+      # npm publish, so a failing build/test can never reach the registry.
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
+      # Only created after a successful publish, so a GitHub Release always
+      # implies the matching npm version is live.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.tag.outputs.version }}" \
+            --title "morphix-env v${{ steps.tag.outputs.version }}" \
+            --generate-notes \
+            --prerelease="$([ "${{ steps.tag.outputs.tag }}" != "latest" ] && echo true || echo false)"

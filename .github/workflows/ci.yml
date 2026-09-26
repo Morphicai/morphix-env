@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Node 20/22: vitest 4 requires node >=20, so 18 cannot run the suite
+    # (the published package itself still declares engines >=18).
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      # keytar is an optional native module: a failed optional install is
+      # tolerated by pnpm, and the test suite mocks it (test/sources.test.ts).
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
