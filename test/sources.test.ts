@@ -134,10 +134,18 @@ describe('provider source adapters', () => {
     const sentinel = value('keychain')
     mocks.findCredentials.mockResolvedValue([{ account: 'MXTEST_KEYCHAIN', password: sentinel }])
 
-    const loaded = await loadSource(entry('machine', { provider: 'os-keychain', service: 'com.example.mx-env', platform: 'macos' }), context())
+    // resolveKeychain guards on process.platform before touching keytar, so
+    // stub darwin to keep this covered on the linux CI matrix too.
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { value: 'darwin' })
+    try {
+      const loaded = await loadSource(entry('machine', { provider: 'os-keychain', service: 'com.example.mx-env', platform: 'macos' }), context())
 
-    expect(loaded.values.MXTEST_KEYCHAIN).toBe(sentinel)
-    expect(mocks.findCredentials).toHaveBeenCalledWith('com.example.mx-env')
+      expect(loaded.values.MXTEST_KEYCHAIN).toBe(sentinel)
+      expect(mocks.findCredentials).toHaveBeenCalledWith('com.example.mx-env')
+    } finally {
+      Object.defineProperty(process, 'platform', platform as PropertyDescriptor)
+    }
   })
 
   it('loads a Doppler project/config source without accepting a token in config', async () => {
