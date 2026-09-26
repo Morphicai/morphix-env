@@ -1,5 +1,5 @@
 import { InfisicalSDK } from '@infisical/sdk'
-import { execSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
 import { parse as dotenvParse } from 'dotenv'
@@ -11,6 +11,11 @@ export interface InfisicalConfig {
   environment: string
   paths: string[]
   siteUrl?: string
+}
+
+export interface ResolvedSecrets {
+  values: Record<string, string>
+  count: number
 }
 
 /**
@@ -44,7 +49,7 @@ function applyPrefix(key: string, prefix?: string): string {
 /**
  * 通过 SDK（Machine Identity）拉取 secrets 并注入 process.env。
  */
-export async function fetchInfisicalSecrets(config: InfisicalConfig, envPrefix?: string): Promise<number> {
+export async function resolveInfisicalSecrets(config: InfisicalConfig, envPrefix?: string): Promise<ResolvedSecrets> {
   const client = new InfisicalSDK({
     ...(config.siteUrl ? { siteUrl: config.siteUrl } : {}),
   })
@@ -54,7 +59,7 @@ export async function fetchInfisicalSecrets(config: InfisicalConfig, envPrefix?:
     clientSecret: config.clientSecret,
   })
 
-  let count = 0
+  const values: Record<string, string> = {}
 
   for (const secretPath of config.paths) {
     const result = await client.secrets().listSecrets({
@@ -67,12 +72,21 @@ export async function fetchInfisicalSecrets(config: InfisicalConfig, envPrefix?:
 
     for (const secret of result.secrets) {
       const key = applyPrefix(secret.secretKey, envPrefix)
-      process.env[key] = secret.secretValue
-      count++
+      values[key] = secret.secretValue
     }
   }
 
-  return count
+  return { values, count: Object.keys(values).length }
+}
+
+/**
+ * Legacy compatibility helper. New composition code MUST use
+ * resolveInfisicalSecrets so values do not mutate the CLI process environment.
+ */
+export async function fetchInfisicalSecrets(config: InfisicalConfig, envPrefix?: string): Promise<number> {
+  const result = await resolveInfisicalSecrets(config, envPrefix)
+  Object.assign(process.env, result.values)
+  return result.count
 }
 
 /**
@@ -134,21 +148,21 @@ export function fetchSecretsViaCLI(
   environment: string,
   paths: string[],
   envPrefix?: string
-): { count: number; errors: InfisicalCliError[] } {
-  let count = 0
+): { values: Record<string, string>; count: number; errors: InfisicalCliError[] } {
+  const values: Record<string, string> = {}
   const errors: InfisicalCliError[] = []
 
   for (const secretPath of paths) {
     try {
-      const output = execSync(
-        `infisical export --path=${secretPath} --env=${environment} --format=dotenv`,
+      const output = execFileSync(
+        'infisical',
+        ['export', `--path=${secretPath}`, `--env=${environment}`, '--format=dotenv'],
         { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
       )
 
       const vars = dotenvParse(output)
       for (const [key, value] of Object.entries(vars)) {
-        process.env[applyPrefix(key, envPrefix)] = value
-        count++
+        values[applyPrefix(key, envPrefix)] = value
       }
     } catch (e: any) {
       const stderr = String(e?.stderr || e?.message || '')
@@ -173,7 +187,7 @@ export function fetchSecretsViaCLI(
     }
   }
 
-  return { count, errors }
+  return { values, count: Object.keys(values).length, errors }
 }
 
 export { hasInfisicalCLI, readInfisicalJson }

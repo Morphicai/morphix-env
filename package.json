@@ -1,6 +1,6 @@
 {
   "name": "morphix-env",
-  "version": "0.5.0",
+  "version": "0.6.0-beta.1",
   "description": "Environment variable toolkit — Infisical integration, local overrides, and client-side runtime injection for Next.js / Vite / Express.",
   "author": "MorphixAI <dev@morphixai.com>",
   "homepage": "https://github.com/Morphicai/morphix-env#readme",
@@ -12,11 +12,13 @@
     "url": "https://github.com/Morphicai/morphix-env/issues"
   },
   "bin": {
-    "morphix-env": "./dist/cli.js"
+    "morphix-env": "./dist/cli.js",
+    "mx-env": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsup src/cli.ts --format cjs --dts --clean",
-    "dev": "tsup src/cli.ts --format cjs --watch",
+    "build": "node scripts/build-editor-ui.mjs && tsup src/cli.ts --format cjs --dts --clean --external keytar",
+    "dev": "node scripts/build-editor-ui.mjs && tsup src/cli.ts --format cjs --watch",
+    "pretest": "pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "pnpm build && pnpm test"
@@ -42,7 +44,15 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "2.30.0",
+    "@radix-ui/react-alert-dialog": "^1.1.0",
+    "@radix-ui/react-select": "^2.1.0",
     "@types/cross-spawn": "^6.0.6",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "esbuild": "^0.27.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.1"
@@ -51,5 +61,8 @@
     "@infisical/sdk": "^5.0.0",
     "cross-spawn": "^7.0.6",
     "dotenv": "^17.3.1"
+  },
+  "optionalDependencies": {
+    "keytar": "7.9.0"
   }
 }

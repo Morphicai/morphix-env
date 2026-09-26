@@ -3,8 +3,10 @@ import { parseEnvFile, loadEnvFiles, extractPublicVars } from '../src/env'
 import { writeFileSync, unlinkSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { randomUUID } from 'crypto'
 
 const TMP = join(tmpdir(), 'mx-env-test-' + Date.now())
+const testValue = (label: string) => `mxenv_test_${label}_${randomUUID().replace(/-/g, '')}`
 
 beforeEach(() => {
   mkdirSync(TMP, { recursive: true })
@@ -48,10 +50,11 @@ describe('parseEnvFile', () => {
 
   it('value 中包含等号', () => {
     const f = join(TMP, '.env.eqvalue')
-    writeFileSync(f, 'MXTEST_URL=postgres://user:pass@host/db?ssl=true\n')
+    const url = `mxenv://${testValue('user')}:${testValue('pass')}@host/db?ssl=true`
+    writeFileSync(f, `MXTEST_URL=${url}\n`)
 
     const vars = parseEnvFile(f)
-    expect(vars.MXTEST_URL).toBe('postgres://user:pass@host/db?ssl=true')
+    expect(vars.MXTEST_URL).toBe(url)
   })
 
   it('空值', () => {
@@ -125,7 +128,7 @@ describe('loadEnvFiles', () => {
 
 describe('extractPublicVars', () => {
   it('提取 NEXT_PUBLIC_ 前缀', () => {
-    process.env.MXTEST_PRIVATE = 'secret'
+    process.env.MXTEST_PRIVATE = testValue('private')
     process.env.NEXT_PUBLIC_MXTEST_API = 'http://localhost'
 
     const vars = extractPublicVars()

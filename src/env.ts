@@ -1,14 +1,12 @@
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
-import { config as dotenvConfig, parse as dotenvParse } from 'dotenv'
+import { parse as dotenvParse } from 'dotenv'
 
 /** 解析 .env 文件，返回 key-value 对象 */
 export function parseEnvFile(filePath: string): Record<string, string> {
   const absPath = resolve(filePath)
   if (!existsSync(absPath)) return {}
-
-  const result = dotenvConfig({ path: absPath, override: false })
-  return result.parsed || {}
+  return dotenvParse(readFileSync(absPath, 'utf8'))
 }
 
 /**
@@ -22,10 +20,11 @@ export function loadEnvFiles(files: string[]): { key: string; source: string }[]
     const absPath = resolve(file)
     if (!existsSync(absPath)) continue
 
-    // override: true 确保后文件覆盖前文件及已有 env
-    const result = dotenvConfig({ path: absPath, override: true })
-    if (result.parsed) {
-      for (const key of Object.keys(result.parsed)) {
+    // Legacy helper: new composition code reads files without mutation.
+    const parsed = dotenvParse(readFileSync(absPath, 'utf8'))
+    if (parsed) {
+      Object.assign(process.env, parsed)
+      for (const key of Object.keys(parsed)) {
         overrides.push({ key, source: file })
       }
     }
@@ -38,9 +37,9 @@ export function loadEnvFiles(files: string[]): { key: string; source: string }[]
 const PUBLIC_PREFIXES = ['NEXT_PUBLIC_', 'VITE_', 'EXPO_PUBLIC_']
 
 /** 从 process.env 中提取客户端公开变量 */
-export function extractPublicVars(): Record<string, string> {
+export function extractPublicVars(environment: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const vars: Record<string, string> = {}
-  for (const [key, value] of Object.entries(process.env)) {
+  for (const [key, value] of Object.entries(environment)) {
     if (value && PUBLIC_PREFIXES.some(p => key.startsWith(p))) {
       vars[key] = value
     }

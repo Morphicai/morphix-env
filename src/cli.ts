@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 
-import { loadEnvFiles, extractPublicVars, parseEnvFile } from './env'
-import { getInfisicalConfig, fetchInfisicalSecrets, hasInfisicalCLI, fetchSecretsViaCLI, readInfisicalJson, isInfisicalLoggedIn } from './infisical'
-import { loadConfig, type MxEnvConfig } from './config'
 import spawn from 'cross-spawn'
-import { writeFileSync, mkdirSync } from 'fs'
-import { dirname } from 'path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { homedir } from 'os'
+import { dirname, join } from 'path'
+import { writeAudit } from './audit'
+import { composeEnvironment, type EnvironmentComposition } from './composition'
+import { loadConfigLayers } from './config'
+import { launchEditor, startEditorServer } from './editor'
+import { extractPublicVars } from './env'
+import { StreamingRedactor } from './redaction'
 
-const VERSION = '0.5.0'
-const DEFAULT_ENV_FILE = '.env.local'
-
-// ─── 参数解析 ─────────────────────────────────────────────
+const VERSION = '0.6.0'
 
 interface Args {
   command: string
@@ -21,21 +22,21 @@ interface Args {
   filter: string | null
   noInfisical: boolean
   env: string | null
+  profile: string | null
+  noGlobal: boolean
+  allowInsecureGlobal: boolean
+  printEditorUrl: boolean
+  source: string | null
 }
 
 function parseArgs(argv: string[]): Args {
   const args: Args = {
-    command: '',
-    subArgs: [],
-    envFiles: [],
-    outFile: null,
-    verbose: false,
-    filter: null,
-    noInfisical: false,
-    env: null,
+    command: '', subArgs: [], envFiles: [], outFile: null, verbose: false,
+    filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
+    allowInsecureGlobal: false, printEditorUrl: false, source: null,
   }
 
-  let i = 2 // skip node, script
+  let i = 2
   const command = argv[i]
   if (!command) return args
   args.command = command
@@ -43,367 +44,298 @@ function parseArgs(argv: string[]): Args {
 
   while (i < argv.length) {
     const arg = argv[i]
-
     if (arg === '--') {
       args.subArgs = argv.slice(i + 1)
       break
     }
-
     if (arg === '--env-file' || arg === '-f') {
-      i++
-      if (argv[i]) args.envFiles.push(argv[i])
+      if (argv[++i]) args.envFiles.push(argv[i])
     } else if (arg === '--out' || arg === '-o') {
-      i++
-      if (argv[i]) args.outFile = argv[i]
+      if (argv[++i]) args.outFile = argv[i]
     } else if (arg === '--filter') {
-      i++
-      if (argv[i]) args.filter = argv[i]
+      if (argv[++i]) args.filter = argv[i]
     } else if (arg === '--env' || arg === '-e') {
-      i++
-      if (argv[i]) args.env = argv[i]
+      if (argv[++i]) args.env = argv[i]
+    } else if (arg === '--profile' || arg === '-p') {
+      if (argv[++i]) args.profile = argv[i]
+    } else if (arg === '--source') {
+      if (argv[++i]) args.source = argv[i]
     } else if (arg === '--verbose' || arg === '-v') {
       args.verbose = true
     } else if (arg === '--no-infisical') {
       args.noInfisical = true
-    } else {
-      // run 命令没有 -- 分隔符时，剩余全部是子命令
-      if (args.command === 'run') {
-        args.subArgs = argv.slice(i)
-        break
-      }
+    } else if (arg === '--no-global') {
+      args.noGlobal = true
+    } else if (arg === '--allow-insecure-global') {
+      args.allowInsecureGlobal = true
+    } else if (arg === '--print-editor-url') {
+      args.printEditorUrl = true
+    } else if (args.command === 'run') {
+      args.subArgs = argv.slice(i)
+      break
     }
-
     i++
   }
-
   return args
 }
 
-/** 合并 CLI 参数和配置文件 */
-function mergeWithConfig(args: Args, config: MxEnvConfig): Args {
-  // envFiles: CLI 指定的优先，没有则用配置文件的，都没有则用默认
-  if (args.envFiles.length === 0) {
-    args.envFiles = config.envFiles || [DEFAULT_ENV_FILE]
-  }
-
-  // outFile: CLI 优先，没有则用配置文件的
-  if (!args.outFile && config.generate) {
-    args.outFile = config.generate.out
-  }
-
-  // filter: CLI 优先
-  if (!args.filter && config.generate?.filter) {
-    args.filter = config.generate.filter
-  }
-
-  return args
-}
-
-// ─── 核心流程：加载所有 env ──────────────────────────────────
-
-async function loadAllEnv(args: Args, config: MxEnvConfig) {
-  // 1. Infisical 拉取（低优先级，不覆盖已有值）
-  if (!args.noInfisical) {
-    const env = args.env || process.env.DEPLOY_ENV || process.env.INFISICAL_ENV || 'prod'
-    const paths = config.infisical?.paths || ['/']
-
-    // 优先尝试 Machine Identity（SDK）— Docker/CI 场景
-    // projectId 解析优先级: INFISICAL_PROJECT_ID > config.infisical.projectId > .infisical.json workspaceId
-    const resolvedProjectId: string = process.env.INFISICAL_PROJECT_ID
-      || config.infisical?.projectId
-      || readInfisicalJson().workspaceId
-      || ''
-
-    const infisicalConfig = config.infisical
-      ? {
-          clientId: process.env.INFISICAL_CLIENT_ID || '',
-          clientSecret: process.env.INFISICAL_CLIENT_SECRET || '',
-          projectId: resolvedProjectId,
-          environment: env,
-          paths,
-          siteUrl: config.infisical.siteUrl,
-        }
-      : getInfisicalConfig()
-
-    const envPrefix = config.infisical?.envPrefix
-
-    if (infisicalConfig && infisicalConfig.clientId && infisicalConfig.clientSecret) {
-      try {
-        const count = await fetchInfisicalSecrets(infisicalConfig, envPrefix)
-        console.log(`[morphix-env] Infisical SDK: loaded ${count} secrets (${env}: ${paths.join(', ')})${envPrefix ? ` [prefix: ${envPrefix}]` : ''}`)
-      } catch (e: any) {
-        failHardWithSdkError(e)
-      }
-    }
-    // Fallback: 尝试 infisical CLI（本地开发场景，用户手动 login）
-    else if (hasInfisicalCLI()) {
-      // 进入 CLI 流程前先做登录态检查，避免后续每个 path 都报同一个错
-      if (!isInfisicalLoggedIn()) {
-        failNotLoggedIn(env)
-      }
-
-      const { count, errors } = fetchSecretsViaCLI(env, paths, envPrefix)
-      const notLoggedIn = errors.find((e) => e.kind === 'not-logged-in')
-      const noProject = errors.find((e) => e.kind === 'no-project')
-
-      if (notLoggedIn) {
-        failNotLoggedIn(env)
-      }
-      if (noProject) {
-        failNoProject(noProject.stderr)
-      }
-
-      if (count > 0) {
-        console.log(`[morphix-env] Infisical CLI: loaded ${count} secrets (${env}: ${paths.join(', ')})${envPrefix ? ` [prefix: ${envPrefix}]` : ''}`)
-        if (errors.length > 0 && args.verbose) {
-          for (const e of errors) {
-            console.warn(`[morphix-env] Infisical CLI: path "${e.path}" failed (${e.kind}): ${e.stderr.trim()}`)
-          }
-        }
-      } else {
-        // count=0 且没有可识别的登录/项目错误：要么所有 path 都没 secrets，要么是其他 CLI 错误
-        const otherErr = errors.find((e) => e.kind === 'other')
-        if (otherErr) {
-          console.error(`[morphix-env] Infisical CLI: failed for env="${env}", path="${otherErr.path}"`)
-          console.error(otherErr.stderr.trim())
-          process.exit(1)
-        }
-        // 真的就是没 secret，给个温和的告警，让 .env.local 兜底
-        console.warn(`[morphix-env] Infisical CLI: no secrets found for env="${env}" (paths: ${paths.join(', ')})`)
-      }
-    } else if (args.verbose) {
-      console.log('[morphix-env] Infisical: skipped (no SDK credentials, no CLI)')
-    } else {
-      // 非 verbose 也要让用户知道走了"裸跑"路径，否则缺 env 时排查很痛苦
-      console.warn('[morphix-env] Infisical: skipped (no SDK credentials, no `infisical` CLI installed)')
-      console.warn('[morphix-env] Hint: install CLI with `brew install infisical/get-cli/infisical` and then `infisical login`')
-    }
-  }
-
-  // 2. .env 文件覆盖（高优先级，强制覆盖）
-  const overrides = loadEnvFiles(args.envFiles)
-  if (overrides.length > 0) {
-    console.log(`[morphix-env] Loaded ${overrides.length} overrides from ${args.envFiles.join(', ')}`)
-    if (args.verbose) {
-      for (const o of overrides) {
-        console.log(`  ${o.key} (from ${o.source})`)
-      }
-    }
-  }
-}
-
-/** 未登录时打印明确指引并退出 */
-function failNotLoggedIn(env: string): never {
-  console.error('')
-  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  console.error('[morphix-env] Infisical 未登录或登录已过期')
-  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  console.error('')
-  console.error('  请运行下面的命令登录后重试：')
-  console.error('')
-  console.error('    infisical login')
-  console.error('')
-  console.error(`  当前环境: ${env}`)
-  console.error('')
-  console.error('  如未安装 CLI: brew install infisical/get-cli/infisical')
-  console.error('  CI / Docker：设置 INFISICAL_CLIENT_ID + INFISICAL_CLIENT_SECRET')
-  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  console.error('')
-  process.exit(1)
-}
-
-/** 项目未配置时打印指引 */
-function failNoProject(stderr: string): never {
-  console.error('')
-  console.error('[morphix-env] Infisical 项目未配置')
-  console.error('  缺少 .infisical.json 或 INFISICAL_PROJECT_ID 环境变量')
-  console.error('  在项目根运行: infisical init')
-  console.error('  原始错误: ' + stderr.trim())
-  process.exit(1)
-}
-
-/** SDK (Machine Identity) 错误 */
-function failHardWithSdkError(e: any): never {
-  console.error(`[morphix-env] Infisical SDK 认证失败: ${e?.message || e}`)
-  console.error('  检查 INFISICAL_CLIENT_ID / INFISICAL_CLIENT_SECRET / INFISICAL_PROJECT_ID 是否正确')
-  process.exit(1)
-}
-
-// ─── 命令实现 ─────────────────────────────────────────────
-
-/** mx-env run [options] -- <command> */
-async function cmdRun(args: Args, config: MxEnvConfig) {
-  if (args.subArgs.length === 0) {
-    console.error('[morphix-env] No command specified. Usage: mx-env run -- <command>')
-    process.exit(1)
-  }
-
-  await loadAllEnv(args, config)
-
-  // 如果配置了 generate，在启动命令前生成 __env.js
-  if (args.outFile) {
-    generateClientEnv(args.outFile, args.filter)
-  }
-
-  const [cmd, ...cmdArgs] = args.subArgs
-  const result = spawn.sync(cmd, cmdArgs, {
-    stdio: 'inherit',
-    env: process.env,
+function resolveComposition(args: Args): Promise<EnvironmentComposition> {
+  const layers = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
+  return composeEnvironment(layers, {
+    profile: args.profile,
+    noGlobal: args.noGlobal,
+    noInfisical: args.noInfisical,
+    envName: args.env,
+    allowInsecureGlobal: args.allowInsecureGlobal,
+    envFiles: args.envFiles,
+    homeDir: homedir(),
   })
-
-  if (result.error) {
-    console.error(`[morphix-env] Failed to execute: ${cmd}`, result.error.message)
-    process.exit(1)
-  }
-  process.exit(result.status ?? 1)
 }
 
-/** 生成客户端 __env.js */
-function generateClientEnv(outFile: string, filter: string | null) {
-  let vars = extractPublicVars()
-
-  if (filter) {
-    vars = Object.fromEntries(
-      Object.entries(vars).filter(([key]) => key.startsWith(filter))
-    )
+function generatedOptions(args: Args): { outFile: string; filter: string | null } {
+  const config = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() }).project.config
+  return {
+    outFile: args.outFile || config.generate?.out || 'public/__env.js',
+    filter: args.filter || config.generate?.filter || null,
   }
+}
 
-  const js = `window.__ENV=${JSON.stringify(vars)};`
+function generateClientEnv(outFile: string, filter: string | null, environment: NodeJS.ProcessEnv): void {
+  let vars = extractPublicVars(environment)
+  if (filter) vars = Object.fromEntries(Object.entries(vars).filter(([key]) => key.startsWith(filter)))
   mkdirSync(dirname(outFile), { recursive: true })
-  writeFileSync(outFile, js)
+  writeFileSync(outFile, `window.__ENV=${JSON.stringify(vars)};`)
   console.log(`[morphix-env] Generated ${outFile} (${Object.keys(vars).length} client vars)`)
 }
 
-/** mx-env generate [options] */
-async function cmdGenerate(args: Args, config: MxEnvConfig) {
-  const outFile = args.outFile || 'public/__env.js'
+async function runChild(command: string, commandArgs: string[], composition: EnvironmentComposition): Promise<number> {
+  return new Promise((resolve) => {
+    const child = spawn(command, commandArgs, { env: composition.environment, stdio: ['inherit', 'pipe', 'pipe'] })
+    const stdout = new StreamingRedactor(composition.redactionValues)
+    const stderr = new StreamingRedactor(composition.redactionValues)
 
-  await loadAllEnv(args, config)
-  generateClientEnv(outFile, args.filter)
+    child.stdout?.on('data', (chunk: Buffer) => process.stdout.write(stdout.write(chunk)))
+    child.stderr?.on('data', (chunk: Buffer) => process.stderr.write(stderr.write(chunk)))
+    child.on('error', () => {
+      console.error(`[morphix-env] Failed to execute: ${command}`)
+      resolve(1)
+    })
+    child.on('close', (code) => {
+      const stdoutFinal = stdout.flush()
+      const stderrFinal = stderr.flush()
+      if (stdoutFinal) process.stdout.write(stdoutFinal)
+      if (stderrFinal) process.stderr.write(stderrFinal)
+      resolve(code ?? 1)
+    })
+  })
+}
 
+function writeRunAudit(composition: EnvironmentComposition, startedAt: number, outcome: 'success' | 'failure', exitCode: number): void {
+  writeAudit({
+    timestamp: new Date().toISOString(),
+    profile: composition.profileName,
+    sources: composition.sourceStatuses.map((source) => source.name),
+    keys: Object.keys(composition.provenance).sort(),
+    outcome,
+    exitCode,
+    durationMs: Date.now() - startedAt,
+  })
+}
+
+async function cmdRun(args: Args): Promise<number> {
+  if (!args.subArgs.length) {
+    console.error('[morphix-env] No command specified. Usage: mx-env run -- <command>')
+    return 1
+  }
+  const startedAt = Date.now()
+  const composition = await resolveComposition(args)
   if (args.verbose) {
-    const vars = extractPublicVars()
-    for (const key of Object.keys(vars)) {
-      console.log(`  ${key}`)
+    for (const source of composition.sourceStatuses) {
+      console.log(`[morphix-env] ${source.name}: ${source.availability} (${source.keyCount} keys)`)
     }
   }
+  if (args.outFile || generatedOptions(args).outFile) {
+    const { outFile, filter } = generatedOptions(args)
+    // Existing run behavior generates when a generate config is present or --out is supplied.
+    const configured = Boolean(args.outFile || loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() }).project.config.generate)
+    if (configured) generateClientEnv(outFile, filter, composition.environment)
+  }
+  const [command, ...commandArgs] = args.subArgs
+  const exitCode = await runChild(command, commandArgs, composition)
+  writeRunAudit(composition, startedAt, exitCode === 0 ? 'success' : 'failure', exitCode)
+  return exitCode
 }
 
-/** mx-env inspect [options] */
-function cmdInspect(args: Args) {
-  for (const file of args.envFiles.length > 0 ? args.envFiles : [DEFAULT_ENV_FILE]) {
-    const vars = parseEnvFile(file)
-    const keys = Object.keys(vars)
-
-    if (keys.length === 0) {
-      console.log(`${file}: (not found or empty)`)
-      continue
-    }
-
-    console.log(`${file}: (${keys.length} vars)`)
-    for (const [key, value] of Object.entries(vars)) {
-      if (args.filter && !key.startsWith(args.filter)) continue
-      const display = value.length > 8 ? value.slice(0, 4) + '***' : value
-      console.log(`  ${key}=${display}`)
-    }
+async function cmdGenerate(args: Args): Promise<number> {
+  const composition = await resolveComposition(args)
+  const { outFile, filter } = generatedOptions(args)
+  generateClientEnv(outFile, filter, composition.environment)
+  if (args.verbose) {
+    for (const key of Object.keys(extractPublicVars(composition.environment)).sort()) console.log(`  ${key}`)
   }
-
-  const publicVars = extractPublicVars()
-  const filtered = args.filter
-    ? Object.entries(publicVars).filter(([k]) => k.startsWith(args.filter!))
-    : Object.entries(publicVars)
-
-  if (filtered.length > 0) {
-    console.log(`\nprocess.env public vars: (${filtered.length})`)
-    for (const [key, value] of filtered) {
-      const display = value.length > 8 ? value.slice(0, 4) + '***' : value
-      console.log(`  ${key}=${display}`)
-    }
-  }
+  return 0
 }
 
-function showHelp() {
+async function cmdInspect(args: Args): Promise<number> {
+  const composition = await resolveComposition(args)
+  console.log(`profile: ${composition.profileName}`)
+  for (const source of composition.sourceStatuses) {
+    console.log(`source: ${source.name} (${source.provider}) — ${source.availability}, ${source.keyCount} keys`)
+  }
+  for (const [key, provenance] of Object.entries(composition.provenance).sort(([a], [b]) => a.localeCompare(b))) {
+    if (!args.filter || key.startsWith(args.filter)) {
+      const overridden = provenance.overriddenSources.length ? `; overrides ${provenance.overriddenSources.join(', ')}` : ''
+      console.log(`  ${key} — ${provenance.source} (${provenance.provider})${overridden}`)
+    }
+  }
+  return 0
+}
+
+async function cmdEdit(args: Args): Promise<number> {
+  if (!args.profile && !args.source) {
+    console.error('[morphix-env] Specify --profile <name> or --source <name> to open the editor.')
+    return 1
+  }
+  const composition = await resolveComposition(args)
+  if (args.source && !composition.sourceEntries.some((entry) => entry.name === args.source)) {
+    const layers = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
+    const declared = layers.project.config.sources?.[args.source]
+      ? { source: layers.project.config.sources[args.source], baseDir: layers.project.baseDir }
+      : (!args.noGlobal && layers.global.config.sources?.[args.source]
+        ? { source: layers.global.config.sources[args.source], baseDir: layers.global.baseDir }
+        : null)
+    if (!declared) {
+      console.error(`[morphix-env] Unknown source "${args.source}".`)
+      return 1
+    }
+    composition.sourceEntries.push({ name: args.source, ...declared })
+    composition.sourceStatuses.push({ name: args.source, provider: declared.source.provider, availability: 'skipped', keyCount: 0 })
+  }
+  const editor = await launchEditor(__filename, composition, args.source || undefined)
+  if (args.printEditorUrl) console.log(`[morphix-env] Local editor URL: ${editor.url}`)
+  else if (editor.opened) console.log('[morphix-env] Opened local editor in your browser.')
+  else console.log('[morphix-env] Local editor started. Run again with --print-editor-url to display its one-time URL.')
+  console.log('[morphix-env] Values remain in the provider or browser session and are not printed here.')
+  return 0
+}
+
+async function cmdDoc(args: Args): Promise<number> {
+  const composition = await resolveComposition(args)
+  const outFile = args.outFile || join(process.cwd(), '.agents', 'skills', 'morphix-env', 'SKILL.md')
+  const keyRows = Object.entries(composition.provenance)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, provenance]) => `| \`${key}\` | ${provenance.source} (${provenance.provider}) |`)
+    .join('\n') || '| _No resolved keys_ | — |'
+  const skill = `---
+name: morphix-env
+description: Safely use and edit this project's composed environment profiles without placing values in Agent context.
+---
+
+# Morphix environment workflow
+
+Default profile context: \`${composition.profileName}\`.
+
+## Operator-owned secret changes
+
+When a user asks to add, modify, or rotate a credential:
+
+1. Run \`mx-env edit --profile <profile>\` or \`mx-env edit --source <source>\`.
+2. Tell the user to complete the change in the local visual editor or provider UI.
+3. Do not ask the user to paste a value into chat.
+4. Do not run \`env\`, \`printenv\`, \`cat .env\`, or any reveal command.
+5. Validate only through \`mx-env inspect --profile <profile>\`; it reports names, source, and status without values.
+
+## Running commands
+
+Use \`mx-env run --profile <profile> -- <command>\` for normal runs.
+Use \`mx-env run --no-global -- <command>\` when a project-only, reproducible environment is required.
+
+## Available key names and sources
+
+| Key | Winning source |
+| --- | --- |
+${keyRows}
+
+Secret values and value prefixes do not belong in this Skill, command output, audit records, or conversation context.
+`
+  mkdirSync(dirname(outFile), { recursive: true })
+  writeFileSync(outFile, skill, { mode: 0o600 })
+  console.log(`[morphix-env] Generated value-free workflow Skill: ${outFile}`)
+  return 0
+}
+
+function cmdAudit(args: Args): number {
+  const file = join(homedir(), '.mx-env', 'audit', `${new Date().toISOString().slice(0, 10)}.jsonl`)
+  if (!existsSync(file)) {
+    console.log('[morphix-env] No audit events for today.')
+    return 0
+  }
+  const lines = readFileSync(file, 'utf8').trim().split('\n').filter(Boolean)
+  const selected = args.subArgs[0] === 'tail' ? lines.slice(-20) : lines
+  for (const line of selected) console.log(line)
+  return 0
+}
+
+function showHelp(): void {
   console.log(`
-morphix-env v${VERSION} — MorphixAI environment variable toolkit
+morphix-env v${VERSION} — secret composition and environment delivery
 
 Usage:
-  mx-env run [options] -- <command>     Load env + exec command
-  mx-env generate [options]             Generate __env.js for client-side runtime
-  mx-env inspect [options]              Print env vars for debugging
+  mx-env run [options] -- <command>       Compose env + execute command
+  mx-env generate [options]               Generate public __env.js
+  mx-env inspect [options]                Print key names, sources, and status only
+  mx-env doc [options]                    Generate a value-free project Skill
+  mx-env audit [tail]                     Read value-free local audit events
+  mx-env edit --profile <name>            Open the one-shot visual editor
+
+Both mx-env and morphix-env are supported.
 
 Options:
-  -f, --env-file <path>    Env file to load (default: .env.local, repeatable)
-  -o, --out <path>         Output path for generate (default: public/__env.js)
-  -e, --env <name>         Infisical environment (dev/staging/prod), overrides config
-  --filter <prefix>        Only include vars with this prefix
-  --no-infisical           Skip Infisical fetch entirely
-  -v, --verbose            Show loaded variable names
+  -p, --profile <name>     Select a named source profile
+  -f, --env-file <path>    Local override file (repeatable)
+  -e, --env <name>         Infisical environment override
+  -o, --out <path>         Client __env.js output
+  --filter <prefix>        Include public keys with this prefix
+  --no-infisical           Do not load Infisical sources
+  --no-global              Ignore ~/.mx-env/.env and ~/.mx-env/config.json
+  --allow-insecure-global  Allow a global .env with permissive file mode
+  --print-editor-url       Explicitly print the one-time local editor URL
+  -v, --verbose            Print source status and key counts only
   --help, -h               Show this help
   --version                Show version
-
-Config file (mx-env.config.json):
-  {
-    "infisical": {
-      "projectId": "xxx",
-      "paths": ["/ai/shared", "/ai/web"],
-      "env": "$DEPLOY_ENV"
-    },
-    "envFiles": [".env.local"],
-    "generate": {
-      "out": "public/__env.js",
-      "filter": "NEXT_PUBLIC_"
-    }
-  }
-
-Env loading priority (high → low):
-  1. .env.local (or --env-file)
-  2. Infisical secrets
-  3. Existing process.env
-
-Examples:
-  mx-env run -- next dev --turbo -p 3004
-  mx-env run --no-infisical -- npm start
-  mx-env run -f .env.staging -- npm start
-  mx-env generate --out dist/__env.js
-  mx-env inspect --filter VITE_
 `)
 }
 
-// ─── 入口 ─────────────────────────────────────────────────
-
-async function main() {
-  const config = loadConfig()
-  const args = mergeWithConfig(parseArgs(process.argv), config)
-
+async function main(): Promise<number> {
+  const args = parseArgs(process.argv)
   switch (args.command) {
-    case 'run':
-      await cmdRun(args, config)
-      break
+    case 'run': return cmdRun(args)
     case 'generate':
-    case 'gen':
-      await cmdGenerate(args, config)
-      break
-    case 'inspect':
-      cmdInspect(args)
-      break
+    case 'gen': return cmdGenerate(args)
+    case 'inspect': return cmdInspect(args)
+    case 'audit': return cmdAudit(args)
+    case 'edit': return cmdEdit(args)
+    case 'doc': return cmdDoc(args)
     case '--help':
     case '-h':
-    case 'help':
-      showHelp()
-      break
-    case '--version':
-      console.log(VERSION)
-      break
+    case 'help': showHelp(); return 0
+    case '--version': console.log(VERSION); return 0
     default:
-      if (args.command) {
-        console.error(`[morphix-env] Unknown command: ${args.command}`)
-      }
+      if (args.command) console.error(`[morphix-env] Unknown command: ${args.command}`)
       showHelp()
-      process.exit(args.command ? 1 : 0)
+      return args.command ? 1 : 0
   }
 }
 
-main().catch(e => {
-  console.error('[morphix-env] Fatal:', e.message)
-  process.exit(1)
-})
+if (process.argv[2] === '__mx_editor') {
+  startEditorServer(process.argv[3])
+    .catch(() => { process.exitCode = 1 })
+} else {
+  main()
+    .then((code) => { process.exitCode = code })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : '[morphix-env] Failed to compose environment.'
+      console.error(message)
+      process.exitCode = 1
+    })
+}

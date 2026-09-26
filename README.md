@@ -1,329 +1,250 @@
-<p align="center">
-  <img src="https://morphix.app/brand/logo-rounded.png" width="80" alt="MorphixAI" />
-</p>
-
 # morphix-env
 
-Environment variable toolkit for multi-project architectures. Combines [Infisical](https://infisical.com) secret management with local override files and client-side runtime injection.
+`morphix-env` is a secret composition CLI for local development, CI, and agent-assisted workflows. It does not become another secret vault: Infisical, Doppler, macOS Keychain, dotenvx, and local files continue to own their values, authentication, access controls, rotation, and provider UI.
 
-## Why
+`morphix-env` assembles the sources chosen by a profile into one short-lived child-process environment, records value-free provenance, and keeps normal command output, inspection, audit records, and generated workflow guidance free of secret values.
 
-| Problem | Solution |
-|---------|----------|
-| `NEXT_PUBLIC_*` / `VITE_*` baked at build time | `morphix-env generate` creates `__env.js` for runtime injection |
-| Scattered env vars across hosting platforms | Single source of truth in Infisical, pulled at startup |
-| No local override when using remote config | `.env.local` always wins — edit one file, restart |
-| Different tools for different needs (dotenv, cross-env, infisical CLI) | One tool, one command |
+The concise command is `mx-env`; the published `morphix-env` command remains fully supported.
 
-## Install
+## Quick start: global local defaults
+
+Create this file once:
+
+```dotenv
+# ~/.mx-env/.env
+PERSONAL_API_URL=http://localhost:4444
+```
+
+Protect it on macOS/Linux:
 
 ```bash
-pnpm add -D morphix-env
-# or
-npm install -D morphix-env
+mkdir -p ~/.mx-env
+chmod 700 ~/.mx-env
+chmod 600 ~/.mx-env/.env
 ```
 
-## Quick Start
+Then every normal project command can use it without repeating configuration:
 
 ```bash
-# Run a command with env injection
-morphix-env run -- next dev
-
-# Generate client-side __env.js
-morphix-env generate --out public/__env.js
-
-# Debug: see what's loaded
-morphix-env inspect
+mx-env run -- pnpm dev
 ```
 
-## How It Works
+`~/.mx-env/.env` is deliberately the only automatically discovered value file. `~/.mx-env/config.json` is optional and adds global Keychain, encrypted-file, or remote-provider sources. For CI, investigation, or an unfamiliar repository, use a reproducible project-only run:
 
-### Core Flow
-
-```
-morphix-env run -- <command>
-│
-├─ 1. Read mx-env.config.json
-│
-├─ 2. Load Infisical secrets ──────────────────────────┐
-│     │                                                 │
-│     ├─ INFISICAL_CLIENT_ID exists?                    │
-│     │   ├─ Yes → SDK (Machine Identity) ── CI/Docker  │
-│     │   └─ No ──┐                                     │
-│     │           ├─ infisical CLI installed?            │
-│     │           │   ├─ Yes → CLI (user login) ── Local │
-│     │           │   └─ No → Skip                       │
-│     │                                                 │
-│     └─ Inject into process.env (does NOT overwrite)   │
-│                                                       │
-├─ 3. Load .env.local ─────────────────────────────────┐
-│     └─ Inject into process.env (OVERWRITES all)       │
-│                                                       │
-├─ 4. Generate __env.js (if configured)                 │
-│     └─ Extract NEXT_PUBLIC_* / VITE_* → write file    │
-│                                                       │
-└─ 5. Spawn child command                               │
-      └─ Inherits fully assembled process.env           │
+```bash
+mx-env run --no-global -- pnpm dev
 ```
 
-### Priority (high → low)
+## Source precedence and conflicts
 
-```
-┌─────────────────────────────────────────────────┐
-│  .env.local                     ← HIGHEST       │
-│  Always wins. Developer's local overrides.       │
-├─────────────────────────────────────────────────┤
-│  Infisical secrets              ← MEDIUM         │
-│  Pulled via SDK or CLI. Does not overwrite.      │
-├─────────────────────────────────────────────────┤
-│  process.env                    ← LOWEST         │
-│  Docker ENV, CI vars, shell exports.             │
-└─────────────────────────────────────────────────┘
+The composed environment has a fixed low-to-high order:
+
+```text
+inherited process.env
+→ ~/.mx-env/.env
+→ ~/.mx-env/config.json default profile
+→ project profile or legacy project configuration
+→ explicit CLI local override (-f)
 ```
 
-### Authentication Flow
+Two sources that provide the same key fail by default. The later source must explicitly declare `"override": true` to replace the earlier value. This catches accidental cross-environment collisions instead of silently selecting a database, API, or deployment credential.
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                   morphix-env starts                      │
-│                         │                                 │
-│           INFISICAL_CLIENT_ID set?                        │
-│              /                  \                          │
-│           Yes                    No                       │
-│            │                      │                       │
-│    ┌───────▼────────┐    infisical CLI installed?         │
-│    │  SDK Auth       │       /            \                │
-│    │  (Machine ID)   │    Yes              No             │
-│    │                 │     │                │              │
-│    │  CI / Docker /  │  ┌──▼───────────┐   │              │
-│    │  Production     │  │ CLI Auth      │   ▼              │
-│    └────────┬────────┘  │ (User Login)  │  Skip            │
-│             │           │               │  Infisical       │
-│             │           │ Local Dev     │                  │
-│             │           └──────┬────────┘                  │
-│             │                  │                           │
-│             ▼                  ▼                           │
-│         Pull secrets from Infisical                       │
-│         Inject into process.env                           │
-└──────────────────────────────────────────────────────────┘
-```
+Existing projects remain compatible: a legacy `mx-env.config.json` still composes the configured Infisical paths followed by `.env.local`, so `.env.local` remains the deliberate override layer.
 
-### Local Development
+## Profiles and providers
 
-```
-Developer machine:
-  1. infisical login          ← one-time, session cached
-  2. pnpm dev                 ← morphix-env auto-detects CLI
-     └─ morphix-env run
-        ├─ infisical CLI pulls 69 secrets
-        ├─ .env.local overrides API_BASE_URL → localhost
-        └─ next dev starts with all vars
+Profiles compose complete source collections; do not enumerate every secret in repository configuration.
+
+```jsonc
+// ~/.mx-env/config.json — optional user baseline, never contains values
+{
+  "sources": {
+    "machine-keychain": {
+      "provider": "os-keychain",
+      "platform": "macos",
+      "service": "com.morphix.env/global"
+    },
+    "team-defaults": {
+      "provider": "infisical",
+      "paths": ["/shared"]
+    }
+  },
+  "profiles": {
+    "developer-default": {
+      "sources": ["machine-keychain", "team-defaults"]
+    }
+  },
+  "defaultProfile": "developer-default"
+}
 ```
 
-### CI / Docker
-
+```jsonc
+// project/mx-env.config.json
+{
+  "sources": {
+    "api": {
+      "provider": "infisical",
+      "paths": ["/ai/api"]
+    },
+    "project-doppler": {
+      "provider": "doppler",
+      "project": "morphicai-api",
+      "config": "dev"
+    },
+    "local": {
+      "provider": "local",
+      "files": [".env.local"],
+      "override": true
+    }
+  },
+  "profiles": {
+    "api-dev": {
+      "extends": "developer-default",
+      "sources": ["api", "project-doppler", "local"]
+    }
+  },
+  "defaultProfile": "api-dev"
+}
 ```
-Container / CI runner:
-  ENV INFISICAL_CLIENT_ID=xxx
-  ENV INFISICAL_CLIENT_SECRET=xxx
-  ENV DEPLOY_ENV=prod
 
-  CMD morphix-env run -- node server.js
-      └─ morphix-env run
-         ├─ SDK pulls secrets (no CLI needed)
-         ├─ .env.local not present → skip
-         └─ server starts with prod vars
+Run it with either CLI name:
+
+```bash
+mx-env run --profile api-dev -- pnpm dev
+morphix-env run --profile api-dev -- pnpm dev
 ```
 
-### `__env.js` — Client-Side Runtime Injection
+### Supported sources
 
-```
-Build phase (CI):
-  morphix-env run -- next build
-  ├─ NEXT_PUBLIC_* injected at build time → baked into JS bundle
-  └─ Works, but image is environment-specific
+| Provider | Source selector | Value ownership / bootstrap |
+|---|---|---|
+| `infisical` | `paths`, optional project/site/environment settings | Local: `infisical login`. CI: Machine Identity through the usual `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET`, and project identity flow. Do not put these in project config. |
+| `doppler` | `project` and `config` | Local: `doppler login`. CI: a least-privilege Doppler Service Token supplied outside repository configuration, ideally via workload identity or the OS Keychain. |
+| `os-keychain` | macOS generic-password `service`; each account is an environment key | macOS only in this release. Keychain owns the value; use `mx-env edit` to add/update it. |
+| `dotenvx` | encrypted `files` | Install `dotenvx` separately and provide its private decryption key through a secure bootstrap path. The encrypted file stays provider-managed. |
+| `local` | dotenv `files` | Intended for project `.env.local` and explicitly declared user files. A missing source is only allowed with `"optional": true`. |
 
-Runtime injection (Docker, optional):
-  morphix-env run -- node server.js
-  ├─ morphix-env generates public/__env.js:
-  │    window.__ENV = {
-  │      "NEXT_PUBLIC_API_URL": "https://api.prod.example.com",
-  │      "NEXT_PUBLIC_APP_NAME": "MyApp"
-  │    };
-  │
-  ├─ Browser loads <script src="/__env.js"> before app
-  └─ App reads: window.__ENV?.NEXT_PUBLIC_API_URL
-     → One build, deploy to any environment
+### Doppler compared with Infisical
+
+Both are strong team secret managers; `morphix-env` treats them as sources rather than attempting to reproduce their control planes.
+
+| Concern | Infisical | Doppler | What `morphix-env` adds |
+|---|---|---|---|
+| Organization | projects, environments, folders/paths, identities | project, config, root/branch config inheritance | One profile can combine either or both with local sources. |
+| Local execution | SDK Machine Identity or `infisical` CLI | `doppler login` + `doppler run` | One stable `mx-env run --profile` interface. |
+| CI least privilege | Machine Identity scoped by project/path/role | Service Token scoped to project/config | Provider bootstrap stays outside config; profile decides only which source is requested. |
+| Visual value editing | Provider dashboard | Provider dashboard | `mx-env edit` opens provider-owned routes instead of copying values into a new dashboard. |
+| Local Keychain / global dotenv | Not their primary concern | Not their primary concern | `~/.mx-env` and `os-keychain` participate in the same explicit order. |
+
+Choose a provider based on its own identity, audit, rotation, price, and hosting requirements. Provider switching is not assumed to be a one-line operation: source selectors and permissions remain provider-specific even though the consuming command remains stable.
+
+For a manual Doppler smoke test, authenticate with `doppler login`, declare a non-production project/config source, and run `mx-env inspect --profile <profile>`. It must report the Doppler source and key names only. Use `mx-env run --profile <profile> -- <non-echoing command>` to validate delivery; do not use `doppler secrets get --plain` or print the child environment.
+
+## Visual editor
+
+Use the one-shot editor instead of asking someone to paste a value into chat:
+
+```bash
+mx-env edit --profile api-dev
+mx-env edit --source machine-keychain
 ```
+
+It starts a short-lived loopback-only browser session. The profile page shows names, source precedence, configured state, provenance, and collisions without values.
+
+- Infisical and Doppler sources route the user to their provider-owned editor.
+- Local dotenv files can be edited only in the selected local source.
+- Keychain shows account names but never reveals existing values; it can add or update an account value.
+- dotenvx writes through its CLI so it remains responsible for the encrypted representation.
+
+The CLI prints status only, never a secret value.
+
+On macOS the browser opens automatically and the default CLI output intentionally omits the one-time editor URL, so an Agent tool result does not receive a bearer-like local session capability. A human can explicitly request the URL when needed:
+
+```bash
+mx-env edit --profile api-dev --print-editor-url
+```
+
+On macOS, verify Keychain editing manually after installing a new version: use a temporary `os-keychain` service namespace, run `mx-env edit --source <name>`, add a generated test account in the browser, confirm it appears in the account-name list without revealing its value, then use **Delete** to remove it. The terminal transcript must contain only the editor URL/status.
+
+## Context hygiene
+
+```bash
+mx-env inspect --profile api-dev
+mx-env audit tail
+```
+
+`inspect` lists key names, source provenance, and configured state only. Audit events contain profile/source/key names, outcome, duration, and exit code—never a value, value prefix, command arguments, or provider stderr.
+
+When child output is forwarded through the CLI, exact non-public injected values are redacted as `[REDACTED]`, including when the value crosses stream chunks or the command fails.
+
+This is leakage minimization, not a cryptographic isolation boundary. A process that receives an environment variable can deliberately transform or exfiltrate it. For a high-risk Agent capability, use a provider proxy/broker as a separate security design rather than passing that credential through `run`.
+
+Browser variables (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`) are an intentional exception: they are public configuration, not protected secrets.
 
 ## Commands
 
-### `morphix-env run [options] -- <command>`
-
-Load environment variables, then execute a command. The child process inherits all injected vars.
-
 ```bash
-# Basic: load env, run dev server
-morphix-env run -- next dev --turbo -p 3004
+# Run one command with its composed profile
+mx-env run --profile api-dev -- pnpm dev
 
-# Custom env file
-morphix-env run -f .env.staging -- npm start
+# Existing scripts remain valid
+morphix-env run --env dev -- pnpm dev
 
-# Skip Infisical (use only local files)
-morphix-env run --no-infisical -- npm start
+# Generate public browser runtime configuration
+mx-env generate --profile api-dev --out public/__env.js
 
-# Verbose: show which vars were loaded
-morphix-env run -v -- node server.js
+# Value-free status/provenance
+mx-env inspect --profile api-dev
+
+# Open the short-lived visual editor
+mx-env edit --profile api-dev
+
+# Generate this project's value-free Agent workflow Skill
+mx-env doc --profile api-dev
+
+# Value-free audit events
+mx-env audit tail
 ```
 
-### `morphix-env generate [options]`
+Options:
 
-Extract public environment variables and write to a JS file for browser runtime injection.
+| Option | Meaning |
+|---|---|
+| `-p, --profile <name>` | Select a named profile. |
+| `-f, --env-file <path>` | Append a local override source for this invocation. |
+| `-e, --env <name>` | Override the Infisical environment for selected Infisical sources. |
+| `--no-infisical` | Skip Infisical sources. |
+| `--no-global` | Ignore `~/.mx-env/.env` and `~/.mx-env/config.json`. |
+| `--allow-insecure-global` | Explicitly permit a global dotenv file readable by group/other users. Avoid this outside controlled troubleshooting. |
+| `--print-editor-url` | Explicitly print the one-time local editor URL; normally the browser opens without emitting it to the terminal. |
+| `-o, --out <path>` / `--filter <prefix>` | Configure public browser-env generation. |
+| `-v, --verbose` | Show source state and key counts, not values. |
 
-```bash
-morphix-env generate                              # → public/__env.js
-morphix-env generate --out dist/__env.js           # Vite projects
-morphix-env generate --filter NEXT_PUBLIC_          # Only Next.js vars
+## Agent workflow
+
+`mx-env doc --profile <profile>` writes a value-free workflow Skill to `.agents/skills/morphix-env/SKILL.md` by default. Generated or maintained Skills contain this rule:
+
+```md
+When the user asks to add, modify, or rotate a credential:
+1. Run `mx-env edit --profile <profile>` or `mx-env edit --source <source>`.
+2. Let the user complete the edit in the local visual editor or provider UI.
+3. Do not request the value in chat; do not run env, printenv, cat .env, or a reveal command.
+4. Validate only configured status and provenance, never the value.
 ```
 
-### `morphix-env inspect [options]`
+## Legacy configuration
 
-Print env var values for debugging. Secrets are masked (first 4 chars shown).
-
-```bash
-morphix-env inspect
-morphix-env inspect --filter NEXT_PUBLIC_
-morphix-env inspect -f .env.production
-```
-
-## Options
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--env-file <path>` | `-f` | Env file to load (default: `.env.local`, repeatable) |
-| `--out <path>` | `-o` | Output path for generate (default: `public/__env.js`) |
-| `--filter <prefix>` | | Only include vars with this prefix |
-| `--no-infisical` | | Skip Infisical fetch entirely |
-| `--verbose` | `-v` | Show loaded variable names |
-
-## Config File
-
-Create `mx-env.config.json` in your project root. Committed to git.
+This remains valid and needs no immediate migration:
 
 ```json
 {
-  "infisical": {
-    "paths": ["/ai"],
-    "env": "dev"
-  },
-  "envFiles": [".env.local"],
-  "generate": {
-    "out": "public/__env.js",
-    "filter": "NEXT_PUBLIC_"
-  }
-}
-```
-
-### Config vs Environment Variables
-
-```
-┌──────────────────────────────────────────────────────┐
-│  mx-env.config.json (committed to git)                │
-│  ├─ paths          → which secrets to pull            │
-│  ├─ env            → which environment                │
-│  ├─ envFiles       → which override files to load     │
-│  └─ generate       → __env.js output config           │
-│                                                       │
-│  These are PROJECT CONFIG, not secrets.                │
-├──────────────────────────────────────────────────────┤
-│  Environment Variables (NEVER committed)              │
-│  ├─ INFISICAL_CLIENT_ID      → Machine Identity       │
-│  ├─ INFISICAL_CLIENT_SECRET  → Machine Identity       │
-│  └─ DEPLOY_ENV               → prod / staging / dev   │
-│                                                       │
-│  These are CREDENTIALS, set in CI/Docker only.        │
-│  Local dev uses infisical CLI login instead.           │
-└──────────────────────────────────────────────────────┘
-```
-
-## Usage Examples
-
-### Next.js
-
-```jsonc
-// package.json
-{
-  "scripts": {
-    "dev": "morphix-env run -- next dev --turbo -p 3004",
-    "build": "morphix-env run -- next build",
-    "start": "morphix-env run -- next start"
-  }
-}
-```
-
-```json
-// mx-env.config.json
-{
-  "infisical": { "paths": ["/ai"], "env": "dev" },
+  "infisical": { "paths": ["/ai"], "envPrefix": "VITE_" },
   "envFiles": [".env.local"],
   "generate": { "out": "public/__env.js", "filter": "NEXT_PUBLIC_" }
 }
 ```
 
-### Vite (React / Vue / Ionic)
-
-```jsonc
-{
-  "scripts": {
-    "dev": "morphix-env run -- vite",
-    "build": "morphix-env run -- vite build"
-  }
-}
-```
-
-```json
-{
-  "infisical": { "paths": ["/frontend"], "env": "dev" },
-  "generate": { "out": "dist/__env.js", "filter": "VITE_" }
-}
-```
-
-### Express API
-
-```jsonc
-{
-  "scripts": {
-    "dev": "morphix-env run -- tsx watch src/index.ts",
-    "start": "morphix-env run -- node dist/index.js"
-  }
-}
-```
-
-```json
-{
-  "infisical": { "paths": ["/ai"], "env": "dev" },
-  "envFiles": [".env.local"]
-}
-```
-
-No `generate` — server-side apps don't need `__env.js`.
-
-### Docker
-
-```dockerfile
-FROM node:20-alpine
-WORKDIR /app
-COPY . .
-RUN pnpm install && pnpm build
-
-ENV INFISICAL_CLIENT_ID=""
-ENV INFISICAL_CLIENT_SECRET=""
-ENV DEPLOY_ENV="prod"
-
-CMD ["npx", "morphix-env", "run", "--", "node", "server.js"]
-```
-
-No Infisical CLI binary needed in the image.
+Migrate when a project needs named profiles, multiple providers, or a source that can be edited through the unified local entry point.
 
 ## License
 
