@@ -53,7 +53,7 @@ jobs:
       # npm publish, so a failing build/test can never reach the registry.
       - name: Publish to npm
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
         run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
       # Only created after a successful publish, so a GitHub Release always
       # implies the matching npm version is live.
