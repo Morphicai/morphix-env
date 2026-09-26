@@ -10,6 +10,7 @@ import { loadConfigLayers } from './config'
 import { launchEditor, startEditorServer } from './editor'
 import { extractPublicVars } from './env'
 import { StreamingRedactor } from './redaction'
+import { cmdSkill } from './skill'
 import pkg from '../package.json'
 
 const VERSION = pkg.version
@@ -28,6 +29,8 @@ interface Args {
   allowInsecureGlobal: boolean
   printEditorUrl: boolean
   source: string | null
+  target: string | null
+  force: boolean
 }
 
 function parseArgs(argv: string[]): Args {
@@ -35,6 +38,7 @@ function parseArgs(argv: string[]): Args {
     command: '', subArgs: [], envFiles: [], outFile: null, verbose: false,
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
+    target: null, force: false,
   }
 
   let i = 2
@@ -71,6 +75,10 @@ function parseArgs(argv: string[]): Args {
       args.allowInsecureGlobal = true
     } else if (arg === '--print-editor-url') {
       args.printEditorUrl = true
+    } else if (arg === '--target') {
+      if (argv[++i]) args.target = argv[i]
+    } else if (arg === '--force') {
+      args.force = true
     } else if (args.command === 'run') {
       args.subArgs = argv.slice(i)
       break
@@ -288,6 +296,8 @@ Usage:
   mx-env doc [options]                    Generate a value-free project Skill
   mx-env audit [tail]                     Read value-free local audit events
   mx-env edit --profile <name>            Open the one-shot visual editor
+  mx-env skill install [--target <t>]     Install the Agent Skill (global|project|trellis)
+  mx-env skill show                       Show skill install status per target
 
 Both mx-env and morphix-env are supported.
 
@@ -301,6 +311,8 @@ Options:
   --no-global              Ignore ~/.mx-env/.env and ~/.mx-env/config.json
   --allow-insecure-global  Allow a global .env with permissive file mode
   --print-editor-url       Explicitly print the one-time local editor URL
+  --target <scope>         Skill install target: global, project, or trellis
+  --force                  Overwrite an installed skill that differs from this version
   -v, --verbose            Print source status and key counts only
   --help, -h               Show this help
   --version                Show version
@@ -317,6 +329,10 @@ async function main(): Promise<number> {
     case 'audit': return cmdAudit(args)
     case 'edit': return cmdEdit(args)
     case 'doc': return cmdDoc(args)
+    case 'skill': {
+      const positional = process.argv.slice(3).find((arg) => !arg.startsWith('-')) ?? 'install'
+      return cmdSkill(positional, { target: args.target, force: args.force })
+    }
     case '--help':
     case '-h':
     case 'help': showHelp(); return 0

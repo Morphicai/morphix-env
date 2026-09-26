@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync } from 'child_process'
-import { writeFileSync, unlinkSync, existsSync, readFileSync, mkdirSync } from 'fs'
+import { writeFileSync, unlinkSync, existsSync, readFileSync, mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
@@ -33,6 +33,9 @@ afterEach(() => {
     const p = join(TMP, f)
     if (existsSync(p)) unlinkSync(p)
   }
+  rmSync(join(TMP, '.claude'), { recursive: true, force: true })
+  rmSync(join(TMP, 'home', '.claude'), { recursive: true, force: true })
+  rmSync(join(TMP, 'home', '.trellis'), { recursive: true, force: true })
 })
 
 // ─── CLI 基本功能 ─────────────────────────────────────────
@@ -266,5 +269,82 @@ describe('config file integration', () => {
     expect(content).toContain('mx-env edit --profile <profile>')
     expect(content).toContain('MXTEST_SKILL')
     expect(content).not.toContain(sentinel)
+  })
+})
+
+// ─── mx-env skill ─────────────────────────────────────────
+
+describe('mx-env skill', () => {
+  const projectSkill = () => join(TMP, '.claude', 'skills', 'morphix-env', 'SKILL.md')
+
+  it('--help lists the skill command and targets', () => {
+    const out = run(['--help'])
+    expect(out).toContain('skill install')
+    expect(out).toContain('--target <scope>')
+  })
+
+  it('install --target project writes the shipped template', () => {
+    const out = run(['skill', 'install', '--target', 'project'])
+    expect(out).toContain('Installed skill')
+    const content = readFileSync(projectSkill(), 'utf8')
+    expect(content).toContain('name: morphix-env')
+    expect(content).toContain('mx-env edit --profile')
+    expect(content).toContain('os-keychain')
+    // The generic template carries no project data: it must never grow a value.
+    expect(content).not.toContain('=mxenv_test_')
+  })
+
+  it('re-install is idempotent when the template is unchanged', () => {
+    run(['skill', 'install', '--target', 'project'])
+    const out = run(['skill', 'install', '--target', 'project'])
+    expect(out).toContain('already installed and up to date')
+  })
+
+  it('refuses to overwrite a modified skill without --force, then --force replaces it', () => {
+    run(['skill', 'install', '--target', 'project'])
+    writeFileSync(projectSkill(), 'user-customized skill')
+
+    try {
+      run(['skill', 'install', '--target', 'project'])
+      expect.unreachable()
+    } catch (error: any) {
+      expect(`${error.stdout || ''}${error.stderr || ''}`).toContain('--force')
+    }
+    expect(readFileSync(projectSkill(), 'utf8')).toBe('user-customized skill')
+
+    const out = run(['skill', 'install', '--target', 'project', '--force'])
+    expect(out).toContain('Installed skill')
+    expect(readFileSync(projectSkill(), 'utf8')).toContain('name: morphix-env')
+  })
+
+  it('install --target global and --target trellis write into the home stores', () => {
+    run(['skill', 'install', '--target', 'global'])
+    expect(readFileSync(join(TMP, 'home', '.claude', 'skills', 'morphix-env', 'SKILL.md'), 'utf8')).toContain('name: morphix-env')
+
+    const out = run(['skill', 'install', '--target', 'trellis'])
+    expect(out).toContain('trellis sync skills')
+    expect(readFileSync(join(TMP, 'home', '.trellis', 'skills', 'morphix-env', 'SKILL.md'), 'utf8')).toContain('name: morphix-env')
+  })
+
+  it('rejects an unknown target and unknown subcommand', () => {
+    try {
+      run(['skill', 'install', '--target', 'nowhere'])
+      expect.unreachable()
+    } catch (error: any) {
+      expect(`${error.stdout || ''}${error.stderr || ''}`).toContain('Unknown skill target')
+    }
+    try {
+      run(['skill', 'explode'])
+      expect.unreachable()
+    } catch (error: any) {
+      expect(`${error.stdout || ''}${error.stderr || ''}`).toContain('Unknown skill subcommand')
+    }
+  })
+
+  it('show reports per-target install status', () => {
+    run(['skill', 'install', '--target', 'project'])
+    const out = run(['skill', 'show'])
+    expect(out).toContain('project: installed (matches this version)')
+    expect(out).toContain('global: not installed')
   })
 })
