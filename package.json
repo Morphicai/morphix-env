@@ -1,7 +1,7 @@
 {
   "name": "morphix-env",
   "version": "0.7.0-beta.1",
-  "description": "Environment variable toolkit — Infisical integration, local overrides, and client-side runtime injection for Next.js / Vite / Express.",
+  "description": "Secret composition CLI — Infisical, Doppler, macOS Keychain, dotenvx, and local files stay value owners; composes them into one value-safe child environment and ships a built-in Agent Skill (mx-env skill install).",
   "author": "MorphixAI <dev@morphixai.com>",
   "homepage": "https://github.com/Morphicai/morphix-env#readme",
   "repository": {
@@ -32,7 +32,12 @@
     "environment-variables",
     "cross-env",
     "infisical",
+    "doppler",
+    "keychain",
     "secrets",
+    "secret-management",
+    "agent",
+    "agent-skills",
     "runtime-env",
     "nextjs",
     "vite",

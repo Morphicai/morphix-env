@@ -6,6 +6,8 @@
 
 The concise command is `mx-env`; the published `morphix-env` command remains fully supported.
 
+The package also ships a maintained, value-free Agent Skill (`mx-env skill install`) so agents can adopt the whole workflow — safety rules, configuration schema, commands — without a second distribution; see [Agent workflow](#agent-workflow).
+
 ## Quick start: global local defaults
 
 Create this file once:
@@ -202,6 +204,12 @@ mx-env edit --profile api-dev
 # Generate this project's value-free Agent workflow Skill
 mx-env doc --profile api-dev
 
+# Install the packaged Agent Skill (global | project | trellis)
+mx-env skill install --target project
+
+# Show per-target install state and template drift
+mx-env skill show
+
 # Value-free audit events
 mx-env audit tail
 ```
@@ -217,12 +225,31 @@ Options:
 | `--no-global` | Ignore `~/.mx-env/.env` and `~/.mx-env/config.json`. |
 | `--allow-insecure-global` | Explicitly permit a global dotenv file readable by group/other users. Avoid this outside controlled troubleshooting. |
 | `--print-editor-url` | Explicitly print the one-time local editor URL; normally the browser opens without emitting it to the terminal. |
+| `--target <scope>` | `skill install` destination: `global` (`~/.claude/skills/`), `project` (`.claude/skills/` inside the repo — commit it), or `trellis` (`~/.trellis/skills/` canonical store). |
+| `--force` | Replace an installed skill that differs from this version's template; a modified file is never overwritten without it. |
 | `-o, --out <path>` / `--filter <prefix>` | Configure public browser-env generation. |
 | `-v, --verbose` | Show source state and key counts, not values. |
 
 ## Agent workflow
 
-`mx-env doc --profile <profile>` writes a value-free workflow Skill to `.agents/skills/morphix-env/SKILL.md` by default. Generated or maintained Skills contain this rule:
+### Packaged Agent Skill
+
+The npm package ships a maintained, value-free Agent Skill at `dist/SKILL.md`. It teaches an agent the full workflow: safety red lines (inspect for validation, `edit` for changes, `run` as the only injection path), the complete `mx-env.config.json` schema for all five providers, a command cheatsheet, project onboarding steps, and troubleshooting. Because it travels with the CLI, it always documents commands that exist in the installed version.
+
+```bash
+# Agent bootstrap straight from npm — no global install required
+npx morphix-env@latest skill install --target project
+
+mx-env skill install --target project   # <repo>/.claude/skills/morphix-env/SKILL.md — commit it with the repository
+mx-env skill install --target global    # ~/.claude/skills/morphix-env/SKILL.md — every project on this machine
+mx-env skill install --target trellis   # ~/.trellis/skills/morphix-env/SKILL.md — then `trellis sync skills`
+```
+
+Installs are idempotent: a re-run against an unchanged template is a no-op, and a skill file the user has customized is never overwritten without `--force`. `mx-env skill show` reports each target's install state and whether it still matches the shipped template.
+
+### Project workflow Skill
+
+`mx-env doc --profile <profile>` writes a value-free workflow Skill to `.agents/skills/morphix-env/SKILL.md` by default, listing this project's resolved key names and their winning sources. Generated or maintained Skills contain this rule:
 
 ```md
 When the user asks to add, modify, or rotate a credential:
