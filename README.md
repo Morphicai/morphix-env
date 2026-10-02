@@ -1,4 +1,6 @@
 <p align="center">
+
+[本仓文档入口](./docs/README.md) · [本地工程约定](./docs/engineering.md)
   <img src="docs/logo.png" width="160" alt="morphix-env" />
 </p>
 

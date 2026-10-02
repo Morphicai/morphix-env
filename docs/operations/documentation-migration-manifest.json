@@ -1,0 +1,109 @@
+{
+  "date": "2026-10-02",
+  "files": [
+    {
+      "source_repo": "root",
+      "source": "openspec/changes/morphix-env-secret-composition/.openspec.yaml",
+      "owner": "env",
+      "destination": "openspec/changes/morphix-env-secret-composition/.openspec.yaml",
+      "status": "active",
+      "reason": "Implementation documentation belongs to its owning project",
+      "original_date": "2026-09-26",
+      "original_sha256": "062e545e250441aa0692c22d7a65e07334f1c0f2e706c0e297f36065b6a0699c",
+      "copied_sha256": "062e545e250441aa0692c22d7a65e07334f1c0f2e706c0e297f36065b6a0699c",
+      "original_commit": "83b81607a98cc69430dafe4302fd3cdf3edd5e34",
+      "final_sha256": "062e545e250441aa0692c22d7a65e07334f1c0f2e706c0e297f36065b6a0699c"
+    },
+    {
+      "source_repo": "root",
+      "source": "openspec/changes/morphix-env-secret-composition/tasks.md",
+      "owner": "env",
+      "destination": "openspec/changes/morphix-env-secret-composition/tasks.md",
+      "status": "active",
+      "reason": "Implementation documentation belongs to its owning project",
+      "original_date": "2026-09-26",
+      "original_sha256": "dd36ca4060550e5b14e854eeb372e1b9692940016f08dd35c2ef7e15981b6422",
+      "copied_sha256": "dd36ca4060550e5b14e854eeb372e1b9692940016f08dd35c2ef7e15981b6422",
+      "original_commit": "83b81607a98cc69430dafe4302fd3cdf3edd5e34",
+      "final_sha256": "ee06cccf84f2468adbaa7d2176a6ebf0d7c0cbd13cefa63e063e99e4256af4e0"
+    },
+    {
+      "source_repo": "root",
+      "source": "openspec/changes/morphix-env-secret-composition/verification.md",
+      "owner": "env",
+      "destination": "openspec/changes/morphix-env-secret-composition/verification.md",
+      "status": "active",
+      "reason": "Implementation documentation belongs to its owning project",
+      "original_date": "2026-09-26",
+      "original_sha256": "71bafddea2a6484b8b332680151fe9e7f56b13f8d135449b9553b268088b3441",
+      "copied_sha256": "71bafddea2a6484b8b332680151fe9e7f56b13f8d135449b9553b268088b3441",
+      "original_commit": "83b81607a98cc69430dafe4302fd3cdf3edd5e34",
+      "final_sha256": "9583c013602033a38b813bc2a2f4f45611aa41da9e31b1f70ab552989d64bf71"
+    },
+    {
+      "source_repo": "root",
+      "source": "openspec/changes/morphix-env-secret-composition/design.md",
+      "owner": "env",
+      "destination": "openspec/changes/morphix-env-secret-composition/design.md",
+      "status": "active",
+      "reason": "Implementation documentation belongs to its owning project",
+      "original_date": "2026-09-26",
+      "original_sha256": "bb0118c0da8bc3c95cd3eaa58f1887a299b134cf01c052e37b5d25d959e85c96",
+      "copied_sha256": "bb0118c0da8bc3c95cd3eaa58f1887a299b134cf01c052e37b5d25d959e85c96",
+      "original_commit": "83b81607a98cc69430dafe4302fd3cdf3edd5e34",
+      "final_sha256": "ef9f7a380aef1f1a89a8f135879d7be353ef7574ccc2c773d937abdd05bc696f"
+    },
+    {
+      "source_repo": "root",
+      "source": "openspec/changes/morphix-env-secret-composition/proposal.md",
+      "owner": "env",
+      "destination": "openspec/changes/morphix-env-secret-composition/proposal.md",
+      "status": "active",
+      "reason": "Implementation documentation belongs to its owning project",
+      "original_date": "2026-09-26",
+      "original_sha256": "605fd14b53c885a536075cbcb254829ab458620a4cf6843f5132698142e4daa2",
+      "copied_sha256": "605fd14b53c885a536075cbcb254829ab458620a4cf6843f5132698142e4daa2",
+      "original_commit": "83b81607a98cc69430dafe4302fd3cdf3edd5e34",
+      "final_sha256": "605fd14b53c885a536075cbcb254829ab458620a4cf6843f5132698142e4daa2"
+    },
+    {
+      "source_repo": "root",
+      "source": "openspec/changes/morphix-env-secret-composition/specs/environment-secret-context-hygiene/spec.md",
+      "owner": "env",
+      "destination": "openspec/changes/morphix-env-secret-composition/specs/environment-secret-context-hygiene/spec.md",
+      "status": "active",
+      "reason": "Implementation documentation belongs to its owning project",
+      "original_date": "2026-09-26",
+      "original_sha256": "83c4e6c8c77e88cc4542288e5fbee931ca6ba6d9d521beae6144ad02006686b7",
+      "copied_sha256": "83c4e6c8c77e88cc4542288e5fbee931ca6ba6d9d521beae6144ad02006686b7",
+      "original_commit": "83b81607a98cc69430dafe4302fd3cdf3edd5e34",
+      "final_sha256": "34fa40efd9c5dfc491d8f864df050db9cedfe26959da443e7533c5c585721c44"
+    },
+    {
+      "source_repo": "root",
+      "source": "openspec/changes/morphix-env-secret-composition/specs/environment-secret-composition/spec.md",
+      "owner": "env",
+      "destination": "openspec/changes/morphix-env-secret-composition/specs/environment-secret-composition/spec.md",
+      "status": "active",
+      "reason": "Implementation documentation belongs to its owning project",
+      "original_date": "2026-09-26",
+      "original_sha256": "2a2834f6faa83c4dab5d65da5c2500f2c087efbceb2d8680b520635eec5fad18",
+      "copied_sha256": "2a2834f6faa83c4dab5d65da5c2500f2c087efbceb2d8680b520635eec5fad18",
+      "original_commit": "83b81607a98cc69430dafe4302fd3cdf3edd5e34",
+      "final_sha256": "2a2834f6faa83c4dab5d65da5c2500f2c087efbceb2d8680b520635eec5fad18"
+    },
+    {
+      "source_repo": "root",
+      "source": "openspec/changes/morphix-env-secret-composition/specs/environment-secret-editor/spec.md",
+      "owner": "env",
+      "destination": "openspec/changes/morphix-env-secret-composition/specs/environment-secret-editor/spec.md",
+      "status": "active",
+      "reason": "Implementation documentation belongs to its owning project",
+      "original_date": "2026-09-26",
+      "original_sha256": "f44dd52f0cea2bfa26238ac76ff794ec1d18fdbc5ce192a4747a4788468d01c4",
+      "copied_sha256": "f44dd52f0cea2bfa26238ac76ff794ec1d18fdbc5ce192a4747a4788468d01c4",
+      "original_commit": "83b81607a98cc69430dafe4302fd3cdf3edd5e34",
+      "final_sha256": "db5a6703efa9d79d81072f054966ae685455e80880b0e4d8d692fc0ca0ba3a99"
+    }
+  ]
+}
