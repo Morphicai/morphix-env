@@ -59,6 +59,21 @@ export class CompositionError extends Error {
   }
 }
 
+/**
+ * Values worth redacting from child output: every non-public sourced value
+ * still present in the environment. Also used after `mx-env://` reference
+ * resolution, which can introduce new values for the same keys.
+ */
+export function collectRedactionValues(
+  environment: NodeJS.ProcessEnv,
+  provenance: Record<string, KeyProvenance>,
+): string[] {
+  return [...new Set(Object.entries(provenance)
+    .filter(([key]) => !isPublicKey(key) && Boolean(environment[key]))
+    .map(([key]) => environment[key] as string)
+    .filter(Boolean))]
+}
+
 function declaredEntries(loaded: LoadedConfig): Map<string, SourceEntry> {
   return new Map(Object.entries(loaded.config.sources || {}).map(([name, source]) => [name, {
     name,
@@ -224,15 +239,13 @@ export async function composeEnvironment(layers: ConfigLayers, options: ComposeO
     }
   }
 
+  const provenance = Object.fromEntries(owner)
   return {
     environment,
     profileName,
     sourceStatuses,
-    provenance: Object.fromEntries(owner),
+    provenance,
     sourceEntries: entries,
-    redactionValues: [...new Set([...owner.entries()]
-      .filter(([key]) => !isPublicKey(key) && Boolean(environment[key]))
-      .map(([key]) => environment[key] as string)
-      .filter(Boolean))],
+    redactionValues: collectRedactionValues(environment, provenance),
   }
 }
