@@ -8,6 +8,7 @@ import {
   type InfisicalSource,
   type KeychainSource,
   type LocalSource,
+  type PluginSource,
   type SecretSource,
   type DopplerSource,
 } from './config'
@@ -290,6 +291,40 @@ function parseDotenvText(text: string): Record<string, string> {
   return dotenvParse(text)
 }
 
+const PLUGIN_TIMEOUT_MS = 30_000
+
+/**
+ * Runs `mx-env-provider-<plugin> <KEY>` once per declared key. The plugin's
+ * stdout is the value (one trailing line ending stripped); its stderr never
+ * reaches the terminal because it may contain sensitive material.
+ */
+function resolvePlugin(entry: SourceEntry, source: PluginSource, context: SourceContext): LoadedSource {
+  const command = `mx-env-provider-${source.plugin}`
+  const values: Record<string, string> = {}
+
+  for (const key of source.keys) {
+    let output: string
+    try {
+      output = execFileSync(command, [key], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ...context.environment },
+        timeout: PLUGIN_TIMEOUT_MS,
+      })
+    } catch (error: any) {
+      if (error?.code === 'ENOENT') {
+        if (source.optional) return { name: entry.name, provider: source.provider, values: {}, availability: 'missing-optional' }
+        throw new SourceError(entry.name, source.provider, `[morphix-env] plugin source "${entry.name}" needs ${command} on PATH.`)
+      }
+      const reason = typeof error?.code === 'string' ? error.code : `exit ${error?.status ?? 'unknown'}`
+      throw new SourceError(entry.name, source.provider, `[morphix-env] plugin source "${entry.name}" failed for key "${key}" (${reason}).`)
+    }
+    values[key] = output.endsWith('\r\n') ? output.slice(0, -2) : output.endsWith('\n') ? output.slice(0, -1) : output
+  }
+
+  return { name: entry.name, provider: source.provider, values, availability: 'loaded' }
+}
+
 export async function loadSource(entry: SourceEntry, context: SourceContext): Promise<LoadedSource> {
   switch (entry.source.provider) {
     case 'local': return resolveLocal(entry, entry.source, context)
@@ -297,5 +332,6 @@ export async function loadSource(entry: SourceEntry, context: SourceContext): Pr
     case 'dotenvx': return resolveDotenvx(entry, entry.source, context)
     case 'os-keychain': return resolveKeychain(entry, entry.source)
     case 'doppler': return resolveDoppler(entry, entry.source, context)
+    case 'plugin': return resolvePlugin(entry, entry.source, context)
   }
 }
