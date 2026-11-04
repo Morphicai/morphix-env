@@ -92,6 +92,20 @@ describe('mx-env export', () => {
     expect(result.stdout).not.toContain('export ')
   })
 
+  it('skips keys that are not shell identifiers, with a warning on stderr', () => {
+    const expectedOk = value('shell-ok')
+    write('.env.local', `FOO-BAR=dash-value\n1LEAD=lead-value\nMXTEST_SHELL_OK=${expectedOk}\n`)
+
+    const result = ok(['export', '--no-infisical'])
+    expect(result.stderr).toContain('key "FOO-BAR" is not a valid shell identifier')
+    expect(result.stderr).toContain('key "1LEAD" is not a valid shell identifier')
+    const lines = result.stdout.trim().split('\n')
+    expect(lines.every((line) => /^export [A-Za-z_][A-Za-z0-9_]*=/.test(line))).toBe(true)
+    expect(result.stdout).toContain(`export MXTEST_SHELL_OK='${expectedOk}'`)
+    expect(result.stdout).not.toContain('FOO-BAR')
+    expect(result.stdout).not.toContain('1LEAD')
+  })
+
   it('writes a value-free audit event', () => {
     const expected = value('audit')
     write('.env.local', `MXTEST_EXPORT_AUDIT=${expected}\n`)
@@ -145,6 +159,32 @@ describe('mx-env render', () => {
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('Usage: mx-env render')
   })
+
+  it('warns about unsupported template constructs and keeps them literal', () => {
+    write('.env.local', 'MXTEST_RENDER=here\n')
+    write('anomaly.json', '{"a":"${MX_ABSENT:-fallback}","b":"$$","c":"${never"}')
+
+    const result = ok(['render', 'anomaly.json', 'anomaly-out.json', '--no-infisical'])
+    expect(result.stderr).toContain('modifier or default')
+    expect(result.stderr).toContain('Escaped dollar $$')
+    expect(result.stderr).toContain('Unclosed or invalid ${')
+    const content = readFileSync(join(TMP, 'anomaly-out.json'), 'utf8')
+    expect(content).toContain('${MX_ABSENT:-fallback}')
+    expect(content).toContain('$$')
+    expect(content).toContain('${never')
+  })
+
+  it('writes a value-free audit event', () => {
+    const expected = value('render-audit')
+    write('.env.local', `MXTEST_RENDER_AUDIT=${expected}\n`)
+    write('audit-tpl.json', `{"t":"${'${MXTEST_RENDER_AUDIT}'}"}`)
+
+    ok(['render', 'audit-tpl.json', 'audit-out.json', '--no-infisical'])
+    const day = new Date().toISOString().slice(0, 10)
+    const audit = readFileSync(join(HOME, '.mx-env', 'audit', `${day}.jsonl`), 'utf8')
+    expect(audit).toContain('MXTEST_RENDER_AUDIT')
+    expect(audit).not.toContain(expected)
+  })
 })
 
 // ─── mx-env inject ────────────────────────────────────────
@@ -192,6 +232,19 @@ describe('mx-env inject', () => {
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('Usage: mx-env inject')
   })
+
+  it('writes a value-free audit event naming the referenced profile and keys', () => {
+    writeConfig()
+    const expected = readFileSync(join(TMP, 'inject-base.env'), 'utf8').trim().split('=')[1]
+    write('mcp.tpl.json', '{"api":"mx-env://dev/MXTEST_INJECT"}')
+
+    ok(['inject', 'mcp.tpl.json', 'audit-mcp.json', '--no-infisical'])
+    const day = new Date().toISOString().slice(0, 10)
+    const audit = readFileSync(join(HOME, '.mx-env', 'audit', `${day}.jsonl`), 'utf8')
+    expect(audit).toContain('"profile":"dev"')
+    expect(audit).toContain('MXTEST_INJECT')
+    expect(audit).not.toContain(expected)
+  })
 })
 
 // ─── mx-env run with references and --dry-run ─────────────
@@ -227,6 +280,31 @@ describe('mx-env run references and dry-run', () => {
     expect(result.stdout).toContain('MXTEST_RUN_DRY')
     expect(result.stdout).not.toContain(expected)
     expect(result.stdout).not.toContain('DRY_SHOULD_NOT_RUN')
+  })
+
+  it('redacts a resolved value even when the referencing key is browser-public', () => {
+    const expected = value('pubref')
+    write('secret.env', `MX_PUBREF_SECRET=${expected}\n`)
+    write('ref.env', 'VITE_MX_PUBREF=mx-env://prod/MX_PUBREF_SECRET\n')
+    write('mx-env.config.json', JSON.stringify({
+      sources: {
+        secret: { provider: 'local', files: ['secret.env'] },
+        refs: { provider: 'local', files: ['ref.env'] },
+      },
+      profiles: { prod: { sources: ['secret'] }, dev: { sources: ['refs'] } },
+      defaultProfile: 'dev',
+    }))
+
+    // Profile "dev" only references the value; its provenance key has a
+    // public prefix, so without the fix the resolved secret would not be
+    // covered by redaction at all.
+    const result = ok([
+      'run', '--no-infisical', '--', 'node', '-e',
+      'console.log("public_ref:" + process.env.VITE_MX_PUBREF)',
+    ])
+    expect(result.stdout).toContain('public_ref:[REDACTED]')
+    expect(result.stdout).not.toContain(expected)
+    expect(result.stdout).not.toContain('mx-env://')
   })
 })
 

@@ -7,6 +7,39 @@ export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`
 }
 
+/** A key that `export KEY=…` can actually declare in POSIX sh. */
+export function isShellIdentifier(key: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)
+}
+
+/**
+ * Value-free descriptions of template constructs that render deliberately
+ * leaves literal: shell-style modifiers/defaults (`${VAR:-x}`), escaped
+ * dollars (`$$`), and unclosed/invalid `${…`. Behavior stays unchanged —
+ * the point is that none of them may pass silently.
+ */
+export function findTemplateAnomalies(text: string): string[] {
+  const anomalies: string[] = []
+  const dollarDollar = text.indexOf('$$')
+  if (dollarDollar >= 0) {
+    anomalies.push(`Escaped dollar $$ at offset ${dollarDollar} is not interpolated; left literal.`)
+  }
+
+  let index = text.indexOf('${')
+  while (index >= 0) {
+    const rest = text.slice(index)
+    if (/^\$\{[A-Za-z_][A-Za-z0-9_]*\}/.test(rest)) {
+      // Plain ${NAME} — substituted by renderTemplate.
+    } else if (/^\$\{[A-Za-z_][A-Za-z0-9_]*[:+=-]/.test(rest)) {
+      anomalies.push(`Unsupported \${...} modifier or default at offset ${index}; only \${NAME} is substituted — left literal.`)
+    } else {
+      anomalies.push(`Unclosed or invalid \${ at offset ${index}; left literal.`)
+    }
+    index = text.indexOf('${', index + 2)
+  }
+  return anomalies
+}
+
 function templateVariablePattern(): RegExp {
   return /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g
 }

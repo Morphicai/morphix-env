@@ -5,8 +5,10 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import {
+  findTemplateAnomalies,
   findTemplateVariables,
   gitOutputStatus,
+  isShellIdentifier,
   renderTemplate,
   shellQuote,
   warnOutputGitRisk,
@@ -36,6 +38,41 @@ describe('shellQuote', () => {
     expect(shellQuote("it's")).toBe("'it'\\''s'")
     expect(shellQuote("two 'quotes'")).toBe("'two '\\''quotes'\\'''")
     expect(shellQuote('line1\nline2')).toBe("'line1\nline2'")
+  })
+})
+
+describe('isShellIdentifier', () => {
+  it('accepts POSIX identifiers and rejects dotenv-legal but shell-illegal keys', () => {
+    expect(isShellIdentifier('MX_OK')).toBe(true)
+    expect(isShellIdentifier('_x1')).toBe(true)
+    expect(isShellIdentifier('FOO-BAR')).toBe(false)
+    expect(isShellIdentifier('1LEAD')).toBe(false)
+    expect(isShellIdentifier('A B')).toBe(false)
+    expect(isShellIdentifier('')).toBe(false)
+  })
+})
+
+describe('findTemplateAnomalies', () => {
+  it('stays silent on clean templates', () => {
+    expect(findTemplateAnomalies('plain ${VAR} and ${OTHER} here')).toEqual([])
+  })
+
+  it('flags modifiers/defaults, escaped dollars, and unclosed constructs', () => {
+    const modifiers = findTemplateAnomalies('a=${VAR:-fallback}')
+    expect(modifiers).toHaveLength(1)
+    expect(modifiers[0]).toContain('modifier or default')
+
+    const dollars = findTemplateAnomalies('pid=$$')
+    expect(dollars).toHaveLength(1)
+    expect(dollars[0]).toContain('Escaped dollar $$')
+
+    const unclosed = findTemplateAnomalies('open=${ never closed')
+    expect(unclosed).toHaveLength(1)
+    expect(unclosed[0]).toContain('Unclosed or invalid ${')
+  })
+
+  it('does not double-flag a modifier as unclosed', () => {
+    expect(findTemplateAnomalies('${V:-x} ${W=1} ${U+}')).toHaveLength(3)
   })
 })
 

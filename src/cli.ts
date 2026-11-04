@@ -17,9 +17,10 @@ import { extractPublicVars } from './env'
 import { StreamingRedactor } from './redaction'
 import { hasMxEnvReference, findMxEnvReferences, ReferenceResolver, type UnresolvedReference } from './refs'
 import { cmdSkill } from './skill'
-import { isPublicKey } from './sources'
 import {
+  findTemplateAnomalies,
   findTemplateVariables,
+  isShellIdentifier,
   renderTemplate,
   shellQuote,
   warnOutputGitRisk,
@@ -210,8 +211,10 @@ async function resolveEnvironmentReferences(composition: EnvironmentComposition,
   }
 
   if (changed.length) {
+    // Every resolved value joins the redaction set — including browser-public
+    // keys: the exemption exists for deliberately public literals, but a
+    // referenced value may be a real secret regardless of the key's prefix.
     const extra = changed
-      .filter((key) => !isPublicKey(key))
       .map((key) => composition.environment[key])
       .filter((value): value is string => Boolean(value))
     composition.redactionValues = [...new Set([
@@ -286,13 +289,22 @@ async function cmdExport(args: Args): Promise<number> {
     return 0
   }
   // stdout carries eval-able statements only — any extra line would break
-  // `eval "$(mx-env export --profile …)"`. Audit stays value-free as always.
-  for (const key of keys) console.log(`export ${key}=${shellQuote(composition.environment[key] ?? '')}`)
+  // `eval "$(mx-env export --profile …)"`. Keys that are not shell
+  // identifiers (FOO-BAR, 1LEAD — legal in dotenv, illegal in shell) would be
+  // silently dropped by eval, so they are warned about on stderr and skipped.
+  for (const key of keys) {
+    if (!isShellIdentifier(key)) {
+      console.warn(`[morphix-env] Warning: key "${key}" is not a valid shell identifier; skipped in export output.`)
+      continue
+    }
+    console.log(`export ${key}=${shellQuote(composition.environment[key] ?? '')}`)
+  }
   writeRunAudit(composition, startedAt, 'success', 0)
   return 0
 }
 
 async function cmdRender(args: Args): Promise<number> {
+  const startedAt = Date.now()
   const [templatePath, outPath] = args.positionals
   if (!templatePath || !outPath) {
     console.error('[morphix-env] Usage: mx-env render <template-file> <output-file> [options]')
@@ -307,8 +319,10 @@ async function cmdRender(args: Args): Promise<number> {
   const names = findTemplateVariables(template)
   const missing = names.filter((name) => composition.environment[name] === undefined || composition.environment[name] === null)
 
-  // Warn before rendering: unresolved names stay literal in the output.
+  // Warn before rendering: unresolved names and unsupported constructs stay
+  // literal in the output, so neither may pass silently.
   if (missing.length) console.warn(`[morphix-env] Missing variables: ${missing.join(', ')} (left unresolved)`)
+  for (const anomaly of findTemplateAnomalies(template)) console.warn(`[morphix-env] ${anomaly}`)
 
   if (args.dryRun) {
     for (const name of names) console.log(`${name}: ${missing.includes(name) ? 'missing' : 'resolved'}`)
@@ -316,13 +330,15 @@ async function cmdRender(args: Args): Promise<number> {
   }
 
   const { output } = renderTemplate(template, composition.environment)
-  writePrivateFile(outPath, output)
   warnOutputGitRisk(outPath)
+  writePrivateFile(outPath, output)
+  writeRunAudit(composition, startedAt, 'success', 0)
   console.log(`[morphix-env] Rendered ${templatePath} -> ${outPath} (${names.length} variables, ${missing.length} unresolved)`)
   return 0
 }
 
 async function cmdInject(args: Args): Promise<number> {
+  const startedAt = Date.now()
   const [templatePath, outPath] = args.positionals
   if (!templatePath || !outPath) {
     console.error('[morphix-env] Usage: mx-env inject <template-file> <output-file> [options]')
@@ -347,8 +363,20 @@ async function cmdInject(args: Args): Promise<number> {
 
   const resolved = await resolver.resolveText(template)
   for (const reference of resolved.missing) warnUnresolvedReference(reference, `in ${templatePath}`)
-  writePrivateFile(outPath, resolved.text)
   warnOutputGitRisk(outPath)
+  writePrivateFile(outPath, resolved.text)
+  // Audit through the same value-free mechanism as run/export. Inject has no
+  // single composition, so the record names the profiles and keys whose
+  // references were materialized — never the values.
+  writeAudit({
+    timestamp: new Date().toISOString(),
+    profile: [...new Set(references.map((reference) => reference.profile))].join(',') || 'none',
+    sources: [],
+    keys: [...new Set(references.map((reference) => reference.key))].sort(),
+    outcome: 'success',
+    exitCode: 0,
+    durationMs: Date.now() - startedAt,
+  })
   console.log(`[morphix-env] Injected ${templatePath} -> ${outPath} (${references.length} references, ${resolved.missing.length} unresolved)`)
   return 0
 }
