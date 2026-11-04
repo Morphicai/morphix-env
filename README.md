@@ -79,10 +79,45 @@ Choosing between Infisical and Doppler still depends on each provider's own iden
 
 This is leakage minimization, not a cryptographic boundary: a process that receives a secret can still transform or exfiltrate it deliberately. For a high-risk agent capability, use a provider proxy/broker as a separate security design rather than passing that credential through `run`.
 
+## On-demand secrets with `run --serve`
+
+`mx-env run --serve -- <command>` (modeled on aws-vault's `--ecs-server`) starts a loopback HTTP server on 127.0.0.1 at a random port that shares the child's lifetime:
+
+- Composed non-public values never enter the child environment — not the direct child, its descendants, `/proc/<pid>/environ`, or core dumps. The child receives only `MXENV_ENDPOINT` and a random `MXENV_TOKEN`; the token exists in the child environment alone and is redacted from child output like any injected value.
+- The child fetches one value at a time: `mx-env fetch <KEY>` (thin client that reads endpoint/token from its own environment and prints the exact value with no trailing newline), or a direct `GET /key/<KEY>` with `Authorization: Bearer $MXENV_TOKEN`. The endpoint answers 401 without the token and 404 for unknown keys; no request or value is ever logged.
+- Browser-public keys (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`) stay in the environment so build tools can inline them; they remain servable as well.
+- The server is destroyed the moment the child exits (and dies with the parent process itself), so no listener outlives the run.
+
+`mx-env run` without `--serve` is unchanged: values are injected into the environment and redacted from forwarded output.
+
+## Provider plugins
+
+Any executable on PATH named `mx-env-provider-<name>` is a provider — new remote stores need no changes to `config.ts` / `sources.ts` / `editor.ts`:
+
+```jsonc
+// mx-env.config.json
+{
+  "sources": {
+    "vault": { "provider": "plugin", "plugin": "bitwarden", "keys": ["OPENAI_API_KEY"] }
+  }
+}
+```
+
+Plugin protocol (summon-style):
+
+- Invoked as `mx-env-provider-<plugin> <KEY>`, once per declared key; exit 0 with the value on stdout (one trailing line ending stripped).
+- A non-zero exit or a missing executable fails the source with a value-free error — the plugin's stderr is never surfaced because it may contain sensitive material. `optional: true` downgrades a missing executable to `missing-optional`.
+- The plugin inherits mx-env's environment, so wrapper scripts can drive their own provider CLIs and credentials; each key invocation times out after 30s.
+- Login and bootstrap stay inside the plugin; repository config carries only wiring (plugin name + key names), never values.
+
+The five built-in providers (`infisical`, `doppler`, `os-keychain`, `dotenvx`, `local`) are unchanged.
+
 ## Commands
 
 ```bash
 mx-env run --profile dev -- <command>   # compose and run (the only injection path)
+mx-env run --serve -- <command>         # serve values over loopback instead of injecting them into env
+mx-env fetch <KEY>                      # read one value from a run --serve child environment
 mx-env inspect [--profile dev]          # key names + provenance, no values
 mx-env edit [--profile dev | --source s] # one-shot visual editor
 mx-env generate --out public/__env.js   # public browser runtime config

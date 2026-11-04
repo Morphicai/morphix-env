@@ -29,14 +29,15 @@ npx morphix-env@latest inspect   # 免安装试用
 配置文件**不含任何值**，只声明 source 接线与组合顺序。项目级放仓库根 `mx-env.config.json`；用户级 `~/.mx-env/config.json` 可选（全局基线，`--no-global` 可排除）。`~/.mx-env/.env` 是唯一自动发现的值文件（个人默认值）。
 
 ```jsonc
-// 项目 mx-env.config.json — 五种 provider 全示例
+// 项目 mx-env.config.json — 全部 provider 示例
 {
   "sources": {
     "local":     { "provider": "local", "files": [".env.local"], "optional": true, "override": true },
     "encrypted": { "provider": "dotenvx", "files": [".env.shared"] },
     "keychain":  { "provider": "os-keychain", "platform": "macos", "service": "com.example/myproject" },
     "infisical": { "provider": "infisical", "paths": ["/team/api"] },
-    "doppler":   { "provider": "doppler", "project": "my-project", "config": "dev" }
+    "doppler":   { "provider": "doppler", "project": "my-project", "config": "dev" },
+    "plugin":    { "provider": "plugin", "plugin": "bitwarden", "keys": ["OPENAI_API_KEY"] }
   },
   "profiles": {
     "dev": { "sources": ["keychain", "infisical", "local"] },
@@ -50,6 +51,7 @@ npx morphix-env@latest inspect   # 免安装试用
 
 - profile 内 `sources` **从低到高**排列；同 key 冲突默认**报错**，靠后 source 显式 `"override": true` 才覆盖（防止两个环境的同名凭据静默错选）。
 - provider 登录与引导留在 provider 侧（`infisical login`、`doppler login`、dotenvx 解密密钥引导），**不写进项目配置**。
+- plugin source：PATH 上的 `mx-env-provider-<name> <KEY>` 把值写到 stdout（退出码 0）；插件自带登录，失败信息不含值。
 - 固定基线顺序：`inherited process.env → ~/.mx-env/.env → 全局默认 profile → 项目 profile / legacy 配置 → -f 覆盖文件`。legacy 项目（`infisical` + `envFiles` 字段）无需改动即兼容。
 
 ## 命令速查
@@ -57,6 +59,8 @@ npx morphix-env@latest inspect   # 免安装试用
 ```bash
 mx-env run --profile dev -- <command>    # 组合环境并执行（子进程输出脱敏）
 mx-env run --no-global -- <command>      # 排除全局基线，可复现的项目-only 运行
+mx-env run --serve -- <command>          # 值不进 env：子进程经 MXENV_ENDPOINT/MXENV_TOKEN 按需取值
+mx-env fetch KEY                         # 在 --serve 子进程内取单个值（精确输出，无换行）
 mx-env generate --out public/__env.js    # 生成浏览器公开变量（NEXT_PUBLIC_/VITE_/EXPO_PUBLIC_ 属公开配置例外）
 mx-env inspect [--profile dev]           # key 名 + source 归属 + 状态（无值）
 mx-env edit --profile dev | --source X   # 一次性可视化编辑器（loopback + 15 分钟 TTL，保存后自动关闭）
