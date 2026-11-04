@@ -55,6 +55,9 @@ afterEach(() => {
 
 describe('plugin source adapter', () => {
   it('invokes mx-env-provider-<name> per key and strips one trailing line ending', async () => {
+    // First execution of a freshly created executable costs ~2s in this
+    // environment (OS scan); combined with full-suite load the default 5s
+    // is not enough for three real spawns.
     const loaded = await loadSource(
       entry({ provider: 'plugin', plugin: 'fake', keys: ['MXTEST_PLUGIN_A', 'MXTEST_PLUGIN_B', 'MXTEST_PLUGIN_CRLF'] }),
       { homeDir: ROOT, environment: pluginPathEnv() },
@@ -66,7 +69,7 @@ describe('plugin source adapter', () => {
       MXTEST_PLUGIN_B: 'beta-value',
       MXTEST_PLUGIN_CRLF: 'crlf-value',
     })
-  })
+  }, 20_000)
 
   it('fails value-free when the plugin exits non-zero (stderr never surfaces)', async () => {
     await expect(loadSource(
@@ -85,7 +88,7 @@ describe('plugin source adapter', () => {
       expect(error.message).toContain('exit 7')
       expect(error.message).not.toContain('plugin-stderr-must-not-leak')
     }
-  })
+  }, 20_000)
 
   it('reports a missing executable, or skips it when optional', async () => {
     try {
