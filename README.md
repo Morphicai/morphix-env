@@ -83,7 +83,7 @@ This is leakage minimization, not a cryptographic boundary: a process that recei
 
 `mx-env run --serve -- <command>` (modeled on aws-vault's `--ecs-server`) starts a loopback HTTP server on 127.0.0.1 at a random port that shares the child's lifetime:
 
-- Composed non-public values never enter the child environment — not the direct child, its descendants, `/proc/<pid>/environ`, or core dumps. The child receives only `MXENV_ENDPOINT` and a random `MXENV_TOKEN`; the token exists in the child environment alone and is redacted from child output like any injected value.
+- Composed non-public values never enter the child environment — not the direct child, its descendants, `/proc/<pid>/environ`, or core dumps. The child receives only `MXENV_ENDPOINT` and a random `MXENV_TOKEN`, and the token is redacted from child output like any injected value. Honest caveat on token visibility: an environment-delivered capability token is readable by same-uid processes on Linux via the child's `/proc/<pid>/environ` — the same inherent property as aws-vault's `--ecs-server`; the *values* themselves still appear in no process environment anywhere.
 - The child fetches one value at a time: `mx-env fetch <KEY>` (thin client that reads endpoint/token from its own environment and prints the exact value with no trailing newline), or a direct `GET /key/<KEY>` with `Authorization: Bearer $MXENV_TOKEN`. The endpoint answers 401 without the token and 404 for unknown keys; no request or value is ever logged.
 - Browser-public keys (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`) stay in the environment so build tools can inline them; they remain servable as well.
 - The server is destroyed the moment the child exits (and dies with the parent process itself), so no listener outlives the run.
@@ -107,7 +107,7 @@ Plugin protocol (summon-style):
 
 - Invoked as `mx-env-provider-<plugin> <KEY>`, once per declared key; exit 0 with the value on stdout (one trailing line ending stripped).
 - A non-zero exit or a missing executable fails the source with a value-free error — the plugin's stderr is never surfaced because it may contain sensitive material. `optional: true` downgrades a missing executable to `missing-optional`.
-- The plugin inherits mx-env's environment, so wrapper scripts can drive their own provider CLIs and credentials; each key invocation times out after 30s.
+- Plugins intentionally inherit the already-composed environment at their precedence position (inherited env → global baseline → profile sources loaded so far), so wrapper scripts can authenticate to their own backend without a second credential channel. Least-privilege consequence: a plugin can read every value composed before it — declare plugin sources only after the sources they need and keep each `keys` list minimal. Each key invocation times out after 30s.
 - Login and bootstrap stay inside the plugin; repository config carries only wiring (plugin name + key names), never values.
 
 The five built-in providers (`infisical`, `doppler`, `os-keychain`, `dotenvx`, `local`) are unchanged.

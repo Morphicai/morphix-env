@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawnSync } from 'child_process'
+import { request as httpRequest } from 'http'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -58,6 +59,38 @@ describe('startSecretServer', () => {
     server.close()
     await expect(fetch(`${server.endpoint}/key/MX_UNIT`)).rejects.toThrow()
     server.close() // idempotent
+  })
+
+  it('answers 400 for malformed percent-encoding without taking the process down', async () => {
+    const server = await startSecretServer({ MX_UNIT: 'unit-value' })
+    const port = Number(server.endpoint.slice('http://127.0.0.1:'.length))
+    // Raw request line: fetch/URL would normalize the path before it left the
+    // client, so the server-side decode path must be exercised directly.
+    const rawStatus = (path: string) => new Promise<number>((resolvePromise, reject) => {
+      const req = httpRequest({
+        host: '127.0.0.1',
+        port,
+        path,
+        method: 'GET',
+        headers: { Authorization: `Bearer ${server.token}` },
+      }, (res) => {
+        res.resume()
+        resolvePromise(res.statusCode ?? 0)
+      })
+      req.on('error', reject)
+      req.end()
+    })
+
+    expect(await rawStatus('/key/%')).toBe(400)
+    expect(await rawStatus('/key/%ZZ')).toBe(400)
+
+    // The listener survived: a well-formed request still succeeds.
+    const healthy = await fetch(`${server.endpoint}/key/MX_UNIT`, {
+      headers: { Authorization: `Bearer ${server.token}` },
+    })
+    expect(healthy.status).toBe(200)
+    expect(await healthy.text()).toBe('unit-value')
+    server.close()
   })
 })
 

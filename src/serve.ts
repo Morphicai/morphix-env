@@ -47,7 +47,16 @@ export async function startSecretServer(values: Record<string, string>): Promise
       res.end('not found')
       return
     }
-    const key = decodeURIComponent(match[1])
+    let key: string
+    try {
+      key = decodeURIComponent(match[1])
+    } catch {
+      // Malformed percent-encoding (/key/%, /key/%ZZ) must answer 400, never
+      // an uncaught exception that would take down the whole run process.
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end('bad request')
+      return
+    }
     if (!Object.prototype.hasOwnProperty.call(values, key)) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end('unknown key')
