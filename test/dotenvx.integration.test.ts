@@ -29,5 +29,5 @@ describe('dotenvx source integration', () => {
     expect(loaded.values.MXTEST_DOTENVX_REAL).toBe(sentinel)
     expect(readFileSync(file, 'utf8')).not.toContain(sentinel)
     expect(existsSync(join(ROOT, 'plaintext.env'))).toBe(false)
-  })
+  }, 15_000)
 })

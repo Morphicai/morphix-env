@@ -15,9 +15,22 @@
     "morphix-env": "./dist/cli.js",
     "mx-env": "./dist/cli.js"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
-    "build": "node scripts/build-editor-ui.mjs && tsup src/cli.ts --format cjs --dts --clean --external keytar && node scripts/copy-skill.mjs",
-    "dev": "node scripts/build-editor-ui.mjs && tsup src/cli.ts --format cjs --watch",
+    "build": "node scripts/build-editor-ui.mjs && tsup src/cli.ts src/index.ts --format cjs --dts --clean --external keytar && node scripts/copy-skill.mjs",
+    "dev": "node scripts/build-editor-ui.mjs && tsup src/cli.ts src/index.ts --format cjs --watch",
     "pretest": "pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",
