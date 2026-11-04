@@ -17,6 +17,8 @@ import { extractPublicVars } from './env'
 import { StreamingRedactor } from './redaction'
 import { hasMxEnvReference, findMxEnvReferences, ReferenceResolver, type UnresolvedReference } from './refs'
 import { cmdSkill } from './skill'
+import { startSecretServer, type SecretServer } from './serve'
+import { isPublicKey } from './sources'
 import {
   findTemplateAnomalies,
   findTemplateVariables,
@@ -182,6 +184,34 @@ function writeRunAudit(composition: EnvironmentComposition, startedAt: number, o
   })
 }
 
+/**
+ * `run --serve` (aws-vault `--ecs-server` style): snapshot the composed
+ * values into a loopback server, strip non-public sourced values from the
+ * child environment, and hand the child only the endpoint plus a random
+ * bearer token. Browser-public keys stay in env (build tools inline them)
+ * and remain servable too.
+ */
+async function startServeFor(composition: EnvironmentComposition, verbose: boolean): Promise<SecretServer> {
+  const values: Record<string, string> = {}
+  for (const key of Object.keys(composition.provenance)) {
+    const value = composition.environment[key]
+    if (value !== undefined) values[key] = value
+  }
+
+  const server = await startSecretServer(values)
+  for (const key of Object.keys(values)) {
+    if (!isPublicKey(key)) delete composition.environment[key]
+  }
+  composition.environment.MXENV_ENDPOINT = server.endpoint
+  composition.environment.MXENV_TOKEN = server.token
+  // The token is injected, so an accidental echo is redacted like any value.
+  composition.redactionValues = [...new Set([...composition.redactionValues, server.token])]
+  if (verbose) {
+    console.error(`[morphix-env] Secret server listening on ${server.endpoint} (${Object.keys(values).length} keys; token is visible to the child only).`)
+  }
+  return server
+}
+
 function warnUnresolvedReference(reference: UnresolvedReference, context: string): void {
   console.warn(`[morphix-env] Unresolved mx-env://${reference.profile}/${reference.key} reference ${context} (${reference.reason}); left as-is.`)
 }
@@ -249,10 +279,55 @@ async function cmdRun(args: Args): Promise<number> {
     const configured = Boolean(args.outFile || loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() }).project.config.generate)
     if (configured) generateClientEnv(outFile, filter, composition.environment)
   }
+
   const [command, ...commandArgs] = args.subArgs
-  const exitCode = await runChild(command, commandArgs, composition)
-  writeRunAudit(composition, startedAt, exitCode === 0 ? 'success' : 'failure', exitCode)
-  return exitCode
+  const secretServer = args.serve ? await startServeFor(composition, args.verbose) : null
+  try {
+    const exitCode = await runChild(command, commandArgs, composition)
+    writeRunAudit(composition, startedAt, exitCode === 0 ? 'success' : 'failure', exitCode)
+    return exitCode
+  } finally {
+    // The server shares the child's lifetime: it is destroyed as soon as the
+    // direct child exits (and dies with this process in any case).
+    secretServer?.close()
+  }
+}
+
+/**
+ * Thin client for the `run --serve` secret server: reads the endpoint and
+ * token from its own environment (child or grandchild) and prints exactly one
+ * value to stdout, with no trailing newline so redirection is lossless.
+ */
+async function cmdFetch(args: Args): Promise<number> {
+  const key = process.argv.slice(3).find((arg) => !arg.startsWith('-'))
+  if (!key) {
+    console.error('[morphix-env] Usage: mx-env fetch <key-name>')
+    return 1
+  }
+  const endpoint = process.env.MXENV_ENDPOINT
+  const token = process.env.MXENV_TOKEN
+  if (!endpoint || !token) {
+    console.error('[morphix-env] mx-env fetch needs MXENV_ENDPOINT and MXENV_TOKEN; run it inside "mx-env run --serve -- <command>".')
+    return 1
+  }
+  try {
+    const response = await fetch(`${endpoint}/key/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (response.ok) {
+      process.stdout.write(await response.text())
+      return 0
+    }
+    if (response.status === 404) {
+      console.error(`[morphix-env] Unknown key on the secret server: ${key}`)
+      return 1
+    }
+    console.error(`[morphix-env] Secret server rejected the request (HTTP ${response.status}).`)
+    return 1
+  } catch {
+    console.error('[morphix-env] Secret server is unreachable; the parent process may have exited.')
+    return 1
+  }
 }
 
 async function cmdGenerate(args: Args): Promise<number> {
@@ -472,6 +547,7 @@ morphix-env v${VERSION} — secret composition and environment delivery
 
 Usage:
   mx-env run [options] -- <command>       Compose env + execute command
+  mx-env fetch <key-name>                 Print one value from a run --serve secret server
   mx-env export [options]                 Print eval-able export KEY='value' lines
   mx-env render <template> <output>       Substitute \${VAR} into a file (mode 0600)
   mx-env inject <template> <output>       Resolve mx-env:// references into a file (mode 0600)
@@ -491,6 +567,7 @@ Options:
   -e, --env <name>         Infisical environment override
   -o, --out <path>         Client __env.js output
   --filter <prefix>        Include public keys with this prefix
+  --serve                  Keep composed values out of env; serve them to the child over loopback
   --dry-run                Report key/variable names only, never values
   --no-infisical           Do not load Infisical sources
   --no-global              Ignore ~/.mx-env/.env and ~/.mx-env/config.json
@@ -508,6 +585,7 @@ async function main(): Promise<number> {
   const args = parseArgs(process.argv)
   switch (args.command) {
     case 'run': return cmdRun(args)
+    case 'fetch': return cmdFetch(args)
     case 'export': return cmdExport(args)
     case 'render': return cmdRender(args)
     case 'inject': return cmdInject(args)

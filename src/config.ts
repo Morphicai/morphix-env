@@ -7,7 +7,7 @@ export const GLOBAL_CONFIG_DIR = '.mx-env'
 export const GLOBAL_CONFIG_FILE = 'config.json'
 export const GLOBAL_ENV_FILE = '.env'
 
-export type SecretProvider = 'infisical' | 'local' | 'dotenvx' | 'os-keychain' | 'doppler'
+export type SecretProvider = 'infisical' | 'local' | 'dotenvx' | 'os-keychain' | 'doppler' | 'plugin'
 
 interface SourceBase {
   /** A later source may replace keys supplied by an earlier source. */
@@ -47,7 +47,19 @@ export interface DopplerSource extends SourceBase {
   config: string
 }
 
-export type SecretSource = InfisicalSource | LocalSource | DotenvxSource | KeychainSource | DopplerSource
+/**
+ * External provider plugin: any executable named `mx-env-provider-<plugin>`
+ * found on PATH. It is invoked once per key with the key name as argv[1] and
+ * writes the value to stdout (one trailing line ending stripped). Provider
+ * login/bootstrap stays inside the plugin, never in repository config.
+ */
+export interface PluginSource extends SourceBase {
+  provider: 'plugin'
+  plugin: string
+  keys: string[]
+}
+
+export type SecretSource = InfisicalSource | LocalSource | DotenvxSource | KeychainSource | DopplerSource | PluginSource
 
 export interface ProfileDefinition {
   sources: string[]
@@ -193,6 +205,14 @@ export function validateConfig(config: MxEnvConfig, label = CONFIG_FILE): string
       case 'doppler':
         if (!source.project || !source.config) errors.push(`${label}: Doppler source "${name}" needs project and config`)
         if (source.optional) errors.push(`${label}: remote source "${name}" cannot be optional`)
+        break
+      case 'plugin':
+        if (typeof source.plugin !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(source.plugin)) {
+          errors.push(`${label}: plugin source "${name}" needs a plugin name (letters, digits, ".", "_", "-")`)
+        }
+        if (!Array.isArray(source.keys) || !source.keys.length || source.keys.some((key) => typeof key !== 'string' || !key)) {
+          errors.push(`${label}: plugin source "${name}" needs at least one key`)
+        }
         break
       default:
         errors.push(`${label}: source "${name}" has an unsupported provider`)
