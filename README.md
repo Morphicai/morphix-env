@@ -118,6 +118,9 @@ The five built-in providers (`infisical`, `doppler`, `os-keychain`, `dotenvx`, `
 mx-env run --profile dev -- <command>   # compose and run (the only injection path)
 mx-env run --serve -- <command>         # serve values over loopback instead of injecting them into env
 mx-env fetch <KEY>                      # read one value from a run --serve child environment
+mx-env export [--profile agents]        # eval-able export KEY='value' lines (values in stdout only for eval)
+mx-env render <template> <output>       # substitute ${VAR} into a config file (mode 0600)
+mx-env inject <template> <output>       # resolve mx-env://profile/KEY references into a file (mode 0600)
 mx-env inspect [--profile dev]          # key names + provenance, no values
 mx-env edit [--profile dev | --source s] # one-shot visual editor
 mx-env generate --out public/__env.js   # public browser runtime config
@@ -125,6 +128,8 @@ mx-env doc                              # write this project's key→source skil
 mx-env skill install | show             # packaged Agent Skill (global / project / trellis)
 mx-env audit tail                       # value-free audit events
 ```
+
+`export`, `render`, `inject`, and `run` accept `--dry-run` (key/variable names only, never values). `eval "$(mx-env export --profile agents)"` injects a profile into the current shell without putting values in shell history. `render` and `inject` write mode-0600 outputs, warn about unresolved `${VAR}` / `mx-env://` references before writing, and warn when the output path is not git-ignored. `mx-env://profile/KEY` references (mirroring 1Password's `op://`) let MCP configs and dotenv templates stay in git without values: `mx-env inject` resolves them at the file level, `mx-env run` resolves them inside composed values before spawning.
 
 Full options live in `mx-env --help`; the packaged skill mirrors the commands of the installed version.
 

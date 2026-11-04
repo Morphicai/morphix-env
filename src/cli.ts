@@ -5,14 +5,29 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
 import { writeAudit } from './audit'
-import { composeEnvironment, type EnvironmentComposition } from './composition'
-import { loadConfigLayers } from './config'
+import {
+  collectRedactionValues,
+  composeEnvironment,
+  type ComposeOptions,
+  type EnvironmentComposition,
+} from './composition'
+import { loadConfigLayers, type ConfigLayers } from './config'
 import { launchEditor, startEditorServer } from './editor'
 import { extractPublicVars } from './env'
 import { StreamingRedactor } from './redaction'
+import { hasMxEnvReference, findMxEnvReferences, ReferenceResolver, type UnresolvedReference } from './refs'
 import { cmdSkill } from './skill'
 import { startSecretServer, type SecretServer } from './serve'
 import { isPublicKey } from './sources'
+import {
+  findTemplateAnomalies,
+  findTemplateVariables,
+  isShellIdentifier,
+  renderTemplate,
+  shellQuote,
+  warnOutputGitRisk,
+  writePrivateFile,
+} from './template'
 import pkg from '../package.json'
 
 const VERSION = pkg.version
@@ -20,6 +35,7 @@ const VERSION = pkg.version
 interface Args {
   command: string
   subArgs: string[]
+  positionals: string[]
   envFiles: string[]
   outFile: string | null
   verbose: boolean
@@ -33,15 +49,16 @@ interface Args {
   source: string | null
   target: string | null
   force: boolean
+  dryRun: boolean
   serve: boolean
 }
 
 function parseArgs(argv: string[]): Args {
   const args: Args = {
-    command: '', subArgs: [], envFiles: [], outFile: null, verbose: false,
+    command: '', subArgs: [], positionals: [], envFiles: [], outFile: null, verbose: false,
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
-    target: null, force: false, serve: false,
+    target: null, force: false, dryRun: false, serve: false,
   }
 
   let i = 2
@@ -82,20 +99,27 @@ function parseArgs(argv: string[]): Args {
       if (argv[++i]) args.target = argv[i]
     } else if (arg === '--force') {
       args.force = true
+    } else if (arg === '--dry-run') {
+      args.dryRun = true
     } else if (arg === '--serve') {
       args.serve = true
     } else if (args.command === 'run') {
       args.subArgs = argv.slice(i)
       break
+    } else if (!arg.startsWith('-')) {
+      args.positionals.push(arg)
     }
     i++
   }
   return args
 }
 
-function resolveComposition(args: Args): Promise<EnvironmentComposition> {
-  const layers = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
-  return composeEnvironment(layers, {
+function configLayers(): ConfigLayers {
+  return loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
+}
+
+function composeOptions(args: Args): ComposeOptions {
+  return {
     profile: args.profile,
     noGlobal: args.noGlobal,
     noInfisical: args.noInfisical,
@@ -103,7 +127,11 @@ function resolveComposition(args: Args): Promise<EnvironmentComposition> {
     allowInsecureGlobal: args.allowInsecureGlobal,
     envFiles: args.envFiles,
     homeDir: homedir(),
-  })
+  }
+}
+
+function resolveComposition(args: Args): Promise<EnvironmentComposition> {
+  return composeEnvironment(configLayers(), composeOptions(args))
 }
 
 function generatedOptions(args: Args): { outFile: string; filter: string | null } {
@@ -184,6 +212,48 @@ async function startServeFor(composition: EnvironmentComposition, verbose: boole
   return server
 }
 
+function warnUnresolvedReference(reference: UnresolvedReference, context: string): void {
+  console.warn(`[morphix-env] Unresolved mx-env://${reference.profile}/${reference.key} reference ${context} (${reference.reason}); left as-is.`)
+}
+
+/**
+ * Resolves `mx-env://` references inside composed values before a child run.
+ * Resolved values join the redaction set so the new material is covered by the
+ * same output redaction as directly composed values.
+ */
+async function resolveEnvironmentReferences(composition: EnvironmentComposition, args: Args): Promise<void> {
+  const targets = Object.entries(composition.environment)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && hasMxEnvReference(entry[1]))
+  if (!targets.length) return
+
+  const resolver = new ReferenceResolver(configLayers(), composeOptions(args))
+  const changed: string[] = []
+  for (const [key, value] of targets) {
+    // Start with an empty chain: a value may reference its own profile (the
+    // common case). Repeated profiles deeper in the chain still terminate.
+    const resolved = await resolver.resolveText(value)
+    if (resolved.missing.length) {
+      for (const reference of resolved.missing) warnUnresolvedReference(reference, `in key "${key}"`)
+      continue
+    }
+    composition.environment[key] = resolved.text
+    changed.push(key)
+  }
+
+  if (changed.length) {
+    // Every resolved value joins the redaction set — including browser-public
+    // keys: the exemption exists for deliberately public literals, but a
+    // referenced value may be a real secret regardless of the key's prefix.
+    const extra = changed
+      .map((key) => composition.environment[key])
+      .filter((value): value is string => Boolean(value))
+    composition.redactionValues = [...new Set([
+      ...collectRedactionValues(composition.environment, composition.provenance),
+      ...extra,
+    ])]
+  }
+}
+
 async function cmdRun(args: Args): Promise<number> {
   if (!args.subArgs.length) {
     console.error('[morphix-env] No command specified. Usage: mx-env run -- <command>')
@@ -196,6 +266,13 @@ async function cmdRun(args: Args): Promise<number> {
       console.log(`[morphix-env] ${source.name}: ${source.availability} (${source.keyCount} keys)`)
     }
   }
+  if (args.dryRun) {
+    // Key names only: a dry run never composes a value into an output stream.
+    console.log(`profile: ${composition.profileName}`)
+    for (const key of Object.keys(composition.provenance).sort()) console.log(`  ${key}`)
+    return 0
+  }
+  await resolveEnvironmentReferences(composition, args)
   if (args.outFile || generatedOptions(args).outFile) {
     const { outFile, filter } = generatedOptions(args)
     // Existing run behavior generates when a generate config is present or --out is supplied.
@@ -275,6 +352,107 @@ async function cmdInspect(args: Args): Promise<number> {
       console.log(`  ${key} — ${provenance.source} (${provenance.provider})${overridden}`)
     }
   }
+  return 0
+}
+
+async function cmdExport(args: Args): Promise<number> {
+  const startedAt = Date.now()
+  const composition = await resolveComposition(args)
+  const keys = Object.keys(composition.provenance).sort()
+  if (args.dryRun) {
+    for (const key of keys) console.log(key)
+    return 0
+  }
+  // stdout carries eval-able statements only — any extra line would break
+  // `eval "$(mx-env export --profile …)"`. Keys that are not shell
+  // identifiers (FOO-BAR, 1LEAD — legal in dotenv, illegal in shell) would be
+  // silently dropped by eval, so they are warned about on stderr and skipped.
+  for (const key of keys) {
+    if (!isShellIdentifier(key)) {
+      console.warn(`[morphix-env] Warning: key "${key}" is not a valid shell identifier; skipped in export output.`)
+      continue
+    }
+    console.log(`export ${key}=${shellQuote(composition.environment[key] ?? '')}`)
+  }
+  writeRunAudit(composition, startedAt, 'success', 0)
+  return 0
+}
+
+async function cmdRender(args: Args): Promise<number> {
+  const startedAt = Date.now()
+  const [templatePath, outPath] = args.positionals
+  if (!templatePath || !outPath) {
+    console.error('[morphix-env] Usage: mx-env render <template-file> <output-file> [options]')
+    return 1
+  }
+  if (!existsSync(templatePath)) {
+    console.error(`[morphix-env] Template not found: ${templatePath}`)
+    return 1
+  }
+  const template = readFileSync(templatePath, 'utf8')
+  const composition = await resolveComposition(args)
+  const names = findTemplateVariables(template)
+  const missing = names.filter((name) => composition.environment[name] === undefined || composition.environment[name] === null)
+
+  // Warn before rendering: unresolved names and unsupported constructs stay
+  // literal in the output, so neither may pass silently.
+  if (missing.length) console.warn(`[morphix-env] Missing variables: ${missing.join(', ')} (left unresolved)`)
+  for (const anomaly of findTemplateAnomalies(template)) console.warn(`[morphix-env] ${anomaly}`)
+
+  if (args.dryRun) {
+    for (const name of names) console.log(`${name}: ${missing.includes(name) ? 'missing' : 'resolved'}`)
+    return 0
+  }
+
+  const { output } = renderTemplate(template, composition.environment)
+  warnOutputGitRisk(outPath)
+  writePrivateFile(outPath, output)
+  writeRunAudit(composition, startedAt, 'success', 0)
+  console.log(`[morphix-env] Rendered ${templatePath} -> ${outPath} (${names.length} variables, ${missing.length} unresolved)`)
+  return 0
+}
+
+async function cmdInject(args: Args): Promise<number> {
+  const startedAt = Date.now()
+  const [templatePath, outPath] = args.positionals
+  if (!templatePath || !outPath) {
+    console.error('[morphix-env] Usage: mx-env inject <template-file> <output-file> [options]')
+    return 1
+  }
+  if (!existsSync(templatePath)) {
+    console.error(`[morphix-env] Template not found: ${templatePath}`)
+    return 1
+  }
+  const template = readFileSync(templatePath, 'utf8')
+  const resolver = new ReferenceResolver(configLayers(), composeOptions(args))
+  const references = findMxEnvReferences(template)
+
+  if (args.dryRun) {
+    for (const reference of references) {
+      const result = await resolver.valueOf(reference.profile, reference.key)
+      const status = result.value !== undefined ? 'resolved' : (result.missing?.reason ?? 'missing')
+      console.log(`${reference.profile}/${reference.key}: ${status}`)
+    }
+    return 0
+  }
+
+  const resolved = await resolver.resolveText(template)
+  for (const reference of resolved.missing) warnUnresolvedReference(reference, `in ${templatePath}`)
+  warnOutputGitRisk(outPath)
+  writePrivateFile(outPath, resolved.text)
+  // Audit through the same value-free mechanism as run/export. Inject has no
+  // single composition, so the record names the profiles and keys whose
+  // references were materialized — never the values.
+  writeAudit({
+    timestamp: new Date().toISOString(),
+    profile: [...new Set(references.map((reference) => reference.profile))].join(',') || 'none',
+    sources: [],
+    keys: [...new Set(references.map((reference) => reference.key))].sort(),
+    outcome: 'success',
+    exitCode: 0,
+    durationMs: Date.now() - startedAt,
+  })
+  console.log(`[morphix-env] Injected ${templatePath} -> ${outPath} (${references.length} references, ${resolved.missing.length} unresolved)`)
   return 0
 }
 
@@ -370,6 +548,9 @@ morphix-env v${VERSION} — secret composition and environment delivery
 Usage:
   mx-env run [options] -- <command>       Compose env + execute command
   mx-env fetch <key-name>                 Print one value from a run --serve secret server
+  mx-env export [options]                 Print eval-able export KEY='value' lines
+  mx-env render <template> <output>       Substitute \${VAR} into a file (mode 0600)
+  mx-env inject <template> <output>       Resolve mx-env:// references into a file (mode 0600)
   mx-env generate [options]               Generate public __env.js
   mx-env inspect [options]                Print key names, sources, and status only
   mx-env doc [options]                    Generate a value-free project Skill
@@ -387,6 +568,7 @@ Options:
   -o, --out <path>         Client __env.js output
   --filter <prefix>        Include public keys with this prefix
   --serve                  Keep composed values out of env; serve them to the child over loopback
+  --dry-run                Report key/variable names only, never values
   --no-infisical           Do not load Infisical sources
   --no-global              Ignore ~/.mx-env/.env and ~/.mx-env/config.json
   --allow-insecure-global  Allow a global .env with permissive file mode
@@ -404,6 +586,9 @@ async function main(): Promise<number> {
   switch (args.command) {
     case 'run': return cmdRun(args)
     case 'fetch': return cmdFetch(args)
+    case 'export': return cmdExport(args)
+    case 'render': return cmdRender(args)
+    case 'inject': return cmdInject(args)
     case 'generate':
     case 'gen': return cmdGenerate(args)
     case 'inspect': return cmdInspect(args)

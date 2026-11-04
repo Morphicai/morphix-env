@@ -61,6 +61,9 @@ mx-env run --profile dev -- <command>    # 组合环境并执行（子进程输�
 mx-env run --no-global -- <command>      # 排除全局基线，可复现的项目-only 运行
 mx-env run --serve -- <command>          # 值不进 env：子进程经 MXENV_ENDPOINT/MXENV_TOKEN 按需取值
 mx-env fetch KEY                         # 在 --serve 子进程内取单个值（精确输出，无换行）
+mx-env export [--profile dev]            # 输出可 eval 的 export KEY='value' 行（值只经 stdout 进入 eval）
+mx-env render <tpl> <out>                # 把 ${VAR} 渲染进不支持插值的配置文件（0600，缺变量先告警）
+mx-env inject <tpl> <out>                # 解析 mx-env://profile/KEY 引用（0600，MCP 配置入仓不落值）
 mx-env generate --out public/__env.js    # 生成浏览器公开变量（NEXT_PUBLIC_/VITE_/EXPO_PUBLIC_ 属公开配置例外）
 mx-env inspect [--profile dev]           # key 名 + source 归属 + 状态（无值）
 mx-env edit --profile dev | --source X   # 一次性可视化编辑器（loopback + 15 分钟 TTL，保存后自动关闭）
@@ -69,6 +72,8 @@ mx-env audit [tail]                      # 值无关的本地审计事件
 mx-env skill install [--target global|project|trellis] [--force]   # 安装本 Skill
 mx-env skill show                        # 查看各目标安装状态
 ```
+
+`export` / `render` / `inject` / `run` 均支持 `--dry-run`（只报 key/变量名，不出值）。值永不出现在 shell 历史里：`eval "$(mx-env export --profile dev)"` 才是 export 的消费方式。
 
 ## 进入一个新项目的标准流程
 

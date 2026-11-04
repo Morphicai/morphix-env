@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs'
-import { dirname, homedir, resolve } from 'path'
+import { dirname, resolve } from 'path'
+import { homedir } from 'os'
 
 export const CONFIG_FILE = 'mx-env.config.json'
 export const GLOBAL_CONFIG_DIR = '.mx-env'
