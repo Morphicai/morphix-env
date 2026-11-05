@@ -173,6 +173,70 @@ describe('executeUnit -> dotenvx', () => {
     expect(composition.environment.GLOB_A).toBe(value)
   }, 30_000)
 
+  it('verification is immune to same-named process env vars shadowing the file', async () => {
+    const value = secretValue('shadow')
+    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
+    writeFileSync(join(HOME, '.mx-env', '.env'), `GLOB_SHADOW=${value}\n`)
+
+    // dotenvx `decrypt --stdout` merges same-named parent-env variables over
+    // file values (no --overload), so a stale export with a different value
+    // used to fail verification and roll the migration back. Verification must
+    // prove the file on disk — and encryption must not bake in the env value.
+    process.env.GLOB_SHADOW = secretValue('env-shadow')
+    // A dotenvx key-material variable in the parent env must neither break the
+    // decrypt call nor substitute for the .env.keys the check proves.
+    process.env.DOTENV_PRIVATE_KEY = 'garbage-not-a-key'
+    try {
+      const [unit] = discoverPlaintextUnits(layers(), HOME)
+      const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
+      expect(outcome.status).toBe('migrated')
+
+      const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
+      expect(composition.environment.GLOB_SHADOW).toBe(value)
+    } finally {
+      delete process.env.GLOB_SHADOW
+      delete process.env.DOTENV_PRIVATE_KEY
+    }
+  }, 30_000)
+
+  it('a file declaring toolchain keys like PATH still migrates (verification child keeps a runnable PATH)', async () => {
+    const value = secretValue('pathkey')
+    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
+    writeFileSync(join(HOME, '.mx-env', '.env'), `PATH=/opt/tooling/bin\nGLOB_PATH=${value}\n`)
+
+    const [unit] = discoverPlaintextUnits(layers(), HOME)
+    const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
+    expect(outcome.status).toBe('migrated')
+
+    const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
+    expect(composition.environment.GLOB_PATH).toBe(value)
+  }, 30_000)
+
+  it('refuses migration for values with $ expansion sequences, naming the affected key', async () => {
+    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
+    writeFileSync(join(HOME, '.mx-env', '.env'), 'GLOB_DOLLAR=ab$cd\n')
+
+    const [unit] = discoverPlaintextUnits(layers(), HOME)
+    const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
+    expect(outcome.status).toBe('failed')
+    expect(outcome.detail).toMatch(/GLOB_DOLLAR/)
+    // Refusal rolls the plaintext back untouched.
+    expect(readFileSync(join(HOME, '.mx-env', '.env'), 'utf8')).toBe('GLOB_DOLLAR=ab$cd\n')
+    expect(existsSync(join(HOME, '.mx-env', '.env.keys'))).toBe(false)
+  }, 30_000)
+
+  it('refuses a reserved DOTENV_PUBLIC_KEY* key up front with the key named', async () => {
+    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
+    writeFileSync(join(HOME, '.mx-env', '.env'), 'DOTENV_PUBLIC_KEY_NOTE=userkey\n')
+
+    const [unit] = discoverPlaintextUnits(layers(), HOME)
+    const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
+    expect(outcome.status).toBe('failed')
+    expect(outcome.detail).toMatch(/rename key "DOTENV_PUBLIC_KEY_NOTE"/)
+    expect(readFileSync(join(HOME, '.mx-env', '.env'), 'utf8')).toContain('userkey')
+    expect(existsSync(join(HOME, '.mx-env', '.env.keys'))).toBe(false)
+  }, 30_000)
+
   it('rejects a permissive global .env.keys at composition time', async () => {
     mkdirSync(join(HOME, '.mx-env'), { recursive: true })
     writeFileSync(join(HOME, '.mx-env', '.env'), `GLOB_B=${secretValue('gate')}\n`)
