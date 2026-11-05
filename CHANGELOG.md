@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.1
+
+### Fixed
+
+- **`migrate` verification no longer consults the caller's environment** (found during a real 11-key global rollout). dotenvx `decrypt --stdout` merges same-named parent-env variables over file values and resolves `DOTENV_PRIVATE_KEY*` key material from the environment (both empirical, dotenvx 2.30; there is no `--overload` for decrypt) — so a stale shell export for any migrated key used to fail the post-migration equivalence check and roll the migration back, and inline key material could substitute for the `.env.keys` the check is supposed to prove. Verification now runs dotenvx under a minimal allowlisted environment (PATH pinned to the current Node runtime), making both structurally impossible. Keys that collide with that runtime environment (`PATH`, `HOME`, …) are verified by presence; value fidelity for them rests on `run --overload` file-wins semantics.
+- Verification failures now **name the differing keys** and explain dotenvx `$name` expansion: values containing `$` expand on every dotenvx load path, so a migration that would change what consumers see is refused with the offending keys named instead of an undiagnosable mismatch.
+- `migrate` refuses plaintext keys in the reserved `DOTENV_PUBLIC_KEY*` prefix up front with the key named (dotenvx rejects such files at `encrypt` with a raw hex error).
+
 ## 0.10.0
 
 ### Added
