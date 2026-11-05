@@ -90,6 +90,31 @@ This is leakage minimization, not a cryptographic boundary: a process that recei
 
 `mx-env run` without `--serve` is unchanged: values are injected into the environment and redacted from forwarded output.
 
+## Terminal shims
+
+For commands you run constantly, shims remove the `mx-env run --` prefix entirely. Declare a command list and generate shims once:
+
+```jsonc
+// ~/.mx-env/config.json (global) and/or mx-env.config.json (project)
+{ "shims": ["node", "pnpm"] }
+```
+
+```bash
+mx-env shell-init          # generate shims in ~/.mx-env/shims, print the PATH line
+mx-env shell-init --write  # also maintain a marked block in ~/.zshrc / ~/.bashrc
+mx-env shell-init --remove # remove shims and the rc block
+```
+
+After the PATH line is active, typing `pnpm dev` is exactly `mx-env run -- pnpm dev`: same composition, same redaction, same exit code. Undeclared commands are untouched.
+
+- The effective list is the union of the global and project lists. A shim is only an entry hook: **what gets injected is always decided by the configuration in effect where the command runs**, so one `pnpm` shim serves every project's own profile.
+- `run` removes the shims directory from the child's PATH before composing, so a tool invoked again inside the run (or by a provider plugin mid-composition) resolves to the real binary — injection happens exactly once, never recursively.
+- `shell-init` is idempotent: re-running converges the directory to the declared list, `--write`/`--remove` use marked rc blocks and never touch your other lines or handmade files.
+- Command names are validated (bare names only; mx-env's own command names are reserved). Invalid entries fail `shell-init` loudly but only warn in composition paths — a convenience layer never breaks `run`.
+- Audit events record `via: "shim"` vs `"cli"` so the two channels stay distinguishable.
+
+**Boundary.** Shims buy convenience, not concealment: injected values live in the child's environment and are visible to same-uid processes. When the consumer is an agent you do not trust with the values, use `run --serve` instead. macOS/Linux only; Windows keeps the explicit `run` form. Do not place files in `~/.mx-env/shims` by hand.
+
 ## Provider plugins
 
 Any executable on PATH named `mx-env-provider-<name>` is a provider — new remote stores need no changes to `config.ts` / `sources.ts` / `editor.ts`:
