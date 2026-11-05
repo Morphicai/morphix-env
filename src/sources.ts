@@ -1,6 +1,6 @@
 import { execFileSync } from 'child_process'
 import { existsSync, statSync } from 'fs'
-import { delimiter, dirname, isAbsolute, resolve } from 'path'
+import { delimiter, dirname, isAbsolute, join, resolve } from 'path'
 import { parse as dotenvParse } from 'dotenv'
 import {
   type DotenvxSource,
@@ -75,7 +75,7 @@ function assertSafeGlobalFile(file: string, context: SourceContext, entry: Sourc
   if ((mode & 0o077) !== 0) {
     throw new SourceError(
       entry.name,
-      'local',
+      entry.source.provider,
       `[morphix-env] Global env file ${file} is readable by group or other users; set mode 0600 or pass --allow-insecure-global.`,
     )
   }
@@ -149,7 +149,7 @@ async function resolveInfisical(entry: SourceEntry, source: InfisicalSource, con
   return { name: entry.name, provider: source.provider, values: result.values, availability: 'loaded' }
 }
 
-function ensureCommand(command: string, sourceName: string, provider: SecretSource['provider']): string {
+export function ensureCommand(command: string, sourceName: string, provider: SecretSource['provider']): string {
   const localBinary = resolve(process.cwd(), 'node_modules', '.bin', command)
   try {
     if (existsSync(localBinary)) {
@@ -183,6 +183,18 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
   if (existingFiles.length !== files.length) {
     throw new SourceError(entry.name, source.provider, `[morphix-env] dotenvx source "${entry.name}" is missing a declared env file.`)
   }
+  // The implicit global file's `.env.keys` is the plaintext-equivalent secret
+  // after migration — it gets the same 0600 gate the plaintext .env had.
+  if (entry.globalImplicit && !context.allowInsecureGlobal && process.platform !== 'win32') {
+    const keysFile = join(dirname(existingFiles[0]), '.env.keys')
+    if (existsSync(keysFile) && (statSync(keysFile).mode & 0o077) !== 0) {
+      throw new SourceError(
+        entry.name,
+        source.provider,
+        `[morphix-env] Global dotenvx keys file ${keysFile} is readable by group or other users; set mode 0600 or pass --allow-insecure-global.`,
+      )
+    }
+  }
 
   const command = ensureCommand('dotenvx', entry.name, source.provider)
   const keys = [...new Set(existingFiles.flatMap((file) => Object.keys(parseEnvFile(file))))]
@@ -193,8 +205,10 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
   let stage = 'run'
   try {
     const output = execFileSync(
+      // --overload aligns dotenvx with every other provider: composed file
+      // values win over same-named variables already in the parent env.
       command,
-      ['run', '-f', existingFiles.join(','), '--', process.execPath, '-e', helper, JSON.stringify(keys)],
+      ['run', '--overload', '-f', existingFiles.join(','), '--', process.execPath, '-e', helper, JSON.stringify(keys)],
       {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -219,7 +233,10 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
     return { name: entry.name, provider: source.provider, values, availability: 'loaded' }
   } catch (error: any) {
     const category = typeof error?.code === 'string' ? error.code : 'failed'
-    throw new SourceError(entry.name, source.provider, `[morphix-env] dotenvx source "${entry.name}" could not decrypt or load (${stage}:${category}).`)
+    const sniffHint = entry.globalImplicit
+      ? ' The global file looks dotenvx-encrypted; if it is actually plaintext, remove the DOTENV_PUBLIC_KEY / encrypted: markers.'
+      : ''
+    throw new SourceError(entry.name, source.provider, `[morphix-env] dotenvx source "${entry.name}" could not decrypt or load (${stage}:${category}).${sniffHint}`)
   }
 }
 

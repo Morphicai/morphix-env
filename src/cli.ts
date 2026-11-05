@@ -14,6 +14,14 @@ import {
 import { loadConfigLayers, type ConfigLayers } from './config'
 import { launchEditor, startEditorServer } from './editor'
 import { extractPublicVars } from './env'
+import {
+  discoverPlaintextUnits,
+  executeUnit,
+  legacyPlaintextHints,
+  type MigrateTarget,
+  type MigrationUnit,
+  type UnitOutcome,
+} from './migrate'
 import { StreamingRedactor } from './redaction'
 import { hasMxEnvReference, findMxEnvReferences, ReferenceResolver, type UnresolvedReference } from './refs'
 import { cmdSkill } from './skill'
@@ -62,11 +70,16 @@ interface Args {
   printEditorUrl: boolean
   source: string | null
   target: string | null
+  /** migrate: destination provider (dotenvx|keychain). */
+  to: string | null
+  /** migrate: keychain service override (requires --source). */
+  service: string | null
   force: boolean
   dryRun: boolean
   serve: boolean
   write: boolean
   remove: boolean
+  warnPlaintext: boolean
   /** Flags the parser did not recognize; shell-init fails on these instead of silently ignoring them. */
   unknownFlags: string[]
 }
@@ -76,8 +89,8 @@ function parseArgs(argv: string[]): Args {
     command: '', subArgs: [], positionals: [], envFiles: [], outFile: null, verbose: false,
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
-    target: null, force: false, dryRun: false, serve: false,
-    write: false, remove: false, unknownFlags: [],
+    target: null, to: null, service: null, force: false, dryRun: false, serve: false,
+    write: false, remove: false, warnPlaintext: false, unknownFlags: [],
   }
 
   let i = 2
@@ -116,6 +129,10 @@ function parseArgs(argv: string[]): Args {
       args.printEditorUrl = true
     } else if (arg === '--target') {
       if (argv[++i]) args.target = argv[i]
+    } else if (arg === '--to') {
+      if (argv[++i]) args.to = argv[i]
+    } else if (arg === '--service') {
+      if (argv[++i]) args.service = argv[i]
     } else if (arg === '--force') {
       args.force = true
     } else if (arg === '--dry-run') {
@@ -126,6 +143,8 @@ function parseArgs(argv: string[]): Args {
       args.remove = true
     } else if (arg === '--serve') {
       args.serve = true
+    } else if (arg === '--warn-plaintext') {
+      args.warnPlaintext = true
     } else if (args.command === 'run') {
       args.subArgs = argv.slice(i)
       break
@@ -187,6 +206,25 @@ function resolveComposition(args: Args): Promise<EnvironmentComposition> {
   const layers = configLayers()
   warnInvalidShims(layers, !args.noGlobal)
   return composeEnvironment(layers, composeOptions(args))
+}
+
+/**
+ * Opt-in plaintext reminder (issue #7): off by default, enabled per-invocation
+ * via --warn-plaintext or globally via MXENV_WARN_PLAINTEXT=1 (the env knob
+ * exists because shimmed commands cannot take mx-env flags). Value-free: only
+ * source names are mentioned. Once per process.
+ */
+let plaintextWarned = false
+
+function warnPlaintextSources(composition: EnvironmentComposition, args: Args): void {
+  if (plaintextWarned) return
+  if (!args.warnPlaintext && process.env.MXENV_WARN_PLAINTEXT !== '1') return
+  plaintextWarned = true
+  const loaded = composition.sourceStatuses.filter(
+    (source) => source.provider === 'local' && source.availability === 'loaded' && source.keyCount > 0,
+  )
+  if (!loaded.length) return
+  console.warn(`[morphix-env] Plaintext local source(s) in use: ${loaded.map((source) => source.name).join(', ')} — local plaintext files are dev-only; run \`mx-env migrate\` to move them into encrypted storage.`)
 }
 
 function generatedOptions(args: Args): { outFile: string; filter: string | null } {
@@ -323,6 +361,7 @@ async function cmdRun(args: Args): Promise<number> {
   }
   const startedAt = Date.now()
   const composition = await resolveComposition(args)
+  warnPlaintextSources(composition, args)
   if (args.verbose) {
     for (const source of composition.sourceStatuses) {
       console.log(`[morphix-env] ${source.name}: ${source.availability} (${source.keyCount} keys)`)
@@ -408,6 +447,7 @@ async function cmdFetch(args: Args): Promise<number> {
 
 async function cmdGenerate(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
+  warnPlaintextSources(composition, args)
   // Resolve mx-env:// references first: a generated client env must contain
   // the same values a run child would receive, not literal reference strings.
   await resolveEnvironmentReferences(composition, args)
@@ -423,7 +463,9 @@ async function cmdInspect(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
   console.log(`profile: ${composition.profileName}`)
   for (const source of composition.sourceStatuses) {
-    console.log(`source: ${source.name} (${source.provider}) — ${source.availability}, ${source.keyCount} keys`)
+    // local 明文源钉死"仅开发用"定位（issue #7）；dotenvx 加密文件不在此列。
+    const plaintextMark = source.provider === 'local' ? ' [plaintext, dev-only]' : ''
+    console.log(`source: ${source.name} (${source.provider}) — ${source.availability}, ${source.keyCount} keys${plaintextMark}`)
   }
   for (const [key, provenance] of Object.entries(composition.provenance).sort(([a], [b]) => a.localeCompare(b))) {
     if (!args.filter || key.startsWith(args.filter)) {
@@ -437,6 +479,7 @@ async function cmdInspect(args: Args): Promise<number> {
 async function cmdExport(args: Args): Promise<number> {
   const startedAt = Date.now()
   const composition = await resolveComposition(args)
+  warnPlaintextSources(composition, args)
   const keys = Object.keys(composition.provenance).sort()
   if (args.dryRun) {
     for (const key of keys) console.log(key)
@@ -473,6 +516,7 @@ async function cmdRender(args: Args): Promise<number> {
   }
   const template = readFileSync(templatePath, 'utf8')
   const composition = await resolveComposition(args)
+  warnPlaintextSources(composition, args)
   const names = findTemplateVariables(template)
   const missing = names.filter((name) => composition.environment[name] === undefined || composition.environment[name] === null)
 
@@ -704,6 +748,127 @@ function runShellInit(args: Args): number {
   return 0
 }
 
+/**
+ * `migrate`（issue #7）：local 明文 → dotenvx/keychain。无 --to 为纯只读
+ * plan；--dry-run 与 --to 组合输出执行计划零写入。执行 = 备份(0600) → 写目标
+ * → 值级等价验证 → 改写配置 → 清理明文；失败自动从备份还原。
+ */
+function printMigratePlan(units: MigrationUnit[], hints: string[], target: string | null): void {
+  if (!units.length) {
+    console.log('[morphix-env] No plaintext units in scope; nothing to migrate.')
+  }
+  for (const unit of units) {
+    const where = unit.kind === 'global-implicit' ? 'global implicit' : `${unit.scope}, declared in ${unit.configPath}`
+    console.log(`unit: ${unit.name} (${where})`)
+    for (const file of unit.files) console.log(`  file: ${file}`)
+    console.log(`  keys: ${unit.keyNames.join(', ') || '(none)'}`)
+    console.log(`  --to dotenvx:  encrypt file(s) in place${unit.kind === 'declared' ? ' + rewrite provider in config' : ' (no config change; loading auto-detects encryption)'}`)
+    console.log(unit.kind === 'global-implicit'
+      ? '  --to keychain: not supported for the global implicit file'
+      : '  --to keychain: move values to a keychain service, rewrite config, delete plaintext')
+  }
+  for (const hint of hints) {
+    console.log(`legacy plaintext (not auto-migrated): ${hint} — declare it as a source in mx-env.config.json to migrate it.`)
+  }
+  if (units.length && !target) {
+    console.log('\nPlan only. Re-run with --to dotenvx|keychain to execute; every unit gets a 0600 backup and a post-migration equivalence check before its config changes.')
+  }
+}
+
+async function cmdMigrate(args: Args): Promise<number> {
+  if (args.unknownFlags.length) {
+    console.error(`[morphix-env] migrate: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
+    return 1
+  }
+  if (args.to && args.to !== 'dotenvx' && args.to !== 'keychain') {
+    console.error('[morphix-env] migrate: --to must be "dotenvx" or "keychain".')
+    return 1
+  }
+  if (args.service && args.to !== 'keychain') {
+    console.error('[morphix-env] migrate: --service is only valid with --to keychain.')
+    return 1
+  }
+  if (args.service && !args.source) {
+    console.error('[morphix-env] migrate: --service requires --source (one service per migrated source).')
+    return 1
+  }
+  const layers = configLayers()
+  const home = homedir()
+  const units = discoverPlaintextUnits(layers, home)
+  const hints = legacyPlaintextHints(layers, units, home)
+  // Two units sharing one plaintext file cannot migrate independently (the
+  // first migration deletes/encrypts the file under the second). Refuse with
+  // the collision spelled out — merging units is a config decision for the
+  // user. Plan mode only warns (it is read-only); duplicate files within one
+  // unit are not a collision.
+  const fileOwners = new Map<string, string>()
+  const collisions: string[] = []
+  for (const unit of units) {
+    for (const file of unit.files) {
+      const owner = fileOwners.get(file)
+      if (owner && owner !== unit.name) {
+        collisions.push(`file ${file} is shared by units "${owner}" and "${unit.name}"`)
+      }
+      if (!owner) fileOwners.set(file, unit.name)
+    }
+  }
+  for (const collision of collisions) {
+    if (!args.to || args.dryRun) console.warn(`[morphix-env] Warning: ${collision}; split them into separate files (or sources) before migrating.`)
+    else {
+      console.error(`[morphix-env] migrate: ${collision}; split them into separate files (or sources) before migrating.`)
+      return 1
+    }
+  }
+  const selected = args.source ? units.filter((unit) => unit.name === args.source) : units
+  if (args.source && !selected.length) {
+    console.error(`[morphix-env] migrate: no plaintext unit named "${args.source}" in scope (already migrated or unknown).`)
+    return 1
+  }
+
+  if (!args.to || args.dryRun) {
+    printMigratePlan(selected, hints, args.to)
+    return 0
+  }
+
+  if (!selected.length) {
+    console.log('[morphix-env] No plaintext units in scope; nothing to migrate.')
+    return 0
+  }
+
+  const target = args.to as MigrateTarget
+  const startedAt = Date.now()
+  const outcomes: UnitOutcome[] = []
+  for (const unit of selected) {
+    const outcome = await executeUnit(unit, target, { service: args.service || undefined }, home)
+    outcomes.push(outcome)
+    if (outcome.status === 'migrated') {
+      console.log(`[morphix-env] Migrated ${unit.name} -> ${target} (${unit.keyNames.length} keys).`)
+      for (const warning of outcome.warnings) console.warn(warning)
+      for (const backup of outcome.backups) console.log(`[morphix-env] Backup (0600): ${backup}`)
+    } else if (outcome.status === 'skipped') {
+      console.warn(`[morphix-env] Skipped ${unit.name}: ${outcome.detail}`)
+    } else {
+      console.error(`[morphix-env] Failed ${unit.name}: ${outcome.detail}`)
+      for (const backup of outcome.backups) console.error(`[morphix-env] Backup retained (0600): ${backup} — delete it by hand once verified.`)
+    }
+  }
+  const failed = outcomes.filter((outcome) => outcome.status === 'failed')
+  const exitCode = failed.length ? 1 : 0
+  writeAudit({
+    timestamp: new Date().toISOString(),
+    profile: 'migrate',
+    sources: selected.map((unit) => unit.name),
+    keys: [...new Set(selected.flatMap((unit) => unit.keyNames))].sort(),
+    outcome: failed.length ? 'failure' : 'success',
+    exitCode,
+    durationMs: Date.now() - startedAt,
+  })
+  if (outcomes.some((outcome) => outcome.backups.length)) {
+    console.log('[morphix-env] Backups are 0600 copies of the original plaintext — delete them once your workflows are verified.')
+  }
+  return exitCode
+}
+
 function cmdAudit(args: Args): number {
   const file = join(homedir(), '.mx-env', 'audit', `${new Date().toISOString().slice(0, 10)}.jsonl`)
   if (!existsSync(file)) {
@@ -728,6 +893,7 @@ Usage:
   mx-env inject <template> <output>       Resolve mx-env:// references into a file (mode 0600)
   mx-env generate [options]               Generate public __env.js
   mx-env inspect [options]                Print key names, sources, and status only
+  mx-env migrate [--to dotenvx|keychain]  Move plaintext local sources into encrypted storage
   mx-env doc [options]                    Generate a value-free project Skill
   mx-env audit [tail]                     Read value-free local audit events
   mx-env edit --profile <name>            Open the one-shot visual editor
@@ -748,8 +914,12 @@ Options:
   --no-infisical           Do not load Infisical sources
   --no-global              Ignore ~/.mx-env/.env and ~/.mx-env/config.json
   --allow-insecure-global  Allow a global .env with permissive file mode
+  --warn-plaintext         Warn once on stderr when plaintext local sources supply keys
   --print-editor-url       Explicitly print the one-time local editor URL
   --target <scope>         Skill install target: global, project, or trellis
+  --to <provider>          migrate destination: dotenvx or keychain (omit for a read-only plan)
+  --source <name>          edit/migrate: select a single source
+  --service <name>         migrate --to keychain: keychain service override (requires --source)
   --force                  Overwrite an installed skill that differs from this version
   -v, --verbose            Print source status and key counts only
   --help, -h               Show this help
@@ -772,6 +942,7 @@ async function main(): Promise<number> {
     case 'generate':
     case 'gen': return cmdGenerate(args)
     case 'inspect': return cmdInspect(args)
+    case 'migrate': return cmdMigrate(args)
     case 'audit': return cmdAudit(args)
     case 'edit': return cmdEdit(args)
     case 'doc': return cmdDoc(args)

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { execFileSync } from 'child_process'
+import { execFileSync, spawnSync } from 'child_process'
 import { writeFileSync, unlinkSync, existsSync, readFileSync, mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -198,6 +198,72 @@ describe('mx-env inspect', () => {
   it('文件不存在时显示 source 缺失状态', () => {
     const out = run(['inspect', '-f', '.env.nonexistent'])
     expect(out).toContain('__mx_legacy_local (local) — missing-optional, 0 keys')
+  })
+})
+
+// ─── plaintext dev-only 标记与可选提醒（issue #7）─────────
+
+describe('plaintext marking and optional reminder', () => {
+  // execFileSync 不返成功路径的 stderr；提醒测试需要同时看两侧。
+  function runCapture(args: string[], env?: Record<string, string>) {
+    // Hermetic like migrate.test.ts: strip shim/serve markers and provider env
+    // so a shimmed dev shell cannot perturb the assertions.
+    const { MXENV_SHIM, MXENV_ENDPOINT, MXENV_TOKEN, MXENV_WARN_PLAINTEXT, DOTENV_KEY, INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET, ...base } = process.env
+    return spawnSync('node', [CLI, ...args], {
+      encoding: 'utf8',
+      env: { ...base, ...env, HOME: join(TMP, 'home') },
+      cwd: TMP,
+    })
+  }
+
+  it('inspect 对 local 明文源追加 [plaintext, dev-only] 标识', () => {
+    writeFileSync(join(TMP, '.env.local'), `MXTEST_MARK=${testValue('mark')}\n`)
+    const out = run(['inspect'])
+    expect(out).toContain('__mx_legacy_local (local) — loaded, 1 keys [plaintext, dev-only]')
+  })
+
+  it('inspect 不标记 dotenvx 源', () => {
+    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+      sources: { enc: { provider: 'dotenvx', files: ['.env.missing'], optional: true } },
+      profiles: { dev: { sources: ['enc'] } },
+      defaultProfile: 'dev',
+    }))
+    const out = run(['inspect'])
+    const dotenvxLine = out.split('\n').find((line) => line.includes('(dotenvx)'))
+    expect(dotenvxLine).toBeTruthy()
+    expect(dotenvxLine).not.toContain('dev-only')
+  })
+
+  it('组合路径默认不提醒明文', () => {
+    writeFileSync(join(TMP, '.env.local'), `MXTEST_QUIET=${testValue('quiet')}\n`)
+    const result = runCapture(['run', '--no-infisical', '--', 'node', '-e', 'process.exit(0)'])
+    expect(result.status).toBe(0)
+    expect(result.stderr).not.toContain('Plaintext local source')
+  })
+
+  it('--warn-plaintext 在 stderr 提醒一次并指向 migrate', () => {
+    writeFileSync(join(TMP, '.env.local'), `MXTEST_WARN=${testValue('warn')}\n`)
+    const result = runCapture(['run', '--no-infisical', '--warn-plaintext', '--', 'node', '-e', 'process.exit(0)'])
+    expect(result.status).toBe(0)
+    expect(result.stderr).toContain('Plaintext local source')
+    expect(result.stderr).toContain('mx-env migrate')
+  })
+
+  it('MXENV_WARN_PLAINTEXT=1 等效于 flag（shim 场景传不了 flag）', () => {
+    writeFileSync(join(TMP, '.env.local'), `MXTEST_WARNENV=${testValue('warnenv')}\n`)
+    const result = runCapture(['run', '--no-infisical', '--', 'node', '-e', 'process.exit(0)'], { MXENV_WARN_PLAINTEXT: '1' })
+    expect(result.status).toBe(0)
+    expect(result.stderr).toContain('Plaintext local source')
+  })
+
+  it('export 开提醒时 stdout 保持 eval-able（提醒只走 stderr）', () => {
+    writeFileSync(join(TMP, '.env.local'), `MXTEST_EXWARN=${testValue('exwarn')}\n`)
+    const result = runCapture(['export', '--no-infisical', '--warn-plaintext'])
+    expect(result.status).toBe(0)
+    expect(result.stderr).toContain('Plaintext local source')
+    const stdoutLines = result.stdout.trim().split('\n').filter(Boolean)
+    expect(stdoutLines.length).toBeGreaterThan(0)
+    for (const line of stdoutLines) expect(line.startsWith('export ')).toBe(true)
   })
 })
 

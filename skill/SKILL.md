@@ -50,6 +50,7 @@ npx morphix-env@latest inspect   # 免安装试用
 要点：
 
 - profile 内 `sources` **从低到高**排列；同 key 冲突默认**报错**，靠后 source 显式 `"override": true` 才覆盖（防止两个环境的同名凭据静默错选）。
+- `local`（明文 dotenv）**仅开发用**；长期存储用 dotenvx（加密文件）或 os-keychain，迁移走 `mx-env migrate`。
 - provider 登录与引导留在 provider 侧（`infisical login`、`doppler login`、dotenvx 解密密钥引导），**不写进项目配置**。
 - plugin source：PATH 上的 `mx-env-provider-<name> <KEY>` 把值写到 stdout（退出码 0）；插件自带登录，失败信息不含值。
 - 固定基线顺序：`inherited process.env → ~/.mx-env/.env → 全局默认 profile → 项目 profile / legacy 配置 → -f 覆盖文件`。legacy 项目（`infisical` + `envFiles` 字段）无需改动即兼容。
@@ -72,7 +73,10 @@ mx-env audit [tail]                      # 值无关的本地审计事件
 mx-env skill install [--target global|project|trellis] [--force]   # 安装本 Skill
 mx-env skill show                        # 查看各目标安装状态
 mx-env shell-init [--write|--remove]     # 为声明的命令生成 PATH shim（shims: ["node","pnpm"] 配置项）
+mx-env migrate [--to dotenvx|keychain]   # local 明文迁加密存储（无 --to 为只读 plan；备份+等价验证+可回滚）
 ```
+
+**明文退场指引**：`local` provider（明文 dotenv 文件）定位是**仅开发用**——文件权限防不住同 uid 的 agent 进程。发现项目或全局在用明文源（`mx-env inspect` 里标 `[plaintext, dev-only]`），引导用户跑 `mx-env migrate` 看 plan，再 `--to dotenvx`（加密文件，跨机/CI 友好）或 `--to keychain`（macOS 钥匙串）。迁移有 0600 备份与值级等价验证，失败自动还原。legacy `.env.local` 不自动迁移——先引导声明为 source。
 
 **shim 消费指引**：配置里声明过 `shims` 且执行过 `shell-init` 的机器上，裸敲被声明命令（如 `pnpm dev`）等价于 `mx-env run -- pnpm dev`——你可以依赖它，无需加前缀。但 shim 是方便性不是隐藏：值仍在子进程 env。**需要值不进 env 的场景（高风险 agent 能力、不可信子进程树）必须显式用 `run --serve`**，不要依赖 shim。audit 里 `via: "shim"` 与 `"cli"` 可区分两种来路。
 

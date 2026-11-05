@@ -18,7 +18,14 @@ describe('dotenvx source integration', () => {
     mkdirSync(ROOT, { recursive: true })
     const sentinel = `mxenv_test_dotenvx_${randomUUID().replace(/-/g, '')}`
     const file = join(ROOT, 'encrypted.env')
-    execFileSync(dotenvx, ['set', 'MXTEST_DOTENVX_REAL', sentinel, '-f', file], { cwd: ROOT, stdio: 'ignore' })
+    // Pin the file model: without DOTENVX_NO_NATIVE, dotenvx 2.x on macOS
+    // custodies the private key in the OS keychain and every test run leaks an
+    // orphaned entry there.
+    execFileSync(dotenvx, ['set', 'MXTEST_DOTENVX_REAL', sentinel, '-f', file], {
+      cwd: ROOT,
+      stdio: 'ignore',
+      env: { ...process.env, DOTENVX_NO_NATIVE: 'true' },
+    })
 
     const loaded = await loadSource({
       name: 'encrypted',

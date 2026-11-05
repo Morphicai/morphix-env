@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased (0.10.0)
+
+### Added
+
+- **`mx-env migrate`** (issue #7): move plaintext `local` storage into encrypted storage — dotenvx encrypted files or the macOS Keychain. Bare `migrate` prints a read-only plan (units, files, key names — never values); `--to dotenvx|keychain` executes per unit with a 0600 backup, a value-level equivalence check (decrypt/keychain read-back vs plaintext snapshot), config rewrite, and automatic restore on failure. Scope: the global `~/.mx-env/.env` (dotenvx only — composition sniffs the encryption markers, no config change needed) plus declared `local` sources in global/project configs; legacy files are reported as hints. Migrations are recorded in the value-free audit (`profile: migrate`). Keychain verification is a subset check (unrelated accounts in the target service only warn), and a rollback writes overwritten same-named accounts back to their previous values — never a silent data loss.
+- **Plaintext dev-only marking**: `mx-env inspect` appends `[plaintext, dev-only]` to `local` sources; `--warn-plaintext` (or `MXENV_WARN_PLAINTEXT=1`, for shimmed invocations) adds a once-per-process stderr reminder on composition paths pointing at `mx-env migrate`.
+
+### Changed
+
+- **dotenvx sources are file-value-wins** (`dotenvx run --overload`): a same-named variable already exported in the parent environment no longer shadows the file value. This aligns dotenvx with `local` semantics — migration now provably preserves what your commands see.
+- dotenvx migrations pin the file model (`--no-native`): the private key lands in a 0600 `.env.keys` beside the file instead of the OS keychain, keeping the result portable and CI-friendly. An unignored `.env.keys` inside a git repo earns a warning.
+- The implicit global dotenvx path (migrated `~/.mx-env/.env`) gates `.env.keys` at 0600, the same rule the plaintext file had (`--allow-insecure-global` waives; win32 exempt).
+
 ## 0.9.0
 
 ### Added

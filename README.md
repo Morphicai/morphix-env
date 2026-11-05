@@ -55,7 +55,7 @@ The same key from two sources fails by default; the later source must declare `"
 }
 ```
 
-Providers: `infisical` · `doppler` · `os-keychain` (macOS) · `dotenvx` (encrypted files) · `local` (dotenv files). Provider login and bootstrap stay on the provider side (`infisical login`, `doppler login`, dotenvx key bootstrap) and never enter repository config.
+Providers: `infisical` · `doppler` · `os-keychain` (macOS) · `dotenvx` (encrypted files) · `local` (plaintext dotenv files — **development only**; move them to encrypted storage with `mx-env migrate`). Provider login and bootstrap stay on the provider side (`infisical login`, `doppler login`, dotenvx key bootstrap) and never enter repository config.
 
 ## Compared with existing secret management
 
@@ -115,6 +115,26 @@ After the PATH line is active, typing `pnpm dev` is exactly `mx-env run -- pnpm 
 
 **Boundary.** Shims buy convenience, not concealment: injected values live in the child's environment and are visible to same-uid processes. When the consumer is an agent you do not trust with the values, use `run --serve` instead. macOS/Linux only; Windows keeps the explicit `run` form. Do not place files in `~/.mx-env/shims` by hand.
 
+## Retiring plaintext: `mx-env migrate`
+
+Plaintext dotenv files are a development convenience, not a storage end-state — file permissions do not protect them from a same-uid agent process. `mx-env migrate` moves them into encrypted storage (dotenvx encrypted files, or the macOS Keychain) with a backup and a value-level equivalence check at every step:
+
+```bash
+mx-env migrate                                 # read-only plan: units, files, key names (never values)
+mx-env migrate --to dotenvx                    # encrypt in place; declared sources flip to provider dotenvx
+mx-env migrate --to keychain --source mysource # values move to service mx-env:mysource; plaintext is deleted
+```
+
+Scope: the global `~/.mx-env/.env` (dotenvx target only) plus every declared `local` source in the global and project configs. Legacy `.env.local`/`envFiles` are reported as hints — declare them as sources first. Two sources sharing one file are refused: split them first.
+
+- Every unit gets a **0600 backup** (`<file>.mx-env-backup-<timestamp>`) and a **post-migration equivalence check** — decrypted or keychain-read-back values must match the plaintext snapshot exactly — before any config is rewritten. On failure the plaintext and config are restored from backup and the backup paths printed. Backups stay until you delete them yourself.
+- dotenvx migrations pin the file model (`--no-native`): the private key lands in a 0600 `.env.keys` beside the file — portable and CI-friendly — instead of the OS keychain. An unignored `.env.keys` inside a git repo earns a loud warning; the encrypted `.env` itself is safe to commit (that is the dotenvx model).
+- The global file needs no config change: composition sniffs the encryption markers and loads it through the dotenvx provider automatically, with the same 0600 gate on `.env.keys` the plaintext file had.
+- Verification goes through `dotenvx decrypt`, never `run`, so a same-named shell export cannot shadow the check. At compose time, dotenvx sources are file-value-wins (`--overload`) — the same semantics `local` had, so migration does not change what your commands see.
+- Migrations are recorded in the value-free audit (`profile: migrate`).
+
+`--dry-run` with `--to` prints the full execution plan without writing. The keychain target is macOS-only and serves declared sources; the dotenvx target needs the dotenvx CLI (`npm i -g @dotenvx/dotenvx` or a project devDependency).
+
 ## Provider plugins
 
 Any executable on PATH named `mx-env-provider-<name>` is a provider — new remote stores need no changes to `config.ts` / `sources.ts` / `editor.ts`:
@@ -147,6 +167,7 @@ mx-env export [--profile agents]        # eval-able export KEY='value' lines (va
 mx-env render <template> <output>       # substitute ${VAR} into a config file (mode 0600)
 mx-env inject <template> <output>       # resolve mx-env://profile/KEY references into a file (mode 0600)
 mx-env inspect [--profile dev]          # key names + provenance, no values
+mx-env migrate [--to dotenvx|keychain]  # move plaintext local sources into encrypted storage
 mx-env edit [--profile dev | --source s] # one-shot visual editor
 mx-env generate --out public/__env.js   # public browser runtime config
 mx-env doc                              # write this project's key→source skill
@@ -169,6 +190,8 @@ mx-env skill install --target trellis   # ~/.trellis/skills/morphix-env/ — the
 ```
 
 Installs are idempotent, and a skill file the user has customized is never overwritten without `--force`. `mx-env skill show` reports each target's install state and template drift.
+
+When the consumer is an agent, prefer `mx-env run --serve -- <command>`: values never enter any process environment, and the agent fetches them one at a time over loopback. Keep secrets in encrypted storage (`mx-env migrate`) and this forms the chain where an agent never touches plaintext — at rest or in env. (Once native keychain ACLs land, the keychain itself can additionally gate access behind Touch ID.)
 
 For project-specific guidance, `mx-env doc --profile <name>` generates a value-free skill listing this project's resolved key names and their winning sources (`.agents/skills/morphix-env/SKILL.md`).
 
