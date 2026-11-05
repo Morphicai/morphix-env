@@ -71,7 +71,10 @@ mx-env doc                               # 生成本项目的 key→source 工�
 mx-env audit [tail]                      # 值无关的本地审计事件
 mx-env skill install [--target global|project|trellis] [--force]   # 安装本 Skill
 mx-env skill show                        # 查看各目标安装状态
+mx-env shell-init [--write|--remove]     # 为声明的命令生成 PATH shim（shims: ["node","pnpm"] 配置项）
 ```
+
+**shim 消费指引**：配置里声明过 `shims` 且执行过 `shell-init` 的机器上，裸敲被声明命令（如 `pnpm dev`）等价于 `mx-env run -- pnpm dev`——你可以依赖它，无需加前缀。但 shim 是方便性不是隐藏：值仍在子进程 env。**需要值不进 env 的场景（高风险 agent 能力、不可信子进程树）必须显式用 `run --serve`**，不要依赖 shim。audit 里 `via: "shim"` 与 `"cli"` 可区分两种来路。
 
 `export` / `render` / `inject` / `run` 均支持 `--dry-run`（只报 key/变量名，不出值）。值永不出现在 shell 历史里：`eval "$(mx-env export --profile dev)"` 才是 export 的消费方式。
 

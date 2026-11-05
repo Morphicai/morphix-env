@@ -90,6 +90,14 @@ export interface MxEnvConfig {
   profiles?: Record<string, ProfileInput>
   /** Profile selected when a caller does not pass --profile. */
   defaultProfile?: string
+  /**
+   * Commands that get a PATH shim via `mx-env shell-init` (global and project
+   * lists are unioned). Wiring only — never values. Deliberately excluded from
+   * validateConfig's hard errors: a convenience layer must not break the core
+   * injection path, so `shell-init` validates and hard-fails while composition
+   * paths only warn (see shims.ts validateShimList).
+   */
+  shims?: string[]
 }
 
 export interface LoadedConfig {

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (0.9.0)
+
+### Added
+
+- **Terminal shims** (`mx-env shell-init [--write|--remove]`): declare `"shims": ["node", "pnpm"]` in the global and/or project config (unioned, case-insensitively deduplicated) and run declared commands bare — a PATH shim makes `pnpm dev` exactly `mx-env run -- pnpm dev`. `run` sanitizes the shims directory out of the child PATH before composing (provider subprocesses included), so injection happens exactly once with no recursion. Shim invocations are recorded in audit with `via: "shim"`. macOS/Linux. (#10)
+
 ## 0.8.0
 
 ### Added

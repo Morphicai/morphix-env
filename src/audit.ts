@@ -10,6 +10,12 @@ export interface AuditEvent {
   outcome: 'success' | 'failure'
   exitCode?: number
   durationMs: number
+  /**
+   * Invocation channel. `shim` means the run came through a PATH shim. This is
+   * an observational dimension, not a security assertion: the marker travels
+   * as an env var and is forgeable by any same-uid process.
+   */
+  via?: 'cli' | 'shim'
 }
 
 /** Best-effort local audit that intentionally has no values or command arguments. */
