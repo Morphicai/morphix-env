@@ -30,4 +30,4 @@
 - [x] 5.1 README：新增 "Terminal shims" 章节（清单配置、init/--write/--remove、递归防护语义、决策 4 的项目语义声明、边界声明：方便性≠对 agent 隐藏，高风险走 `run --serve`、macOS/Linux only、"不要手工往 shim 目录放文件"）
 - [x] 5.2 skill/SKILL.md：补 shim 消费指引（agent 何时可依赖 shim、何时必须显式 run --serve）
 - [x] 5.3 CHANGELOG 0.9.0 草稿条目；`openspec validate terminal-command-shims --strict` 通过
-- [ ] 5.4 独立 code review（正确性 + 生产就绪双视角）→ 修复门禁项 → PR → 合并后按 0.8.0 同流程发版（npm publish 前向用户确认）
+- [x] 5.4 独立 code review（正确性 + 生产就绪双视角）→ 修复门禁项 → PR → 合并后按 0.8.0 同流程发版（npm publish 前向用户确认）
