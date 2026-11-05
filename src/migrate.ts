@@ -1,7 +1,7 @@
 import { execFileSync } from 'child_process'
 import { chmodSync, copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
-import { dirname, isAbsolute, join, resolve } from 'path'
+import { delimiter, dirname, isAbsolute, join, resolve } from 'path'
 import { parse as dotenvParse } from 'dotenv'
 import {
   type ConfigLayers,
@@ -145,11 +145,11 @@ function withRestoreOutcome(message: string, failed: string[], backups: string[]
   return `${message} Plaintext and configuration were restored from backup${backups.length ? ` (${backups.join(', ')})` : ''}.`
 }
 
-function equivalent(expected: Record<string, string>, actual: Record<string, string>): boolean {
+function equivalent(expected: Record<string, string>, actual: Record<string, string>, presenceOnly: Set<string>): boolean {
   const expectedKeys = Object.keys(expected).sort()
   const actualKeys = Object.keys(actual).sort()
   if (expectedKeys.length !== actualKeys.length) return false
-  return expectedKeys.every((key, index) => key === actualKeys[index] && expected[key] === actual[key])
+  return expectedKeys.every((key, index) => key === actualKeys[index] && (presenceOnly.has(key) || expected[key] === actual[key]))
 }
 
 /** The declared `files` subset that exists on disk (post-migration config must not name missing files — dotenvx hard-fails on those). */
@@ -204,13 +204,37 @@ async function reloadViaKeychain(unit: MigrationUnit, newSource: SecretSource, h
 }
 
 /**
+ * Verification child processes get a minimal allowlisted environment, never
+ * the caller's. Empirical dotenvx 2.30 behavior this defends against:
+ * `decrypt --stdout` merges same-named parent-env variables over file values
+ * (no --overload exists for decrypt) and resolves `DOTENV_PRIVATE_KEY*` key
+ * material from the environment — so an inherited environment can both
+ * false-fail verification and substitute for the `.env.keys` the check is
+ * supposed to prove. PATH is pinned to reach the current Node runtime for the
+ * dotenvx shebang (same rationale as resolveDotenvx).
+ */
+function verificationEnv(): NodeJS.ProcessEnv {
+  return {
+    ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+    ...(process.env.SYSTEMROOT ? { SYSTEMROOT: process.env.SYSTEMROOT } : {}),
+    ...(process.env.TMPDIR ? { TMPDIR: process.env.TMPDIR } : {}),
+    ...(process.env.TMP ? { TMP: process.env.TMP } : {}),
+    ...(process.env.TEMP ? { TEMP: process.env.TEMP } : {}),
+    PATH: [dirname(process.execPath), process.env.PATH || ''].filter(Boolean).join(delimiter),
+    DOTENVX_NO_NATIVE: 'true',
+  }
+}
+
+/**
  * dotenvx verification goes through `decrypt --stdout`, NOT `run`: run injects
- * into a child env that already contains this process's variables, and without
- * --overload a same-named shell export would shadow the file value and produce
- * false mismatches. decrypt keeps values in the pipe and is a genuinely
- * independent code path from the snapshot's dotenv.parse. --no-native pins the
- * file model so verification proves the `.env.keys` on disk, never a
- * keychain-custodian fluke.
+ * into a child env, and without --overload a same-named shell export would
+ * shadow the file value and produce false mismatches. decrypt keeps values in
+ * the pipe and is a genuinely independent code path from the snapshot's
+ * dotenv.parse — but it still consults the child environment (see
+ * verificationEnv) and expands `$name` sequences in values during loading, so
+ * values that would not survive migration intact are refused and named rather
+ * than silently changed. --no-native pins the file model so verification
+ * proves the `.env.keys` on disk, never a keychain-custodian fluke.
  */
 function decryptValues(command: string, files: string[]): Record<string, string> {
   const values: Record<string, string> = {}
@@ -219,10 +243,12 @@ function decryptValues(command: string, files: string[]): Record<string, string>
       encoding: 'utf8',
       cwd: dirname(file),
       stdio: ['ignore', 'pipe', 'ignore'],
+      env: verificationEnv(),
     })
-    // Strip exactly the public-key markers the encrypted file declares (they
-    // are dotenvx machinery, never part of the plaintext snapshot) — not a
-    // prefix match, which could eat a user key named DOTENV_PUBLIC_KEY_*.
+    // Strip the public-key markers the encrypted file declares (dotenvx
+    // machinery, never part of the plaintext snapshot). dotenvx reserves the
+    // whole DOTENV_PUBLIC_KEY* prefix and migrateToDotenvx refuses such keys up
+    // front, so in practice only the marker line is dropped here.
     const markerKeys = new Set(Object.keys(parseEnvFile(file)).filter((key) => key.startsWith('DOTENV_PUBLIC_KEY')))
     for (const [key, value] of Object.entries(dotenvParse(output))) {
       if (!markerKeys.has(key)) values[key] = value
@@ -250,6 +276,14 @@ async function migrateToDotenvx(unit: MigrationUnit, stamp: string, homeDir: str
       throw new Error('the dotenvx CLI is required; install it (e.g. `npm i -g @dotenvx/dotenvx`) or migrate to another target.')
     }
     for (const file of unit.files) {
+      // dotenvx reserves the DOTENV_PUBLIC_KEY* prefix: encrypt rejects such
+      // files with a raw hex error. Refuse up front with the key named so the
+      // operator knows what to rename.
+      for (const key of Object.keys(parseEnvFile(file))) {
+        if (key.startsWith('DOTENV_PUBLIC_KEY')) {
+          throw new Error(`dotenvx reserves the DOTENV_PUBLIC_KEY* prefix; rename key "${key}" in ${file} before migrating.`)
+        }
+      }
       // cwd pins where `.env.keys` lands — beside the file, matching
       // resolveDotenvx's lookup assumption. --no-native forces the file model:
       // dotenvx 2.x on macOS otherwise custodies the private key in the OS
@@ -263,8 +297,20 @@ async function migrateToDotenvx(unit: MigrationUnit, stamp: string, homeDir: str
     const keysFiles = candidateKeysFiles.filter(existsSync)
 
     const values = decryptValues(command, unit.files)
-    if (!equivalent(snapshot, values)) {
-      throw new Error('post-migration verification failed: decrypted values differ from the plaintext snapshot.')
+    // Keys that collide with the runtime environment the dotenvx CLI itself
+    // needs (PATH, HOME, …) cannot be proven value-wise through a shebang-run
+    // CLI — the child env must carry them and dotenvx's output shadows them.
+    // Their presence is verified here; value fidelity for them rests on
+    // encrypt reading the file and composition's `run --overload` file-wins.
+    const presenceOnly = new Set(Object.keys(verificationEnv()))
+    if (!equivalent(snapshot, values, presenceOnly)) {
+      const diffKeys = [...new Set([...Object.keys(snapshot), ...Object.keys(values)])]
+        .filter((key) => !presenceOnly.has(key) && snapshot[key] !== values[key])
+        .sort()
+      throw new Error(
+        `post-migration verification failed: decrypted values differ from the plaintext snapshot for: ${diffKeys.join(', ')}.` +
+        ' dotenvx expands $name sequences during loading — if a listed key holds a $ sequence, migration would change what consumers see and is refused; edit that value first.',
+      )
     }
     const warnings: string[] = []
     if (unit.kind === 'declared') {
