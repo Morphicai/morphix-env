@@ -8,10 +8,11 @@ import {
   type SecretSource,
   validateConfig,
 } from './config'
+import { isDotenvxEncrypted } from './env'
 import { isPublicKey, loadSource, type LoadedSource, type SourceEntry } from './sources'
 
 const DEFAULT_ENV_FILE = '.env.local'
-const GLOBAL_DOTENV_SOURCE = '__mx_global_dotenv'
+export const GLOBAL_DOTENV_SOURCE = '__mx_global_dotenv'
 const LEGACY_INFISICAL_SOURCE = '__mx_legacy_infisical'
 const LEGACY_LOCAL_SOURCE = '__mx_legacy_local'
 
@@ -160,9 +161,15 @@ function resolveEntries(layers: ConfigLayers, options: ComposeOptions): { name: 
     ...Object.entries(layers.project.config.profiles || {}),
   ])
 
+  // Sniff the global implicit file: after `mx-env migrate --to dotenvx` it is
+  // encrypted in place and must load through the dotenvx provider — no config
+  // change is involved (design decision 2).
+  const globalEncrypted = isDotenvxEncrypted(layers.globalEnvFile)
   const globalDotenv: SourceEntry[] = includeGlobal ? [{
     name: GLOBAL_DOTENV_SOURCE,
-    source: { provider: 'local', files: [layers.globalEnvFile], optional: true },
+    source: globalEncrypted
+      ? { provider: 'dotenvx', files: [layers.globalEnvFile], optional: true }
+      : { provider: 'local', files: [layers.globalEnvFile], optional: true },
     baseDir: layers.global.baseDir,
     globalImplicit: true,
   }] : []
