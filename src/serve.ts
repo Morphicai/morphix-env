@@ -68,7 +68,16 @@ export async function startSecretServer(values: Record<string, string>): Promise
 
   await new Promise<void>((resolvePromise, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolvePromise())
+    server.listen(0, '127.0.0.1', () => {
+      // The one-shot listener above only covers startup; once listening, swap
+      // in a stderr witness so a late runtime error is never swallowed by an
+      // already-settled promise.
+      server.removeListener('error', reject)
+      server.on('error', (error) => {
+        console.error(`[morphix-env] Secret server error: ${error instanceof Error ? error.message : 'unknown'}`)
+      })
+      resolvePromise()
+    })
   })
 
   const address = server.address()

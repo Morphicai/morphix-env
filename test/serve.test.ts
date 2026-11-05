@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { spawnSync } from 'child_process'
+import { spawnSync, execFile } from 'child_process'
+import { promisify } from 'util'
 import { request as httpRequest } from 'http'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { startSecretServer } from '../src/serve'
+
+const execFileAsync = promisify(execFile)
 
 const CLI = join(__dirname, '..', 'dist', 'cli.js')
 const TMP = join(tmpdir(), `mx-env-serve-${randomUUID()}`)
@@ -181,6 +184,36 @@ describe('mx-env fetch', () => {
     const result = run(['fetch'])
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('Usage: mx-env fetch')
+  })
+
+  it('parses the key after value-taking flags (not the flag value)', async () => {
+    const secret = value('flagparse')
+    const server = await startSecretServer({ MXTEST_FLAGKEY: secret })
+    try {
+      // Async spawn: a blocking spawnSync would freeze this process's event
+      // loop and starve the in-process server it queries.
+      const { stdout } = await execFileAsync('node', [CLI, 'fetch', '-e', 'dev', 'MXTEST_FLAGKEY'], {
+        encoding: 'utf8',
+        env: { ...process.env, HOME, MXENV_ENDPOINT: server.endpoint, MXENV_TOKEN: server.token },
+        cwd: TMP,
+      })
+      expect(stdout).toBe(secret)
+    } finally {
+      server.close()
+    }
+  })
+
+  it('refuses a non-loopback MXENV_ENDPOINT so the token never leaves the machine', () => {
+    const token = `tok_${randomUUID().replace(/-/g, '')}`
+    const result = spawnSync('node', [CLI, 'fetch', 'WHATEVER'], {
+      encoding: 'utf8',
+      // TEST-NET-3 (documentation range): guaranteed no real listener.
+      env: { ...process.env, HOME, MXENV_ENDPOINT: 'http://203.0.113.10:9999', MXENV_TOKEN: token },
+      cwd: TMP,
+    })
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('loopback')
+    expect(result.stderr).not.toContain(token)
   })
 })
 

@@ -299,7 +299,7 @@ async function cmdRun(args: Args): Promise<number> {
  * value to stdout, with no trailing newline so redirection is lossless.
  */
 async function cmdFetch(args: Args): Promise<number> {
-  const key = process.argv.slice(3).find((arg) => !arg.startsWith('-'))
+  const key = args.positionals[0]
   if (!key) {
     console.error('[morphix-env] Usage: mx-env fetch <key-name>')
     return 1
@@ -308,6 +308,20 @@ async function cmdFetch(args: Args): Promise<number> {
   const token = process.env.MXENV_TOKEN
   if (!endpoint || !token) {
     console.error('[morphix-env] mx-env fetch needs MXENV_ENDPOINT and MXENV_TOKEN; run it inside "mx-env run --serve -- <command>".')
+    return 1
+  }
+  // The token authorizes reads of composed secrets, so it must never leave
+  // this machine: a poisoned or hand-set endpoint pointing off-loopback would
+  // carry it into a remote server's logs via the Authorization header.
+  let endpointUrl: URL
+  try {
+    endpointUrl = new URL(endpoint)
+  } catch {
+    console.error('[morphix-env] MXENV_ENDPOINT is not a valid URL.')
+    return 1
+  }
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(endpointUrl.hostname)) {
+    console.error('[morphix-env] MXENV_ENDPOINT is not a loopback address; refusing to send the fetch token off-machine.')
     return 1
   }
   try {
@@ -332,6 +346,9 @@ async function cmdFetch(args: Args): Promise<number> {
 
 async function cmdGenerate(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
+  // Resolve mx-env:// references first: a generated client env must contain
+  // the same values a run child would receive, not literal reference strings.
+  await resolveEnvironmentReferences(composition, args)
   const { outFile, filter } = generatedOptions(args)
   generateClientEnv(outFile, filter, composition.environment)
   if (args.verbose) {
@@ -363,6 +380,9 @@ async function cmdExport(args: Args): Promise<number> {
     for (const key of keys) console.log(key)
     return 0
   }
+  // Resolve mx-env:// references so export matches run's semantics: consumers
+  // of `eval "$(mx-env export)"` get the same values a run child would.
+  await resolveEnvironmentReferences(composition, args)
   // stdout carries eval-able statements only — any extra line would break
   // `eval "$(mx-env export --profile …)"`. Keys that are not shell
   // identifiers (FOO-BAR, 1LEAD — legal in dotenv, illegal in shell) would be
@@ -404,6 +424,9 @@ async function cmdRender(args: Args): Promise<number> {
     return 0
   }
 
+  // Resolve mx-env:// references so rendered output matches run's semantics
+  // instead of embedding literal reference strings.
+  await resolveEnvironmentReferences(composition, args)
   const { output } = renderTemplate(template, composition.environment)
   warnOutputGitRisk(outPath)
   writePrivateFile(outPath, output)
