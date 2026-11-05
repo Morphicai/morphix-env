@@ -37,5 +37,5 @@
 - [x] 6.1 README：新增 `mx-env migrate` 章节（范围/两目标/dry-run/备份与回滚/幂等/no-native 文件模型）；"Choosing providers" 处钉死 local=仅开发用；agent 消费指引（run --serve 为推荐形态，#4 P3 落地后形成完整链路）；dotenvx provider --overload 语义注记
 - [x] 6.2 skill/SKILL.md：补 dev-only 定位与 migrate 指引；agent 场景继续推 run --serve
 - [x] 6.3 CHANGELOG 0.10.0 草稿条目（含 --overload 行为变更注记）；`openspec validate plaintext-retirement --strict` 通过
-- [ ] 6.4 独立 code review（正确性 + 生产就绪/token 出域四面双视角）→ 修复门禁项 → PR → 用户确认合并 → 0.10.0 发版（npm publish 前向用户确认）→ 关闭 issue #7
-- [ ] 6.5 向用户报告：本次开发期在本机 login keychain 遗留的 `dotenvx (<pubkey>)` 孤儿条目（native custodian 实证 + 旧集成测试泄漏），由用户决定是否清理
+- [x] 6.4 独立 code review（正确性 + 生产就绪/token 出域四面双视角）→ 修复门禁项 → PR → 用户确认合并 → 0.10.0 发版（npm publish 前向用户确认）→ 关闭 issue #7
+- [x] 6.5 向用户报告：本次开发期在本机 login keychain 遗留的 `dotenvx (<pubkey>)` 孤儿条目（native custodian 实证 + 旧集成测试泄漏），由用户决定是否清理
