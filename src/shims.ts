@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync, accessSync, constants } from 'fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync, accessSync, constants } from 'fs'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
 import type { ConfigLayers } from './config'
@@ -102,15 +102,17 @@ function readIfExists(path: string): string | null {
 /**
  * Writes shims for the declared commands and converges the directory: stale
  * tool-generated shims (marker present) whose command is no longer declared
- * are removed; handmade files (no marker) are never touched. Idempotent —
- * rewriting an up-to-date shim is skipped byte-for-byte.
+ * are removed. **Handmade files (no marker) are never touched** — a declared
+ * command colliding with one is skipped and reported, never overwritten.
+ * Idempotent — rewriting an up-to-date shim is skipped byte-for-byte.
  */
-export function writeShims(commands: string[], homeDir = homedir()): { written: string[]; removed: string[] } {
+export function writeShims(commands: string[], homeDir = homedir()): { written: string[]; removed: string[]; skipped: string[] } {
   const dir = shimsDir(homeDir)
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   const wanted = new Set(commands.map((command) => command.toLowerCase()))
   const written: string[] = []
   const removed: string[] = []
+  const skipped: string[] = []
 
   for (const file of readdirSync(dir)) {
     const path = join(dir, file)
@@ -124,12 +126,25 @@ export function writeShims(commands: string[], homeDir = homedir()): { written: 
   for (const command of commands) {
     const path = join(dir, command)
     const content = renderShimScript(command)
-    if (readIfExists(path) === content) continue
+    // Never follow a pre-existing symlink: reading/writing through it would
+    // touch its target. Replace the link with a regular file instead.
+    let isSymlink = false
+    try {
+      isSymlink = lstatSync(path).isSymbolicLink()
+    } catch { /* absent */ }
+    const existing = isSymlink ? null : readIfExists(path)
+    if (!isSymlink && existing !== null && !existing.includes(SHIM_MARKER)) {
+      // A handmade file holds the name. Refuse to overwrite; surface it.
+      skipped.push(command)
+      continue
+    }
+    if (isSymlink) rmSync(path)
+    else if (existing === content) continue
     writeFileSync(path, content, { mode: 0o755 })
     chmodSync(path, 0o755)
     written.push(command)
   }
-  return { written, removed }
+  return { written, removed, skipped }
 }
 
 /** Removes every tool-generated shim; handmade files are left alone. */
@@ -168,7 +183,13 @@ export const RC_BLOCK_BEGIN = '# >>> mx-env shims >>>'
 export const RC_BLOCK_END = '# <<< mx-env shims <<<'
 
 export function rcBlock(homeDir = homedir()): string {
-  return `${RC_BLOCK_BEGIN}\nexport PATH="${shimsDir(homeDir)}:$PATH"\n${RC_BLOCK_END}`
+  const dir = shimsDir(homeDir)
+  // The path lands inside a double-quoted shell line; refuse characters that
+  // could break out of it. Real $HOME values essentially never contain these.
+  if (/["$`\\]/.test(dir)) {
+    throw new Error('[morphix-env] Shims directory path contains characters that are unsafe in a shell rc line.')
+  }
+  return `${RC_BLOCK_BEGIN}\nexport PATH="${dir}:$PATH"\n${RC_BLOCK_END}`
 }
 
 /** Infers the rc file from $SHELL; returns null for shells we do not write. */
@@ -179,29 +200,36 @@ export function defaultRcPath(shell: string | undefined, homeDir = homedir()): s
   return null
 }
 
-/** Idempotently installs the PATH block; an existing block is replaced in place. */
+/** Atomic write (tmp + rename) so a crash can never truncate a user's rc file. */
+function writeFileAtomic(path: string, content: string): void {
+  const tmp = `${path}.mx-env-${process.pid}.tmp`
+  writeFileSync(tmp, content)
+  renameSync(tmp, path)
+}
+
+/** Idempotently installs the PATH block; all existing marked blocks are replaced. */
 export function upsertRcBlock(rcPath: string, homeDir = homedir()): 'added' | 'updated' | 'unchanged' {
   const existing = readIfExists(rcPath) ?? ''
   const block = rcBlock(homeDir)
-  const pattern = new RegExp(`${escapeRegExp(RC_BLOCK_BEGIN)}[\\s\\S]*?${escapeRegExp(RC_BLOCK_END)}`)
+  const pattern = new RegExp(`${escapeRegExp(RC_BLOCK_BEGIN)}[\\s\\S]*?${escapeRegExp(RC_BLOCK_END)}`, 'g')
   if (pattern.test(existing)) {
     const replaced = existing.replace(pattern, block)
     if (replaced === existing) return 'unchanged'
-    writeFileSync(rcPath, replaced.endsWith('\n') ? replaced : `${replaced}\n`)
+    writeFileAtomic(rcPath, replaced.endsWith('\n') ? replaced : `${replaced}\n`)
     return 'updated'
   }
   const separator = existing.length && !existing.endsWith('\n') ? '\n' : ''
-  writeFileSync(rcPath, `${existing}${separator}${block}\n`)
+  writeFileAtomic(rcPath, `${existing}${separator}${block}\n`)
   return 'added'
 }
 
-/** Idempotently removes the PATH block, leaving all other rc content intact. */
+/** Idempotently removes every marked PATH block, leaving other content intact. */
 export function removeRcBlock(rcPath: string): 'removed' | 'absent' {
   const existing = readIfExists(rcPath)
   if (existing === null) return 'absent'
-  const pattern = new RegExp(`\\n?${escapeRegExp(RC_BLOCK_BEGIN)}[\\s\\S]*?${escapeRegExp(RC_BLOCK_END)}\\n?`)
+  const pattern = new RegExp(`\\n?${escapeRegExp(RC_BLOCK_BEGIN)}[\\s\\S]*?${escapeRegExp(RC_BLOCK_END)}\\n?`, 'g')
   if (!pattern.test(existing)) return 'absent'
-  writeFileSync(rcPath, existing.replace(pattern, '\n'))
+  writeFileAtomic(rcPath, existing.replace(pattern, '\n'))
   return 'removed'
 }
 
@@ -244,26 +272,34 @@ export function stripShimsFromPath(pathValue: string | undefined, homeDir = home
  * clean. Returns the pre-sanitization PATH (shell-init's parity check needs
  * the real one) and whether the invocation came through a shim.
  */
-export function sanitizeBootEnv(env: NodeJS.ProcessEnv = process.env, homeDir = homedir()): { viaShim: boolean; originalPath?: string } {
+export function sanitizeBootEnv(env: NodeJS.ProcessEnv = process.env, homeDir?: string): { viaShim: boolean; originalPath?: string } {
   const originalPath = env.PATH
   const viaShim = env.MXENV_SHIM === '1'
-  const stripped = stripShimsFromPath(originalPath, homeDir)
-  if (stripped !== originalPath) {
-    if (stripped) env.PATH = stripped
-    else delete env.PATH
-  }
+  try {
+    // homedir() can throw in hardened containers with no $HOME and no passwd
+    // entry; light commands (--help/--version) must survive that.
+    const home = homeDir ?? homedir()
+    const stripped = stripShimsFromPath(originalPath, home)
+    if (stripped !== originalPath) {
+      if (stripped) env.PATH = stripped
+      else delete env.PATH
+    }
+  } catch { /* sanitization is best-effort; composition paths resolve home themselves */ }
   delete env.MXENV_SHIM
   return { viaShim, originalPath }
 }
 
 /**
- * Per-command PATH parity: a declared command must resolve to its shim file,
- * otherwise an earlier PATH entry (volta, another tool) shadows it and the
- * shim silently never fires. Uses the pre-sanitization PATH captured at boot.
+ * Per-command PATH parity: a declared command must resolve to its shim file.
+ * `absent` — no executable by that name anywhere on PATH (first install: the
+ * shims dir is not on PATH yet); `shadowed` — an earlier PATH entry (volta,
+ * another tool) wins and the shim silently never fires. Uses the
+ * pre-sanitization PATH captured at boot.
  */
-export function findShadowedCommands(commands: string[], originalPath: string | undefined, homeDir = homedir()): string[] {
-  if (!originalPath) return [...commands]
+export function findShadowedCommands(commands: string[], originalPath: string | undefined, homeDir = homedir()): { absent: string[]; shadowed: string[] } {
+  if (!originalPath) return { absent: [...commands], shadowed: [] }
   const dirs = originalPath.split(delimiter).filter(Boolean)
+  const absent: string[] = []
   const shadowed: string[] = []
   for (const command of commands) {
     const shimPath = join(shimsDir(homeDir), command)
@@ -278,7 +314,8 @@ export function findShadowedCommands(commands: string[], originalPath: string | 
     }
     const samePath = (a: string, b: string) =>
       process.platform === 'darwin' ? a.toLowerCase() === b.toLowerCase() : a === b
-    if (resolvedTo === null || !samePath(resolvedTo, shimPath)) shadowed.push(command)
+    if (resolvedTo === null) absent.push(command)
+    else if (!samePath(resolvedTo, shimPath)) shadowed.push(command)
   }
-  return shadowed
+  return { absent, shadowed }
 }

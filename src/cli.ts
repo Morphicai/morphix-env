@@ -158,9 +158,6 @@ function composeOptions(args: Args): ComposeOptions {
   }
 }
 
-/** Once-per-process guard for the invalid-shims warning. */
-let shimWarned = false
-
 /**
  * Boot-time capture, set by main() before dispatch: whether this invocation
  * came through a PATH shim (audit `via` dimension) and the pre-sanitization
@@ -168,20 +165,27 @@ let shimWarned = false
  */
 const bootInfo: { viaShim: boolean; originalPath?: string } = { viaShim: false }
 
+/**
+ * Once-per-process warning for invalid `shims` lists (design decision 8):
+ * composition paths degrade to warn-and-ignore; only shell-init hard-fails.
+ */
+let shimWarned = false
+
+function warnInvalidShims(layers: ConfigLayers, includeGlobal: boolean): void {
+  if (shimWarned) return
+  shimWarned = true
+  const problems = [
+    ...(includeGlobal ? validateShimList(layers.global.config.shims, layers.global.path) : []),
+    ...validateShimList(layers.project.config.shims, layers.project.path),
+  ]
+  if (problems.length) {
+    console.warn(`[morphix-env] Ignoring invalid "shims" entries (${problems.length} problem(s)); run \`mx-env shell-init\` for the details.`)
+  }
+}
+
 function resolveComposition(args: Args): Promise<EnvironmentComposition> {
   const layers = configLayers()
-  // A broken `shims` list must never break composition: warn and ignore, and
-  // let `shell-init` be the command that hard-fails on it (design decision 8).
-  if (!shimWarned) {
-    shimWarned = true
-    const shimProblems = [
-      ...validateShimList(layers.global.config.shims, layers.global.path),
-      ...validateShimList(layers.project.config.shims, layers.project.path),
-    ]
-    if (shimProblems.length) {
-      console.warn(`[morphix-env] Ignoring invalid "shims" entries (${shimProblems.length} problem(s)); run \`mx-env shell-init\` for the details.`)
-    }
-  }
+  warnInvalidShims(layers, !args.noGlobal)
   return composeEnvironment(layers, composeOptions(args))
 }
 
@@ -505,7 +509,9 @@ async function cmdInject(args: Args): Promise<number> {
     return 1
   }
   const template = readFileSync(templatePath, 'utf8')
-  const resolver = new ReferenceResolver(configLayers(), composeOptions(args))
+  const layers = configLayers()
+  warnInvalidShims(layers, !args.noGlobal)
+  const resolver = new ReferenceResolver(layers, composeOptions(args))
   const references = findMxEnvReferences(template)
 
   if (args.dryRun) {
@@ -618,6 +624,10 @@ Secret values and value prefixes do not belong in this Skill, command output, au
  * command names, never secrets.
  */
 function cmdShellInit(args: Args): number {
+  if (process.platform === 'win32') {
+    console.error('[morphix-env] shell-init is supported on macOS/Linux only; on Windows keep using explicit `mx-env run -- <command>`.')
+    return 1
+  }
   if (args.unknownFlags.length) {
     console.error(`[morphix-env] shell-init: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
     return 1
@@ -626,6 +636,18 @@ function cmdShellInit(args: Args): number {
     console.error('[morphix-env] shell-init: --write and --remove are mutually exclusive.')
     return 1
   }
+  try {
+    return runShellInit(args)
+  } catch (error) {
+    // Filesystem failures (unwritable home, rc path is a directory, …) must
+    // surface as actionable text, not a raw errno bubble.
+    const code = (error as NodeJS.ErrnoException)?.code
+    console.error(`[morphix-env] shell-init failed${code ? ` (${code})` : ''}: check that your home directory and rc file are writable, then retry.`)
+    return 1
+  }
+}
+
+function runShellInit(args: Args): number {
   const layers = configLayers()
   const home = homedir()
   const rcPath = defaultRcPath(process.env.SHELL, home)
@@ -647,9 +669,12 @@ function cmdShellInit(args: Args): number {
   }
 
   const commands = resolveShimCommands(layers, !args.noGlobal)
-  const { written, removed } = writeShims(commands, home)
+  const { written, removed, skipped } = writeShims(commands, home)
   console.log(`[morphix-env] Shims ready in ${shimsDir(home)} (${commands.length} command(s): ${commands.join(', ') || 'none'}; ${written.length} written, ${removed.length} removed).`)
 
+  for (const command of skipped) {
+    console.warn(`[morphix-env] Warning: "${command}" exists in the shims directory as a handmade file (no mx-env marker); refusing to overwrite. Remove or rename it by hand, then re-run shell-init.`)
+  }
   for (const file of detectHandmadeReservedShims(home)) {
     console.warn(`[morphix-env] Warning: "${file}" in the shims directory was not created by mx-env and shadows a reserved command; delete it by hand. Do not place files in ${shimsDir(home)} manually.`)
   }
@@ -657,9 +682,12 @@ function cmdShellInit(args: Args): number {
   // Parity check against the pre-sanitization PATH captured at boot: each
   // declared command must resolve to its shim, or an earlier PATH entry
   // (volta, another tool) silently wins and nothing is injected.
-  const shadowed = findShadowedCommands(commands, bootInfo.originalPath, home)
+  const { absent, shadowed } = findShadowedCommands(commands, bootInfo.originalPath, home)
+  if (absent.length) {
+    console.warn(`[morphix-env] Note: ${absent.join(', ')} cannot be resolved on the current PATH yet — add the shims directory (below) and open a new shell.`)
+  }
   if (shadowed.length) {
-    console.warn(`[morphix-env] Warning: these commands do not resolve to their shim on the current PATH: ${shadowed.join(', ')} — move ${shimsDir(home)} ahead of the entries that provide them.`)
+    console.warn(`[morphix-env] Warning: these commands resolve to a different executable ahead of their shim: ${shadowed.join(', ')} — move ${shimsDir(home)} ahead of the entries that provide them.`)
   }
 
   if (args.write) {
@@ -676,7 +704,8 @@ function cmdShellInit(args: Args): number {
   return 0
 }
 
-function cmdAudit(args: Args): number {  const file = join(homedir(), '.mx-env', 'audit', `${new Date().toISOString().slice(0, 10)}.jsonl`)
+function cmdAudit(args: Args): number {
+  const file = join(homedir(), '.mx-env', 'audit', `${new Date().toISOString().slice(0, 10)}.jsonl`)
   if (!existsSync(file)) {
     console.log('[morphix-env] No audit events for today.')
     return 0

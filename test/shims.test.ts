@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawnSync } from 'child_process'
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
@@ -103,6 +103,24 @@ describe('writeShims / removeAllShims', () => {
     expect(existsSync(join(shimsDir(HOME), 'mine'))).toBe(true)
     expect(existsSync(join(shimsDir(HOME), 'node'))).toBe(false)
 
+    // A handmade file holding a DECLARED name is skipped and reported, never
+    // overwritten.
+    writeBin(shimsDir(HOME), 'pnpm', '#!/bin/sh\necho handmade-pnpm\n')
+    const fourth = writeShims(['pnpm'], HOME)
+    expect(fourth.skipped).toEqual(['pnpm'])
+    expect(readFileSync(join(shimsDir(HOME), 'pnpm'), 'utf8')).toContain('handmade-pnpm')
+
+    // A symlink is never followed: it is replaced with a regular shim file and
+    // the link target is untouched.
+    const victim = join(TMP, 'victim.txt')
+    writeFileSync(victim, 'precious')
+    rmSync(join(shimsDir(HOME), 'pnpm'))
+    symlinkSync(victim, join(shimsDir(HOME), 'pnpm'))
+    const fifth = writeShims(['pnpm'], HOME)
+    expect(fifth.written).toEqual(['pnpm'])
+    expect(readFileSync(victim, 'utf8')).toBe('precious')
+    expect(lstatSync(join(shimsDir(HOME), 'pnpm')).isSymbolicLink()).toBe(false)
+
     // removeAllShims removes only marked files.
     const removed = removeAllShims(HOME)
     expect(removed).toEqual(['pnpm'])
@@ -147,9 +165,12 @@ describe('stripShimsFromPath', () => {
     expect(stripped).toBe('/usr/bin:/bin')
   })
 
-  it('keeps a clean PATH untouched and tolerates missing dirs', () => {
+  it('keeps a clean PATH untouched, tolerates missing dirs, preserves empty entries', () => {
     expect(stripShimsFromPath('/usr/bin:/bin', HOME)).toBe('/usr/bin:/bin')
     expect(stripShimsFromPath(undefined, HOME)).toBeUndefined()
+    // An empty PATH entry means "current directory" in POSIX exec semantics —
+    // it must survive the filter.
+    expect(stripShimsFromPath('/usr/bin::/bin', HOME)).toBe('/usr/bin::/bin')
   })
 })
 
@@ -161,12 +182,12 @@ describe('findShadowedCommands', () => {
     writeShims(['faketool', 'othertool'], HOME)
     const shimDir = shimsDir(HOME)
 
-    // Shim first: nothing shadowed.
-    expect(findShadowedCommands(['faketool'], `${shimDir}:${realbin}`, HOME)).toEqual([])
+    // Shim first: nothing shadowed, nothing absent.
+    expect(findShadowedCommands(['faketool'], `${shimDir}:${realbin}`, HOME)).toEqual({ absent: [], shadowed: [] })
     // Real binary first: shadowed.
-    expect(findShadowedCommands(['faketool'], `${realbin}:${shimDir}`, HOME)).toEqual(['faketool'])
-    // Shims dir absent from PATH entirely: shadowed.
-    expect(findShadowedCommands(['faketool'], realbin, HOME)).toEqual(['faketool'])
+    expect(findShadowedCommands(['faketool'], `${realbin}:${shimDir}`, HOME)).toEqual({ absent: [], shadowed: ['faketool'] })
+    // Command with a shim but no real binary anywhere on PATH: absent.
+    expect(findShadowedCommands(['othertool'], realbin, HOME)).toEqual({ absent: ['othertool'], shadowed: [] })
   })
 })
 
@@ -188,7 +209,9 @@ describe('shell-init e2e', () => {
   let PATH_BASE: string
 
   function cliEnv(extra: Record<string, string> = {}) {
-    return { ...process.env, HOME, SHELL: '/bin/zsh', PATH: `${bindir}:${PATH_BASE}`, ...extra }
+    // Hermetic: never let an outer shim/serve marker leak into the child CLI.
+    const { MXENV_SHIM, MXENV_ENDPOINT, MXENV_TOKEN, ...base } = process.env
+    return { ...base, HOME, SHELL: '/bin/zsh', PATH: `${bindir}:${PATH_BASE}`, ...extra }
   }
 
   function runCli(args: string[], extraEnv: Record<string, string> = {}) {
@@ -320,6 +343,6 @@ printf '%s' "plugval_$1"
   it('warns when a declared command is shadowed by an earlier PATH entry', () => {
     const init = runCli(['shell-init'], { PATH: `${realbin}:${bindir}:${PATH_BASE}` })
     expect(init.status).toBe(0)
-    expect(init.stderr).toContain('do not resolve to their shim')
+    expect(init.stderr).toContain('resolve to a different executable ahead of their shim')
   }, 20_000)
 })
