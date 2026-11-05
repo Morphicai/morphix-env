@@ -44,7 +44,7 @@
 - [x] 6.1 Add value-free Skill generation or maintained workflow text that instructs Agents to use `mx-env edit --profile` and never solicit, print, or paste secret values; verify generated text contains no resolved values or prefixes.
 - [x] 6.2 Update `README.md` with profiles, source precedence, provider bootstrap rules, `mx-env`, edit workflow, context-hygiene limits, and a Doppler comparison; verify all documented commands match CLI help.
 - [x] 6.3 Update root package and getting-started references to show the long-command compatibility path and the new short command; verify stale priority and old config-shape claims are removed or explicitly marked legacy.
-- [ ] 6.4 Create opt-in profile migrations for API, web, and app-shell on their respective submodule branches; verify each migrated application preserves dev, build/start, and public-env behavior before changing its root submodule pointer.
+- [-] 6.4 (延期为遗留事项，归档时未执行) Create opt-in profile migrations for API, web, and app-shell on their respective submodule branches; verify each migrated application preserves dev, build/start, and public-env behavior before changing its root submodule pointer. —— 遗留说明：三个消费仓仍走 legacy 配置路径（兼容性已由 §2/§7 验证保持），profile 迁移属于消费仓各自的独立任务，不阻塞本 change 收口；待 W2（Trellis SDK 消费）落地时按仓逐一迁移。
 - [x] 6.5 Package the maintained Agent Skill inside the CLI itself so agents can bootstrap from npm (`npx morphix-env skill install [--target global|project|trellis]`); verify the template ships in `dist/SKILL.md`, installs are idempotent with no-clobber/`--force` semantics, `skill show` reports per-target drift, README/package description document it, and the full suite passes. (0.7.0-beta.1)
 
 ## 7. Integration, release, and rollback verification
