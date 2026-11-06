@@ -27,7 +27,7 @@
     "build": "node scripts/build-editor-ui.mjs && tsup && node scripts/copy-skill.mjs",
     "dev": "node scripts/build-editor-ui.mjs && tsup --watch",
     "test": "pnpm --filter mxenv-core build && pnpm build && vitest run",
-    "typecheck": "pnpm --filter mxenv-core build && node scripts/build-editor-ui.mjs && tsc --noEmit"
+    "typecheck": "pnpm --filter mxenv-core build && node scripts/build-editor-ui.mjs && tsc --noEmit && tsc --noEmit -p tsconfig.editor-ui.json"
   },
   "dependencies": {
     "cross-spawn": "^7.0.6",
@@ -42,6 +42,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "esbuild": "^0.27.0",
+    "happy-dom": "^21.0.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tsup": "^8.0.0",

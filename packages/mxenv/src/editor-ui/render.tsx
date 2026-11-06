@@ -1,9 +1,9 @@
-// Server-side renderer: produces the complete editor page as one HTML string.
-// Everything (CSS, client JS, state, favicon) is inlined — the editor makes
-// zero external requests even though it looks like a modern React app.
+// Page-shell renderer: produces the editor page as one HTML string with an
+// empty mount point. React mounts client-side from the inlined state (see
+// client.tsx) — no SSR. Everything (CSS, client JS, state, favicon) is
+// inlined — the editor makes zero external requests even though it looks
+// like a modern React app.
 
-import { renderToString } from 'react-dom/server'
-import { App } from './App'
 import { EDITOR_CLIENT_CSS, EDITOR_CLIENT_JS } from './generated/clientAssets'
 import type { EditorUiState } from './types'
 
@@ -39,7 +39,6 @@ function safeScriptBody(js: string): string {
 }
 
 export function renderEditorHtml(title: string, state: EditorUiState): string {
-  const appHtml = renderToString(<App state={state} />)
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -51,7 +50,7 @@ export function renderEditorHtml(title: string, state: EditorUiState): string {
 <style>${EDITOR_CLIENT_CSS}</style>
 </head>
 <body>
-<div id="root">${appHtml}</div>
+<div id="root"></div>
 <script>window.__MX_EDITOR_STATE__=${safeStateJson(state)};</script>
 <script>${safeScriptBody(EDITOR_CLIENT_JS)}</script>
 </body>

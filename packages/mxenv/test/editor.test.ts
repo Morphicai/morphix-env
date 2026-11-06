@@ -5,6 +5,7 @@ import { dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { createEditorServer, type RunningEditor } from '../src/editor'
+import { revealedValue, stateOnPage } from './support/editorPage'
 
 // Keychain editing is exercised against a keytar test double so the suite has
 // no native-module dependency; dotenvx paths run against the real CLI.
@@ -243,7 +244,9 @@ describe('visual editor', () => {
     seed(file, 'MXTEST_PREFILL', 'sentinel-prefill')
 
     const page = await get(`${sourceRoot('enc')}?fileIndex=0&key=MXTEST_PREFILL`)
-    expect(page).toContain('value="MXTEST_PREFILL"')
+    // CSR 形态（去 SSR 后）：prefill 落在 state JSON 的 formKey 字段，input
+    // 预填由浏览器端渲染——提取 state JSON 解析后断言字段（不受转义形态影响）。
+    expect(stateOnPage(page, 'dotenvx').formKey).toBe('MXTEST_PREFILL')
   }, 15_000)
 
   it('keychain page lists accounts and reveals one value at a time', async () => {
@@ -299,7 +302,10 @@ describe('visual editor', () => {
 
     const reveal = await post(`${sourceRoot('enc')}/dotenvx`, { action: 'reveal', key: 'MXTEST_EQ', fileIndex: '0' })
     expect(reveal).toContain('MXTEST_EQ=truncated-trap')
-    expect(reveal).not.toContain('<code class="revealed-value">truncated-trap')
+    // CSR 形态：值不再经 SSR 灌入 <code>，不变式下沉到 state JSON 的
+    // revealed.value——提取解析后断言：若 reveal 在 = 处截断，值恰为
+    // 'truncated-trap'，此式变红（缺失 revealed 同样抛错，防恒真）。
+    expect(revealedValue(reveal)).not.toBe('truncated-trap')
   }, 15_000)
 
   it('rejects unknown actions and value-less writes instead of wiping secrets', async () => {
@@ -330,7 +336,9 @@ describe('visual editor', () => {
 
     const reveal = await post(`${sourceRoot('enc')}/dotenvx`, { action: 'reveal', key: 'HOME', fileIndex: '0' })
     expect(reveal).toContain('stored-home-secret')
-    expect(reveal).not.toContain('<code class="revealed-value">/Users/')
+    // CSR 形态：同上，不变式=state JSON 的 revealed.value 不得是子进程 HOME
+    // 路径（若 child-env 覆盖取胜，值会以 /Users/ 开头被此式捕获）。
+    expect(revealedValue(reveal)).not.toMatch(/^\/Users\//)
   }, 15_000)
 
   it('refuses to store values containing $ expansion sequences', async () => {
@@ -361,7 +369,9 @@ describe('visual editor', () => {
     expect(saved).toContain('<title>Saved</title>')
 
     const reveal = await post(`${sourceRoot('enc')}/dotenvx`, { action: 'reveal', key: 'MXTEST_DASH', fileIndex: '0' })
-    expect(reveal).toContain('<code class="revealed-value">-f</code>')
+    // CSR 形态：dash 开头值原样驻留 state JSON 的 revealed.value（toBe 天然
+    // 整值匹配，防 -foo 之类前缀误命中）。
+    expect(revealedValue(reveal)).toBe('-f')
     // No stray option-shaped file was created beside the source.
     expect(existsSync(join(ROOT, '-f'))).toBe(false)
     expect(existsSync(join(process.cwd(), '-f'))).toBe(false)
@@ -382,7 +392,10 @@ describe('visual editor', () => {
   it('saved page returns to the saved file via fileIndex', async () => {
     await openEditor()
     const saved = await post(`${sourceRoot('enc')}/dotenvx`, { action: 'set', key: 'MXTEST_CONTINUE', value: 'sentinel-continue', fileIndex: '0' })
-    expect(saved).toContain('?fileIndex=0')
+    // CSR 形态：返回链接由浏览器端按 state 生成，不变式=state JSON 携带
+    // fileIndex 0（"Saved"+fileIndex 组合即回到所存文件；页面级 href 断言
+    // 见 editor-ui-smoke 的 N-4）。
+    expect(stateOnPage(saved, 'saved').fileIndex).toBe(0)
   }, 15_000)
 
   it('audits local-file write failures', async () => {

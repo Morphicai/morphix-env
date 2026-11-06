@@ -1,8 +1,9 @@
-// Client entry: hydrates the server-rendered editor markup with the same
-// state the server used, so raw-fetch consumers (tests, curl) still see full
-// HTML while interactive users get Radix behavior for free.
+// Client entry: mounts the editor into the empty shell render.tsx emitted,
+// reading the state the server inlined. No SSR — React renders entirely in
+// the browser; raw-fetch consumers (tests, curl) see the shell plus state
+// JSON, interactive users get Radix behavior for free.
 
-import { hydrateRoot } from 'react-dom/client'
+import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import type { EditorUiState } from './types'
 
@@ -15,5 +16,5 @@ declare global {
 const container = document.getElementById('root')
 const state = window.__MX_EDITOR_STATE__
 if (container && state) {
-  hydrateRoot(container, <App state={state} />)
+  createRoot(container).render(<App state={state} />)
 }
