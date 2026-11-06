@@ -1,13 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { spawnSync } from 'child_process'
-import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { delimiter, join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { loadSource, SourceError, type SourceEntry } from '../src/sources'
 import { validateConfig, type PluginSource } from '../src/config'
 
-const CLI = join(__dirname, '..', 'dist', 'cli.js')
 const ROOT = join(tmpdir(), `mx-env-plugin-${randomUUID()}`)
 const PLUGIN_DIR = join(ROOT, 'bin')
 const HOME = join(ROOT, 'home')
@@ -21,10 +19,6 @@ case "$1" in
   *) printf 'unexpected-key' >&2; exit 9 ;;
 esac
 `
-
-function value(label: string): string {
-  return `mxenv_test_${label}_${randomUUID().replace(/-/g, '')}`
-}
 
 function write(name: string, content: string, mode?: number): string {
   const path = join(ROOT, name)
@@ -131,28 +125,4 @@ describe('plugin config validation', () => {
     expect(problems[1]).toContain('needs a plugin name')
     expect(problems[2]).toContain('needs at least one key')
   })
-})
-
-describe('plugin source through the CLI', () => {
-  it('composes plugin values into a run and reports provenance as plugin', () => {
-    write('mx-env.config.json', JSON.stringify({
-      sources: { vault: { provider: 'plugin', plugin: 'fake', keys: ['MXTEST_PLUGIN_A'] } },
-      profiles: { dev: { sources: ['vault'] } },
-      defaultProfile: 'dev',
-    }))
-    const env = pluginPathEnv()
-    env.HOME = HOME
-
-    const inspect = spawnSync('node', [CLI, 'inspect', '--no-infisical'], { encoding: 'utf8', env, cwd: ROOT })
-    expect(inspect.status).toBe(0)
-    expect(inspect.stdout).toContain('MXTEST_PLUGIN_A — vault (plugin)')
-
-    const child = write('check.js', `
-      console.log(process.env.MXTEST_PLUGIN_A === 'alpha-value' ? 'PLUGIN_MATCH' : 'PLUGIN_MISMATCH')
-    `)
-    const runResult = spawnSync('node', [CLI, 'run', '--no-infisical', '--', 'node', child], { encoding: 'utf8', env, cwd: ROOT })
-    expect(runResult.status).toBe(0)
-    expect(runResult.stdout).toContain('PLUGIN_MATCH')
-    expect(runResult.stdout).not.toContain('PLUGIN_MISMATCH')
-  }, 20_000)
 })

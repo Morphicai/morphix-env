@@ -1,0 +1,280 @@
+#!/usr/bin/env node
+
+import { homedir } from 'os'
+import { loadConfigLayers, sanitizeBootEnv, shimsDir, validateShimList, type ConfigLayers } from 'mxenv-core'
+import {
+  defaultRcPath,
+  detectHandmadeReservedShims,
+  findShadowedCommands,
+  removeAllShims,
+  removeRcBlock,
+  resolveShimCommands,
+  upsertRcBlock,
+  writeShims,
+} from './shims'
+import pkg from '../package.json'
+
+const VERSION = pkg.version
+
+interface Args {
+  command: string
+  subArgs: string[]
+  positionals: string[]
+  envFiles: string[]
+  outFile: string | null
+  verbose: boolean
+  filter: string | null
+  noInfisical: boolean
+  env: string | null
+  profile: string | null
+  noGlobal: boolean
+  allowInsecureGlobal: boolean
+  printEditorUrl: boolean
+  source: string | null
+  target: string | null
+  to: string | null
+  service: string | null
+  force: boolean
+  dryRun: boolean
+  serve: boolean
+  write: boolean
+  remove: boolean
+  warnPlaintext: boolean
+  /** Flags the parser did not recognize; shell-init fails on these instead of silently ignoring them. */
+  unknownFlags: string[]
+}
+
+/**
+ * Same flag grammar as the L2 CLI parser: recognized-but-unused flags stay
+ * silently accepted (zero semantic change for `shell-init`), and only flags
+ * the parser does not recognize land in unknownFlags.
+ */
+function parseArgs(argv: string[]): Args {
+  const args: Args = {
+    command: '', subArgs: [], positionals: [], envFiles: [], outFile: null, verbose: false,
+    filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
+    allowInsecureGlobal: false, printEditorUrl: false, source: null,
+    target: null, to: null, service: null, force: false, dryRun: false, serve: false,
+    write: false, remove: false, warnPlaintext: false, unknownFlags: [],
+  }
+
+  let i = 2
+  const command = argv[i]
+  if (!command) return args
+  args.command = command
+  i++
+
+  while (i < argv.length) {
+    const arg = argv[i]
+    if (arg === '--') {
+      args.subArgs = argv.slice(i + 1)
+      break
+    }
+    if (arg === '--env-file' || arg === '-f') {
+      if (argv[++i]) args.envFiles.push(argv[i])
+    } else if (arg === '--out' || arg === '-o') {
+      if (argv[++i]) args.outFile = argv[i]
+    } else if (arg === '--filter') {
+      if (argv[++i]) args.filter = argv[i]
+    } else if (arg === '--env' || arg === '-e') {
+      if (argv[++i]) args.env = argv[i]
+    } else if (arg === '--profile' || arg === '-p') {
+      if (argv[++i]) args.profile = argv[i]
+    } else if (arg === '--source') {
+      if (argv[++i]) args.source = argv[i]
+    } else if (arg === '--verbose' || arg === '-v') {
+      args.verbose = true
+    } else if (arg === '--no-infisical') {
+      args.noInfisical = true
+    } else if (arg === '--no-global') {
+      args.noGlobal = true
+    } else if (arg === '--allow-insecure-global') {
+      args.allowInsecureGlobal = true
+    } else if (arg === '--print-editor-url') {
+      args.printEditorUrl = true
+    } else if (arg === '--target') {
+      if (argv[++i]) args.target = argv[i]
+    } else if (arg === '--to') {
+      if (argv[++i]) args.to = argv[i]
+    } else if (arg === '--service') {
+      if (argv[++i]) args.service = argv[i]
+    } else if (arg === '--force') {
+      args.force = true
+    } else if (arg === '--dry-run') {
+      args.dryRun = true
+    } else if (arg === '--write') {
+      args.write = true
+    } else if (arg === '--remove') {
+      args.remove = true
+    } else if (arg === '--serve') {
+      args.serve = true
+    } else if (arg === '--warn-plaintext') {
+      args.warnPlaintext = true
+    } else if (args.command === 'run') {
+      args.subArgs = argv.slice(i)
+      break
+    } else if (!arg.startsWith('-')) {
+      args.positionals.push(arg)
+    } else {
+      // Unknown flags are recorded, not silently dropped: shell-init refuses
+      // to proceed with them so `shell-init --wirte` cannot degrade into a
+      // silent no-op. Other commands keep their historical lenient behavior.
+      args.unknownFlags.push(arg)
+    }
+    i++
+  }
+  return args
+}
+
+function configLayers(): ConfigLayers {
+  return loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
+}
+
+/**
+ * Boot-time capture, set by main() before dispatch: whether this invocation
+ * came through a PATH shim (audit `via` dimension) and the pre-sanitization
+ * PATH (shell-init's per-command parity check needs the real one).
+ */
+const bootInfo: { viaShim: boolean; originalPath?: string } = { viaShim: false }
+
+/**
+ * `shell-init`: generate PATH shims for the declared command list (global ∪
+ * project), optionally write/remove the rc PATH block. Hard-fails on invalid
+ * `shims` entries — this is the command whose whole job is the list, unlike
+ * composition paths which only warn. Value-free by construction: the list is
+ * command names, never secrets.
+ */
+function cmdShellInit(args: Args): number {
+  if (process.platform === 'win32') {
+    console.error('[morphix-env] shell-init is supported on macOS/Linux only; on Windows keep using explicit `mx-env run -- <command>`.')
+    return 1
+  }
+  if (args.unknownFlags.length) {
+    console.error(`[morphix-env] shell-init: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
+    return 1
+  }
+  if (args.write && args.remove) {
+    console.error('[morphix-env] shell-init: --write and --remove are mutually exclusive.')
+    return 1
+  }
+  try {
+    return runShellInit(args)
+  } catch (error) {
+    // Filesystem failures (unwritable home, rc path is a directory, …) must
+    // surface as actionable text, not a raw errno bubble.
+    const code = (error as NodeJS.ErrnoException)?.code
+    console.error(`[morphix-env] shell-init failed${code ? ` (${code})` : ''}: check that your home directory and rc file are writable, then retry.`)
+    return 1
+  }
+}
+
+function runShellInit(args: Args): number {
+  const layers = configLayers()
+  const home = homedir()
+  const rcPath = defaultRcPath(process.env.SHELL, home)
+
+  if (args.remove) {
+    const removed = removeAllShims(home)
+    const rcOutcome = rcPath ? removeRcBlock(rcPath) : 'absent'
+    console.log(`[morphix-env] Removed ${removed.length} shim(s)${removed.length ? ` (${removed.join(', ')})` : ''}; rc block ${rcOutcome}${rcPath ? ` in ${rcPath}` : ''}.`)
+    return 0
+  }
+
+  const problems = [
+    ...validateShimList(layers.global.config.shims, layers.global.path),
+    ...validateShimList(layers.project.config.shims, layers.project.path),
+  ]
+  if (problems.length) {
+    for (const problem of problems) console.error(`[morphix-env] ${problem}`)
+    return 1
+  }
+
+  const commands = resolveShimCommands(layers, !args.noGlobal)
+  const { written, removed, skipped } = writeShims(commands, home)
+  console.log(`[morphix-env] Shims ready in ${shimsDir(home)} (${commands.length} command(s): ${commands.join(', ') || 'none'}; ${written.length} written, ${removed.length} removed).`)
+
+  for (const command of skipped) {
+    console.warn(`[morphix-env] Warning: "${command}" exists in the shims directory as a handmade file (no mx-env marker); refusing to overwrite. Remove or rename it by hand, then re-run shell-init.`)
+  }
+  for (const file of detectHandmadeReservedShims(home)) {
+    console.warn(`[morphix-env] Warning: "${file}" in the shims directory was not created by mx-env and shadows a reserved command; delete it by hand. Do not place files in ${shimsDir(home)} manually.`)
+  }
+
+  // Parity check against the pre-sanitization PATH captured at boot: each
+  // declared command must resolve to its shim, or an earlier PATH entry
+  // (volta, another tool) silently wins and nothing is injected.
+  const { absent, shadowed } = findShadowedCommands(commands, bootInfo.originalPath, home)
+  if (absent.length) {
+    console.warn(`[morphix-env] Note: ${absent.join(', ')} cannot be resolved on the current PATH yet — add the shims directory (below) and open a new shell.`)
+  }
+  if (shadowed.length) {
+    console.warn(`[morphix-env] Warning: these commands resolve to a different executable ahead of their shim: ${shadowed.join(', ')} — move ${shimsDir(home)} ahead of the entries that provide them.`)
+  }
+
+  if (args.write) {
+    if (!rcPath) {
+      console.error('[morphix-env] shell-init: cannot infer an rc file from $SHELL (zsh/bash supported); add the PATH line manually.')
+      return 1
+    }
+    const outcome = upsertRcBlock(rcPath, home)
+    console.log(`[morphix-env] rc block ${outcome} in ${rcPath}. Open a new shell to activate.`)
+    return 0
+  }
+
+  console.log(`\nAdd the shims directory to PATH${rcPath ? ` (e.g. in ${rcPath})` : ''}:\n\n  export PATH="${shimsDir(home)}:$PATH"\n\nOr re-run with --write to let mx-env maintain a marked block in your rc file.`)
+  return 0
+}
+
+function showHelp(): void {
+  console.log(`
+morphix-env CLI (mxenv-cli) v${VERSION} — machine-level management face
+
+Usage:
+  mxenv-cli shell-init [--write|--remove]    Generate PATH shims for declared commands
+
+Options:
+  --write                  Also maintain a marked PATH block in your rc file
+  --remove                 Remove every generated shim and the rc PATH block
+  --help, -h               Show this help
+  --version                Show version
+
+Project-level commands (run, export, inspect, edit, migrate, …) come from the
+project-local install (node_modules/.bin); this CLI manages the machine only.
+`)
+}
+
+/** Wave B placeholders: reserved command names, deliberately not implemented. */
+function cmdReserved(command: string): number {
+  console.error(`[morphix-env] "${command}" is reserved for a future release and is not implemented yet.`)
+  return 1
+}
+
+async function main(): Promise<number> {
+  // Same boot discipline as the L2 CLI: strip shim PATH entries before any
+  // work so nothing we spawn can recurse into a shim.
+  Object.assign(bootInfo, sanitizeBootEnv())
+  const args = parseArgs(process.argv)
+  switch (args.command) {
+    case 'shell-init': return cmdShellInit(args)
+    // Wave B skeleton (package-split 4.3): reserved, not implemented.
+    case 'gui':
+    case 'global':
+    case 'host': return cmdReserved(args.command)
+    case '--help':
+    case '-h':
+    case 'help': showHelp(); return 0
+    case '--version': console.log(VERSION); return 0
+    default:
+      if (args.command) console.error(`[morphix-env] Unknown command: ${args.command}`)
+      showHelp()
+      return args.command ? 1 : 0
+  }
+}
+
+main()
+  .then((code) => { process.exitCode = code })
+  .catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : '[morphix-env] Command failed.'
+    console.error(message)
+    process.exitCode = 1
+  })

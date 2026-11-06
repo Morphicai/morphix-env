@@ -4,16 +4,26 @@ import spawn from 'cross-spawn'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
-import { writeAudit } from './audit'
 import {
   collectRedactionValues,
   composeEnvironment,
+  extractPublicVars,
+  findMxEnvReferences,
+  hasMxEnvReference,
+  isPublicKey,
+  loadConfigLayers,
+  ReferenceResolver,
+  sanitizeBootEnv,
+  StreamingRedactor,
+  stripShimsFromPath,
+  validateShimList,
+  writeAudit,
   type ComposeOptions,
+  type ConfigLayers,
   type EnvironmentComposition,
-} from './composition'
-import { loadConfigLayers, type ConfigLayers } from './config'
+  type UnresolvedReference,
+} from 'mxenv-core'
 import { launchEditor, startEditorServer } from './editor'
-import { extractPublicVars } from './env'
 import {
   discoverPlaintextUnits,
   executeUnit,
@@ -22,25 +32,8 @@ import {
   type MigrationUnit,
   type UnitOutcome,
 } from './migrate'
-import { StreamingRedactor } from './redaction'
-import { hasMxEnvReference, findMxEnvReferences, ReferenceResolver, type UnresolvedReference } from './refs'
 import { cmdSkill } from './skill'
 import { startSecretServer, type SecretServer } from './serve'
-import {
-  defaultRcPath,
-  detectHandmadeReservedShims,
-  findShadowedCommands,
-  removeAllShims,
-  removeRcBlock,
-  resolveShimCommands,
-  sanitizeBootEnv,
-  shimsDir,
-  stripShimsFromPath,
-  upsertRcBlock,
-  validateShimList,
-  writeShims,
-} from './shims'
-import { isPublicKey } from './sources'
 import {
   findTemplateAnomalies,
   findTemplateVariables,
@@ -80,7 +73,7 @@ interface Args {
   write: boolean
   remove: boolean
   warnPlaintext: boolean
-  /** Flags the parser did not recognize; shell-init fails on these instead of silently ignoring them. */
+  /** Flags the parser did not recognize; migrate fails on these instead of silently ignoring them. */
   unknownFlags: string[]
 }
 
@@ -151,9 +144,10 @@ function parseArgs(argv: string[]): Args {
     } else if (!arg.startsWith('-')) {
       args.positionals.push(arg)
     } else {
-      // Unknown flags are recorded, not silently dropped: shell-init refuses
-      // to proceed with them so `shell-init --wirte` cannot degrade into a
-      // silent no-op. Other commands keep their historical lenient behavior.
+      // Unknown flags are recorded, not silently dropped: migrate refuses to
+      // proceed with them so `migrate --wirte` cannot degrade into a silent
+      // no-op. Other commands keep their historical lenient behavior. (The
+      // same strictness guards shell-init in the mxenv-cli package.)
       args.unknownFlags.push(arg)
     }
     i++
@@ -179,8 +173,8 @@ function composeOptions(args: Args): ComposeOptions {
 
 /**
  * Boot-time capture, set by main() before dispatch: whether this invocation
- * came through a PATH shim (audit `via` dimension) and the pre-sanitization
- * PATH (shell-init's per-command parity check needs the real one).
+ * came through a PATH shim (audit `via` dimension). The pre-sanitization PATH
+ * ride-along is consumed by shell-init in the mxenv-cli package.
  */
 const bootInfo: { viaShim: boolean; originalPath?: string } = { viaShim: false }
 
@@ -658,93 +652,8 @@ Secret values and value prefixes do not belong in this Skill, command output, au
   return 0
 }
 
-/**
- * `shell-init`: generate PATH shims for the declared command list (global ∪
- * project), optionally write/remove the rc PATH block. Hard-fails on invalid
- * `shims` entries — this is the command whose whole job is the list, unlike
- * composition paths which only warn. Value-free by construction: the list is
- * command names, never secrets.
- */
-function cmdShellInit(args: Args): number {
-  if (process.platform === 'win32') {
-    console.error('[morphix-env] shell-init is supported on macOS/Linux only; on Windows keep using explicit `mx-env run -- <command>`.')
-    return 1
-  }
-  if (args.unknownFlags.length) {
-    console.error(`[morphix-env] shell-init: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
-    return 1
-  }
-  if (args.write && args.remove) {
-    console.error('[morphix-env] shell-init: --write and --remove are mutually exclusive.')
-    return 1
-  }
-  try {
-    return runShellInit(args)
-  } catch (error) {
-    // Filesystem failures (unwritable home, rc path is a directory, …) must
-    // surface as actionable text, not a raw errno bubble.
-    const code = (error as NodeJS.ErrnoException)?.code
-    console.error(`[morphix-env] shell-init failed${code ? ` (${code})` : ''}: check that your home directory and rc file are writable, then retry.`)
-    return 1
-  }
-}
+/* `shell-init` moved to the mxenv-cli package (package-split 4.1). */
 
-function runShellInit(args: Args): number {
-  const layers = configLayers()
-  const home = homedir()
-  const rcPath = defaultRcPath(process.env.SHELL, home)
-
-  if (args.remove) {
-    const removed = removeAllShims(home)
-    const rcOutcome = rcPath ? removeRcBlock(rcPath) : 'absent'
-    console.log(`[morphix-env] Removed ${removed.length} shim(s)${removed.length ? ` (${removed.join(', ')})` : ''}; rc block ${rcOutcome}${rcPath ? ` in ${rcPath}` : ''}.`)
-    return 0
-  }
-
-  const problems = [
-    ...validateShimList(layers.global.config.shims, layers.global.path),
-    ...validateShimList(layers.project.config.shims, layers.project.path),
-  ]
-  if (problems.length) {
-    for (const problem of problems) console.error(`[morphix-env] ${problem}`)
-    return 1
-  }
-
-  const commands = resolveShimCommands(layers, !args.noGlobal)
-  const { written, removed, skipped } = writeShims(commands, home)
-  console.log(`[morphix-env] Shims ready in ${shimsDir(home)} (${commands.length} command(s): ${commands.join(', ') || 'none'}; ${written.length} written, ${removed.length} removed).`)
-
-  for (const command of skipped) {
-    console.warn(`[morphix-env] Warning: "${command}" exists in the shims directory as a handmade file (no mx-env marker); refusing to overwrite. Remove or rename it by hand, then re-run shell-init.`)
-  }
-  for (const file of detectHandmadeReservedShims(home)) {
-    console.warn(`[morphix-env] Warning: "${file}" in the shims directory was not created by mx-env and shadows a reserved command; delete it by hand. Do not place files in ${shimsDir(home)} manually.`)
-  }
-
-  // Parity check against the pre-sanitization PATH captured at boot: each
-  // declared command must resolve to its shim, or an earlier PATH entry
-  // (volta, another tool) silently wins and nothing is injected.
-  const { absent, shadowed } = findShadowedCommands(commands, bootInfo.originalPath, home)
-  if (absent.length) {
-    console.warn(`[morphix-env] Note: ${absent.join(', ')} cannot be resolved on the current PATH yet — add the shims directory (below) and open a new shell.`)
-  }
-  if (shadowed.length) {
-    console.warn(`[morphix-env] Warning: these commands resolve to a different executable ahead of their shim: ${shadowed.join(', ')} — move ${shimsDir(home)} ahead of the entries that provide them.`)
-  }
-
-  if (args.write) {
-    if (!rcPath) {
-      console.error('[morphix-env] shell-init: cannot infer an rc file from $SHELL (zsh/bash supported); add the PATH line manually.')
-      return 1
-    }
-    const outcome = upsertRcBlock(rcPath, home)
-    console.log(`[morphix-env] rc block ${outcome} in ${rcPath}. Open a new shell to activate.`)
-    return 0
-  }
-
-  console.log(`\nAdd the shims directory to PATH${rcPath ? ` (e.g. in ${rcPath})` : ''}:\n\n  export PATH="${shimsDir(home)}:$PATH"\n\nOr re-run with --write to let mx-env maintain a marked block in your rc file.`)
-  return 0
-}
 
 /**
  * `migrate`（issue #7）：local 明文 → dotenvx/keychain。无 --to 为纯只读
@@ -897,7 +806,6 @@ Usage:
   mx-env edit [--profile|--source <name>] Open the visual editor (15-min session)
   mx-env skill install [--target <t>]     Install the Agent Skill (global|project|trellis)
   mx-env skill show                       Show skill install status per target
-  mx-env shell-init [--write|--remove]    Generate PATH shims for declared commands
 
 Both mx-env and morphix-env are supported.
 
@@ -944,7 +852,6 @@ async function main(): Promise<number> {
     case 'audit': return cmdAudit(args)
     case 'edit': return cmdEdit(args)
     case 'doc': return cmdDoc(args)
-    case 'shell-init': return cmdShellInit(args)
     case 'skill': {
       const positional = process.argv.slice(3).find((arg) => !arg.startsWith('-')) ?? 'install'
       return cmdSkill(positional, { target: args.target, force: args.force })

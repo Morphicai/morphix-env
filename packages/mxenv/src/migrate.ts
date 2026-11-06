@@ -4,14 +4,18 @@ import { homedir } from 'os'
 import { delimiter, dirname, isAbsolute, join, resolve } from 'path'
 import { parse as dotenvParse } from 'dotenv'
 import {
+  ensureCommand,
+  expandHomePath,
+  GLOBAL_DOTENV_SOURCE,
+  isDotenvxEncrypted,
+  loadKeytar,
+  loadSource,
+  parseEnvFile,
   type ConfigLayers,
   type LocalSource,
   type SecretSource,
-  expandHomePath,
-} from './config'
-import { GLOBAL_DOTENV_SOURCE } from './composition'
-import { isDotenvxEncrypted, parseEnvFile } from './env'
-import { ensureCommand, loadKeytar, loadSource, type SourceEntry } from './sources'
+  type SourceEntry,
+} from 'mxenv-core'
 
 export type MigrateTarget = 'dotenvx' | 'keychain'
 

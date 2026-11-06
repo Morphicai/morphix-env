@@ -4,24 +4,23 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync,
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
+// 共享纯 PATH/清单逻辑已下沉 mxenv-core（package-split 4.1）：L2 run 与
+// L3 shell-init 共用同一实现，测试直引 core 验证下沉生效。
+import { RESERVED_SHIM_NAMES, shimsDir, stripShimsFromPath, validateShimList, type ConfigLayers } from 'mxenv-core'
 import {
   detectHandmadeReservedShims,
   findShadowedCommands,
   removeAllShims,
   removeRcBlock,
   renderShimScript,
-  RESERVED_SHIM_NAMES,
   resolveShimCommands,
-  shimsDir,
-  stripShimsFromPath,
   upsertRcBlock,
-  validateShimList,
   writeShims,
   SHIM_MARKER,
 } from '../src/shims'
-import type { ConfigLayers } from '../src/config'
 
-const CLI = join(__dirname, '..', 'dist', 'cli.js')
+const CLI_L2 = join(__dirname, '..', '..', 'mxenv', 'dist', 'cli.js')
+const CLI_L3 = join(__dirname, '..', 'dist', 'cli.js')
 const TMP = join(tmpdir(), `mx-env-shims-${randomUUID()}`)
 const HOME = join(TMP, 'home')
 
@@ -191,14 +190,21 @@ describe('findShadowedCommands', () => {
   })
 })
 
-describe('reserved-name parity with the CLI dispatch table', () => {
-  it('every case label in cli.ts main() dispatch is reserved', () => {
-    const source = readFileSync(join(__dirname, '..', 'src', 'cli.ts'), 'utf8')
-    const labels = [...source.matchAll(/case '([^']+)'/g)].map((match) => match[1])
-    expect(labels.length).toBeGreaterThan(10)
-    for (const label of labels) {
-      if (label === '--help' || label === '-h' || label === '--version') continue
-      expect(RESERVED_SHIM_NAMES).toContain(label)
+describe('reserved-name parity with the CLI dispatch tables', () => {
+  it('every case label in both cli.ts dispatch tables is reserved', () => {
+    // shell-init 拆到 mxenv-cli 后命令面分居两个 cli.ts：两边的 dispatch 标签
+    // 都必须在 RESERVED_SHIM_NAMES（core）里，防未来命令漂移出保留名。
+    const sources = {
+      'mxenv-cli/src/cli.ts': readFileSync(join(__dirname, '..', 'src', 'cli.ts'), 'utf8'),
+      'mxenv/src/cli.ts': readFileSync(join(__dirname, '..', '..', 'mxenv', 'src', 'cli.ts'), 'utf8'),
+    }
+    for (const [label, source] of Object.entries(sources)) {
+      const labels = [...source.matchAll(/case '([^']+)'/g)].map((match) => match[1])
+      expect(labels.length, `${label} dispatch labels`).toBeGreaterThan(5)
+      for (const caseLabel of labels) {
+        if (caseLabel === '--help' || caseLabel === '-h' || caseLabel === '--version') continue
+        expect(RESERVED_SHIM_NAMES, `${label}: ${caseLabel}`).toContain(caseLabel)
+      }
     }
   })
 })
@@ -214,8 +220,12 @@ describe('shell-init e2e', () => {
     return { ...base, HOME, SHELL: '/bin/zsh', PATH: `${bindir}:${PATH_BASE}`, ...extra }
   }
 
-  function runCli(args: string[], extraEnv: Record<string, string> = {}) {
-    return spawnSync('node', [CLI, ...args], { encoding: 'utf8', env: cliEnv(extraEnv), cwd: TMP })
+  function runL3(args: string[], extraEnv: Record<string, string> = {}) {
+    return spawnSync('node', [CLI_L3, ...args], { encoding: 'utf8', env: cliEnv(extraEnv), cwd: TMP })
+  }
+
+  function runL2(args: string[], extraEnv: Record<string, string> = {}) {
+    return spawnSync('node', [CLI_L2, ...args], { encoding: 'utf8', env: cliEnv(extraEnv), cwd: TMP })
   }
 
   beforeEach(() => {
@@ -224,8 +234,9 @@ describe('shell-init e2e', () => {
     mkdirSync(realbin, { recursive: true })
     mkdirSync(bindir, { recursive: true })
     PATH_BASE = process.env.PATH || '/usr/bin:/bin'
-    // A fake `mx-env` on PATH delegating to the freshly built CLI.
-    writeBin(bindir, 'mx-env', `#!/bin/sh\nexec ${process.execPath} ${JSON.stringify(CLI)} "$@"\n`)
+    // A fake `mx-env` on PATH delegating to the freshly built L2 CLI (shims
+    // exec `mx-env run`; the L2 command face lives in the mxenv package).
+    writeBin(bindir, 'mx-env', `#!/bin/sh\nexec ${process.execPath} ${JSON.stringify(CLI_L2)} "$@"\n`)
     // The real tool the shim will wrap. Prints value-free probes only.
     writeBin(realbin, 'faketool', `#!/bin/sh
 echo "secret_present:$( [ -n "$MXTEST_E2E" ] && echo yes || echo no )"
@@ -244,7 +255,7 @@ exit "\${1:-0}"
   })
 
   it('full cycle: init → bare invocation injects, resolves to real tool inside, audit marks via=shim', () => {
-    const init = runCli(['shell-init'])
+    const init = runL3(['shell-init'])
     expect(init.status).toBe(0)
     expect(init.stdout).toContain('export PATH=')
     const shimPath = join(shimsDir(HOME), 'faketool')
@@ -283,7 +294,7 @@ printf '%s' "plugval_$1"
       profiles: { dev: { sources: ['plug'] } },
       defaultProfile: 'dev',
     }))
-    expect(runCli(['shell-init']).status).toBe(0)
+    expect(runL3(['shell-init']).status).toBe(0)
     const viaShimPath = `${shimsDir(HOME)}:${bindir}:${realbin}:${PATH_BASE}`
     const result = spawnSync(join(shimsDir(HOME), 'faketool'), [], {
       encoding: 'utf8', env: cliEnv({ PATH: viaShimPath }), cwd: TMP, timeout: 25_000,
@@ -296,21 +307,21 @@ printf '%s' "plugval_$1"
   }, 40_000)
 
   it('init lifecycle: write idempotent, remove idempotent, unknown flag rejected', () => {
-    expect(runCli(['shell-init']).status).toBe(0)
+    expect(runL3(['shell-init']).status).toBe(0)
     const rc = join(HOME, '.zshrc')
 
-    expect(runCli(['shell-init', '--write']).status).toBe(0)
+    expect(runL3(['shell-init', '--write']).status).toBe(0)
     const once = readFileSync(rc, 'utf8')
     expect(once).toContain('# >>> mx-env shims >>>')
-    expect(runCli(['shell-init', '--write']).status).toBe(0)
+    expect(runL3(['shell-init', '--write']).status).toBe(0)
     expect(readFileSync(rc, 'utf8')).toBe(once)
 
-    expect(runCli(['shell-init', '--remove']).status).toBe(0)
+    expect(runL3(['shell-init', '--remove']).status).toBe(0)
     expect(readFileSync(rc, 'utf8')).not.toContain('mx-env shims')
     expect(readdirSync(shimsDir(HOME))).toEqual([])
-    expect(runCli(['shell-init', '--remove']).status).toBe(0)
+    expect(runL3(['shell-init', '--remove']).status).toBe(0)
 
-    const bad = runCli(['shell-init', '--wirte'])
+    const bad = runL3(['shell-init', '--wirte'])
     expect(bad.status).toBe(1)
     expect(bad.stderr).toContain('unrecognized flag')
   }, 30_000)
@@ -322,17 +333,17 @@ printf '%s' "plugval_$1"
       profiles: { dev: { sources: ['local'] } },
       defaultProfile: 'dev',
     }))
-    const init = runCli(['shell-init'])
+    const init = runL3(['shell-init'])
     expect(init.status).toBe(1)
     expect(init.stderr).toContain('reserved')
 
-    const run = runCli(['run', '--no-infisical', '--', 'node', '-e', 'process.exit(process.env.MXTEST_E2E ? 0 : 7)'])
+    const run = runL2(['run', '--no-infisical', '--', 'node', '-e', 'process.exit(process.env.MXTEST_E2E ? 0 : 7)'])
     expect(run.status).toBe(0)
     expect(run.stderr).toContain('Ignoring invalid "shims"')
   }, 30_000)
 
   it('shim without mx-env on PATH fails with an actionable message and exit 127', () => {
-    expect(runCli(['shell-init']).status).toBe(0)
+    expect(runL3(['shell-init']).status).toBe(0)
     const bareNoMx = spawnSync(join(shimsDir(HOME), 'faketool'), [], {
       encoding: 'utf8', env: cliEnv({ PATH: `${realbin}:/usr/bin:/bin` }), cwd: TMP,
     })
@@ -341,7 +352,7 @@ printf '%s' "plugval_$1"
   }, 20_000)
 
   it('warns when a declared command is shadowed by an earlier PATH entry', () => {
-    const init = runCli(['shell-init'], { PATH: `${realbin}:${bindir}:${PATH_BASE}` })
+    const init = runL3(['shell-init'], { PATH: `${realbin}:${bindir}:${PATH_BASE}` })
     expect(init.status).toBe(0)
     expect(init.stderr).toContain('resolve to a different executable ahead of their shim')
   }, 20_000)

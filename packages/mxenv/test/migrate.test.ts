@@ -1,16 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawnSync } from 'child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
-import { composeEnvironment } from '../src/composition'
-import { loadConfigLayers } from '../src/config'
+import { composeEnvironment, loadConfigLayers, loadKeytar } from 'mxenv-core'
 import { discoverPlaintextUnits, executeUnit, legacyPlaintextHints } from '../src/migrate'
-import { loadKeytar } from '../src/sources'
 
 const CLI = join(__dirname, '..', 'dist', 'cli.js')
-const REPO_DOTENVX = join(__dirname, '..', 'node_modules', '.bin', 'dotenvx')
+// Shared test tooling (dotenvx CLI) lives at the workspace root — product
+// packages must not declare decryption tooling (see test/product-boundary).
+// Walk up from this file to find root node_modules/.bin/dotenvx.
+function findDotenvxBin(): string {
+  let dir = join(__dirname, '..')
+  for (;;) {
+    const candidate = join(dir, 'node_modules', '.bin', 'dotenvx')
+    if (existsSync(candidate)) return candidate
+    const parent = dirname(dir)
+    if (parent === dir) throw new Error('dotenvx test tooling not found under any node_modules/.bin — run pnpm install')
+    dir = parent
+  }
+}
+const REPO_DOTENVX = findDotenvxBin()
 const TMP = join(tmpdir(), `mx-env-migrate-${randomUUID()}`)
 const HOME = join(TMP, 'home')
 const secretValue = (label: string) => `mxenv_migrate_${label}_${randomUUID().replace(/-/g, '')}`

@@ -1,79 +1,35 @@
 import { homedir } from 'os'
 import {
+  collectRedactionValues,
+  CompositionError,
+  type ComposeOptions,
   type ConfigLayers,
+  type EnvironmentComposition,
   type InfisicalSource,
+  type KeyProvenance,
   type LoadedConfig,
   normalizeProfile,
   type ProfileInput,
-  type SecretSource,
+  type SourceStatus,
   validateConfig,
-} from './config'
+} from './contracts'
 import { isDotenvxEncrypted } from './env'
-import { isPublicKey, loadSource, type LoadedSource, type SourceEntry } from './sources'
+import { loadSource, type SourceEntry } from './sources'
 
 const DEFAULT_ENV_FILE = '.env.local'
 export const GLOBAL_DOTENV_SOURCE = '__mx_global_dotenv'
 const LEGACY_INFISICAL_SOURCE = '__mx_legacy_infisical'
 const LEGACY_LOCAL_SOURCE = '__mx_legacy_local'
 
-export interface ComposeOptions {
-  profile?: string | null
-  noGlobal?: boolean
-  noInfisical?: boolean
-  envName?: string | null
-  allowInsecureGlobal?: boolean
-  envFiles?: string[]
-  baseEnvironment?: NodeJS.ProcessEnv
-  homeDir?: string
-}
-
-export interface KeyProvenance {
-  key: string
-  source: string
-  provider: SecretSource['provider']
-  precedence: number
-  overriddenSources: string[]
-}
-
-export interface SourceStatus {
-  name: string
-  provider: SecretSource['provider']
-  availability: LoadedSource['availability']
-  keyCount: number
-}
-
-export interface EnvironmentComposition {
-  environment: NodeJS.ProcessEnv
-  profileName: string
-  sourceStatuses: SourceStatus[]
-  provenance: Record<string, KeyProvenance>
-  /** Value-free source descriptors used by the one-shot editor. */
-  sourceEntries: SourceEntry[]
-  /** Kept only in memory for output redaction during this invocation. */
-  redactionValues: string[]
-}
-
-export class CompositionError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'CompositionError'
-  }
-}
-
-/**
- * Values worth redacting from child output: every non-public sourced value
- * still present in the environment. Also used after `mx-env://` reference
- * resolution, which can introduce new values for the same keys.
- */
-export function collectRedactionValues(
-  environment: NodeJS.ProcessEnv,
-  provenance: Record<string, KeyProvenance>,
-): string[] {
-  return [...new Set(Object.entries(provenance)
-    .filter(([key]) => !isPublicKey(key) && Boolean(environment[key]))
-    .map(([key]) => environment[key] as string)
-    .filter(Boolean))]
-}
+// 组合/审计类型与 redaction 收集规则已抽至 ./contracts（L0）；re-export 保持
+// 原导出面。此模块只保留组合引擎实现（L1 值能力 compose 唯一实现）。
+export { collectRedactionValues, CompositionError } from './contracts'
+export type {
+  ComposeOptions,
+  EnvironmentComposition,
+  KeyProvenance,
+  SourceStatus,
+} from './contracts'
 
 function declaredEntries(loaded: LoadedConfig): Map<string, SourceEntry> {
   return new Map(Object.entries(loaded.config.sources || {}).map(([name, source]) => [name, {

@@ -4,14 +4,19 @@ import { delimiter, dirname, isAbsolute, join, resolve } from 'path'
 import { parse as dotenvParse } from 'dotenv'
 import {
   type DotenvxSource,
-  expandHomePath,
   type InfisicalSource,
+  isPublicKey,
   type KeychainSource,
+  type LoadedSource,
   type LocalSource,
   type PluginSource,
   type SecretSource,
+  type SourceAvailability,
+  type SourceContext,
+  type SourceEntry,
   type DopplerSource,
-} from './config'
+} from './contracts'
+import { expandHomePath } from './config'
 import { parseEnvFile } from './env'
 import {
   fetchSecretsViaCLI,
@@ -21,33 +26,9 @@ import {
   resolveInfisicalSecrets,
 } from './infisical'
 
-export type SourceAvailability = 'loaded' | 'missing-optional' | 'skipped'
-
-export interface SourceEntry {
-  name: string
-  source: SecretSource
-  baseDir: string
-  /** Internal conventional source. Never emitted as a user configuration declaration. */
-  globalImplicit?: boolean
-  /** Legacy compatibility sources are allowed to skip missing Infisical setup. */
-  legacy?: boolean
-}
-
-export interface SourceContext {
-  homeDir: string
-  envName?: string | null
-  noInfisical?: boolean
-  allowInsecureGlobal?: boolean
-  /** Values already composed at a lower precedence. Needed by dotenvx bootstrap only. */
-  environment: NodeJS.ProcessEnv
-}
-
-export interface LoadedSource {
-  name: string
-  provider: SecretSource['provider']
-  values: Record<string, string>
-  availability: SourceAvailability
-}
+// 结构类型与 isPublicKey 规则已抽至 ./contracts（L0）；re-export 保持原导出面。
+export { isPublicKey } from './contracts'
+export type { LoadedSource, SourceAvailability, SourceContext, SourceEntry } from './contracts'
 
 export class SourceError extends Error {
   constructor(
@@ -63,10 +44,6 @@ export class SourceError extends Error {
 function resolveSourcePath(path: string, entry: SourceEntry, homeDir: string): string {
   const expanded = expandHomePath(path, homeDir)
   return isAbsolute(expanded) ? expanded : resolve(entry.baseDir, expanded)
-}
-
-export function isPublicKey(key: string): boolean {
-  return key.startsWith('NEXT_PUBLIC_') || key.startsWith('VITE_') || key.startsWith('EXPO_PUBLIC_')
 }
 
 function assertSafeGlobalFile(file: string, context: SourceContext, entry: SourceEntry): void {

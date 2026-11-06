@@ -4,12 +4,17 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { isAbsolute, dirname, join, resolve } from 'path'
 import { randomBytes } from 'crypto'
-import type { EnvironmentComposition } from './composition'
-import { expandHomePath } from './config'
-import { isDotenvxEncrypted, parseEnvFile } from './env'
-import { ensureCommand, loadKeytar, type SourceEntry } from './sources'
+import {
+  ensureCommand,
+  expandHomePath,
+  isDotenvxEncrypted,
+  loadKeytar,
+  parseEnvFile,
+  writeAudit,
+  type EnvironmentComposition,
+  type SourceEntry,
+} from 'mxenv-core'
 import { verificationEnv } from './migrate'
-import { writeAudit } from './audit'
 import { renderEditorHtml } from './editor-ui/render'
 import type { EditorUiState } from './editor-ui/types'
 

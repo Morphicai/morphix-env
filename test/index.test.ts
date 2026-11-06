@@ -40,6 +40,27 @@ describe('package exports', () => {
     expect(manifest.exports['.']).toEqual({ types: './dist/index.d.ts', default: './dist/index.js' })
     expect(manifest.exports['./cli']).toEqual({ types: './dist/cli.d.ts', default: './dist/cli.js' })
   })
+
+  it('dist facade .d.ts 钉住公开类型面（防 tsup dts 丢 type re-export）', () => {
+    const dts = readFileSync(join(__dirname, '..', 'dist', 'index.d.ts'), 'utf8')
+    // 公开类型面=12 个（与 HEAD SDK facade 逐一一致，缺一即 .d.ts 面回归）。
+    for (const name of [
+      'ComposeOptions',
+      'EnvironmentComposition',
+      'KeyProvenance',
+      'SourceStatus',
+      'ConfigLayers',
+      'LoadedConfig',
+      'LoadConfigOptions',
+      'MxEnvConfig',
+      'ProfileDefinition',
+      'ProfileInput',
+      'SecretSource',
+      'SourceEntry',
+    ]) {
+      expect(dts, `类型导出 ${name} 丢失`).toContain(name)
+    }
+  })
 })
 
 describe('SDK facade from dist', () => {
@@ -51,6 +72,7 @@ describe('SDK facade from dist', () => {
     expect(typeof sdk.loadConfigLayers).toBe('function')
     expect(typeof sdk.validateConfig).toBe('function')
     expect(typeof sdk.StreamingRedactor).toBe('function')
+    expect(typeof sdk.CompositionError).toBe('function')
     // Legacy helpers mutate process.env and must not ride the facade.
     expect(sdk.loadEnvFiles).toBeUndefined()
     expect(sdk.fetchInfisicalSecrets).toBeUndefined()

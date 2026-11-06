@@ -29,12 +29,11 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "node scripts/build-editor-ui.mjs && tsup src/cli.ts src/index.ts --format cjs --dts --clean --external keytar && node scripts/copy-skill.mjs",
-    "dev": "node scripts/build-editor-ui.mjs && tsup src/cli.ts src/index.ts --format cjs --watch",
-    "pretest": "pnpm build",
-    "test": "vitest run",
+    "build": "pnpm --filter mxenv-core build && tsup src/index.ts --format cjs --dts --clean --external keytar",
+    "dev": "tsup src/index.ts --format cjs --watch",
+    "test": "pnpm build && vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "pnpm build && pnpm test"
+    "prepublishOnly": "pnpm test"
   },
   "files": [
     "dist",
@@ -64,24 +63,11 @@
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "2.30.0",
-    "@radix-ui/react-alert-dialog": "^1.1.0",
-    "@radix-ui/react-select": "^2.1.0",
-    "@types/cross-spawn": "^6.0.6",
-    "@types/react": "^19.1.0",
-    "@types/react-dom": "^19.1.0",
-    "esbuild": "^0.27.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.1"
   },
   "dependencies": {
-    "@infisical/sdk": "^5.0.0",
-    "cross-spawn": "^7.0.6",
-    "dotenv": "^17.3.1"
-  },
-  "optionalDependencies": {
-    "keytar": "7.9.0"
+    "mxenv-core": "workspace:*"
   }
 }

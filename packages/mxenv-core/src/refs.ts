@@ -1,45 +1,18 @@
+import {
+  findMxEnvReferences,
+  hasMxEnvReference,
+  type MxEnvReference,
+  referencePattern,
+  type ReferenceResolution,
+  type UnresolvedReference,
+} from './contracts'
 import { composeEnvironment, type ComposeOptions, type EnvironmentComposition } from './composition'
 import type { ConfigLayers } from './config'
 
-/**
- * 1Password-style reference (`op://vault/item/field`) for value-free files:
- * `mx-env://<profile>/<KEY>` is written into MCP configs and dotenv templates
- * and resolved at the consumption point (`mx-env inject` / `mx-env run`), so
- * those files can be committed without carrying a value.
- */
-const MX_ENV_REFERENCE_SOURCE = 'mx-env:\\/\\/([A-Za-z0-9][A-Za-z0-9_-]*)\\/([A-Za-z0-9_][A-Za-z0-9_.-]*)'
-
-function referencePattern(): RegExp {
-  return new RegExp(MX_ENV_REFERENCE_SOURCE, 'g')
-}
-
-export interface MxEnvReference {
-  profile: string
-  key: string
-}
-
-export interface UnresolvedReference extends MxEnvReference {
-  reason: 'missing' | 'cycle'
-}
-
-export interface ReferenceResolution {
-  text: string
-  missing: UnresolvedReference[]
-}
-
-/** Unique `mx-env://profile/KEY` references in declaration order. */
-export function findMxEnvReferences(text: string): MxEnvReference[] {
-  const found = new Map<string, MxEnvReference>()
-  for (const match of text.matchAll(referencePattern())) {
-    const reference: MxEnvReference = { profile: match[1], key: match[2] }
-    found.set(`${reference.profile}/${reference.key}`, reference)
-  }
-  return [...found.values()]
-}
-
-export function hasMxEnvReference(text: string): boolean {
-  return referencePattern().test(text)
-}
+// `mx-env://` 引用语法的纯解析层（pattern/类型/find/has）已抽至 ./contracts
+// （L0）；re-export 保持原导出面。此模块只保留依赖组合能力的解析器（L1）。
+export { findMxEnvReferences, hasMxEnvReference } from './contracts'
+export type { MxEnvReference, ReferenceResolution, UnresolvedReference } from './contracts'
 
 /**
  * Resolves `mx-env://` references against composed profiles without mutating

@@ -1,0 +1,39 @@
+{
+  "name": "mxenv-cli",
+  "version": "0.12.0",
+  "description": "L3 management face for mxenv — machine-level extras like shell-init.",
+  "license": "MIT",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "pnpm --filter mxenv-core build && pnpm --filter mxenv build && pnpm build && vitest run",
+    "typecheck": "pnpm --filter mxenv-core build && tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.1"
+  },
+  "bin": {
+    "mxenv-cli": "./dist/cli.js"
+  },
+  "dependencies": {
+    "mxenv-core": "workspace:*"
+  }
+}

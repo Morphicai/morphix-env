@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { createEditorServer, type RunningEditor } from '../src/editor'
@@ -10,8 +10,8 @@ import { createEditorServer, type RunningEditor } from '../src/editor'
 // no native-module dependency; dotenvx paths run against the real CLI.
 const keychainStore = vi.hoisted(() => ({ entries: new Map<string, string>() }))
 
-vi.mock('../src/sources', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/sources')>()
+vi.mock('mxenv-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('mxenv-core')>()
   return {
     ...actual,
     loadKeytar: async () => ({
@@ -25,7 +25,21 @@ vi.mock('../src/sources', async (importOriginal) => {
 const ROOT = join(tmpdir(), `mx-env-editor-${randomUUID()}`)
 const HOME = join(ROOT, 'home')
 const TOKEN = 'testtoken'
-const dotenvxBin = join(process.cwd(), 'node_modules', '.bin', 'dotenvx')
+// The dotenvx CLI is shared test tooling held at the workspace root (product
+// packages must not declare decryption tooling — see test/product-boundary).
+// pnpm isolates each package's .bin, so walk up from this file to find it
+// (same anchor as migrate.test.ts — cwd-based lookup breaks under odd roots).
+function findDotenvxBin(): string {
+  let dir = join(__dirname, '..')
+  for (;;) {
+    const candidate = join(dir, 'node_modules', '.bin', 'dotenvx')
+    if (existsSync(candidate)) return candidate
+    const parent = dirname(dir)
+    if (parent === dir) throw new Error('dotenvx test tooling not found under any node_modules/.bin — run pnpm install')
+    dir = parent
+  }
+}
+const dotenvxBin = findDotenvxBin()
 
 let running: RunningEditor | null = null
 
