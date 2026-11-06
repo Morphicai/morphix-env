@@ -73,7 +73,7 @@ Choosing between Infisical and Doppler still depends on each provider's own iden
 ## Value safety
 
 - `mx-env inspect` reports key names, source provenance, and configured state only.
-- `mx-env edit --profile <name>` opens a short-lived, loopback-only browser editor: remote sources route to their provider-owned UI, Keychain never reveals existing values, and on macOS the one-time editor URL is not printed to the terminal unless `--print-editor-url`.
+- `mx-env edit` opens a short-lived, loopback-only browser editor (optionally scoped with `--profile <name>` or `--source <name>`): browse existing key names per source, reveal stored values one key at a time on explicit request (dotenvx and Keychain; values stay in the browser session), edit/add/delete keys, and switch sources. The session survives individual saves for multi-step maintenance and ends via an explicit action or the 15-minute TTL. Remote sources route to their provider-owned UI, and on macOS the one-time editor URL is not printed to the terminal unless `--print-editor-url`.
 - `mx-env run` is the only injection path. Exact injected values are redacted from forwarded child output, including across stream chunks; browser-public prefixes (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`) are a deliberate exception.
 - Audit events carry profile/source/key names, outcome, and exit code — never values, command arguments, or provider stderr.
 

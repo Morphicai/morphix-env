@@ -35,13 +35,13 @@ function ExternalIcon(): ReactNode {
   )
 }
 
-function Page({ state, title, subtitle, back = true, children }: {
+function Page({ state, title, subtitle, children }: {
   state: EditorUiState
   title: string
   subtitle?: ReactNode
-  back?: boolean
   children?: ReactNode
 }): ReactNode {
+  const currentSource = 'sourceName' in state ? state.sourceName : null
   return (
     <div className="page">
       <header className="topbar">
@@ -56,16 +56,28 @@ function Page({ state, title, subtitle, back = true, children }: {
           <span className="profile-name">{state.profileName}</span>
         </div>
       </header>
+      <nav className="source-nav" aria-label="Sources">
+        <a className={`source-chip${currentSource === null ? ' is-current' : ''}`} href={basePath(state)}>All sources</a>
+        {state.sources.map((source) => (
+          <a
+            key={source.name}
+            className={`source-chip${currentSource === source.name ? ' is-current' : ''}`}
+            href={sourcePath(state, source.name)}
+          >
+            <span className="source-chip-provider">{source.provider}</span>
+            {source.name}
+          </a>
+        ))}
+      </nav>
       <main className="container">
         <div className="page-head">
-          {back && <a className="back-link" href={basePath(state)}>← All sources</a>}
           <h1>{title}</h1>
           {subtitle && <p className="subtitle">{subtitle}</p>}
         </div>
         {children}
       </main>
       <footer className="footer">
-        One-time local session · values never return to the terminal · the editor closes itself after a save
+        One-time local session · values never return to the terminal · 15-minute lifetime · end the session explicitly when done
       </footer>
     </div>
   )
@@ -121,7 +133,6 @@ function ProfilePage({ state }: { state: Extract<EditorUiState, { page: 'profile
     <Page
       state={state}
       title="Profile overview"
-      back={false}
       subtitle={<>Profile <code className="inline-code">{state.profileName}</code> — this summary deliberately never displays values.</>}
     >
       <Card title="Sources" count={state.sourceStatuses.length}>
@@ -287,19 +298,76 @@ function LocalPage({ state }: { state: Extract<EditorUiState, { page: 'local' }>
 }
 
 function DotenvxPage({ state }: { state: Extract<EditorUiState, { page: 'dotenvx' }> }): ReactNode {
+  const action = `${sourcePath(state, state.sourceName)}/dotenvx`
   return (
     <Page
       state={state}
       title={`Edit ${state.sourceName}`}
-      subtitle="This file is managed by dotenvx. Edit one key at a time so the provider can preserve encryption."
+      subtitle="This file is managed by dotenvx. Values appear only when you reveal them — one at a time — and stay in this browser session."
     >
+      <Card title="Existing keys" count={state.keyNames.length}>
+        {state.keyNames.length === 0
+          ? <p className="empty">No keys in this file yet — add the first one below.</p>
+          : (
+            <ul className="account-list">
+              {state.keyNames.map((key, index) => (
+                <li className="account-row" key={key}>
+                  <code className="src-name">{key}</code>
+                  {state.revealed?.key === key && <code className="revealed-value">{state.revealed.value}</code>}
+                  <span className="account-actions">
+                    {state.revealed?.key === key
+                      ? <a className="btn btn-ghost" href={`${sourcePath(state, state.sourceName)}?fileIndex=${state.fileIndex}`}>Hide</a>
+                      : (
+                        <form method="post" action={action} className="inline-form">
+                          <input type="hidden" name="action" value="reveal" />
+                          <input type="hidden" name="key" value={key} />
+                          <input type="hidden" name="fileIndex" value={state.fileIndex} />
+                          <button type="submit" className="btn btn-ghost">Show value</button>
+                        </form>
+                      )}
+                    <a className="btn btn-ghost" href={`${sourcePath(state, state.sourceName)}?fileIndex=${state.fileIndex}&key=${encodeURIComponent(key)}`}>Edit</a>
+                    <form id={`dotenvx-delete-${index}`} method="post" action={action} className="hidden-form">
+                      <input type="hidden" name="action" value="delete" />
+                      <input type="hidden" name="key" value={key} />
+                      <input type="hidden" name="fileIndex" value={state.fileIndex} />
+                    </form>
+                    <AlertDialog.Root>
+                      <AlertDialog.Trigger asChild>
+                        <button type="button" className="btn btn-danger-ghost">Delete</button>
+                      </AlertDialog.Trigger>
+                      <AlertDialog.Portal>
+                        <AlertDialog.Overlay className="dialog-overlay" />
+                        <AlertDialog.Content className="dialog-content">
+                          <AlertDialog.Title className="dialog-title">Delete “{key}”?</AlertDialog.Title>
+                          <AlertDialog.Description className="dialog-description">
+                            This removes the key from the encrypted file. The stored value is destroyed and cannot be recovered from mx-env.
+                          </AlertDialog.Description>
+                          <div className="dialog-actions">
+                            <AlertDialog.Cancel className="btn btn-ghost">Cancel</AlertDialog.Cancel>
+                            <AlertDialog.Action asChild>
+                              <button type="submit" form={`dotenvx-delete-${index}`} className="btn btn-danger">Delete key</button>
+                            </AlertDialog.Action>
+                          </div>
+                        </AlertDialog.Content>
+                      </AlertDialog.Portal>
+                    </AlertDialog.Root>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+      </Card>
       <section className="card">
         <FileSelect base={sourcePath(state, state.sourceName)} files={state.files} fileIndex={state.fileIndex} />
-        <form method="post" action={`${sourcePath(state, state.sourceName)}/dotenvx`} className="form">
+        <div className="card-head">
+          <h2>Add or replace a key</h2>
+        </div>
+        <form method="post" action={action} className="form">
+          <input type="hidden" name="action" value="set" />
           <input type="hidden" name="fileIndex" value={state.fileIndex} />
           <div className="field">
             <span className="field-label">Key</span>
-            <input className="input" name="key" required pattern="[A-Za-z_][A-Za-z0-9_]*" autoComplete="off" spellCheck={false} />
+            <input className="input" name="key" required pattern="[A-Za-z_][A-Za-z0-9_.]*" autoComplete="off" spellCheck={false} defaultValue={state.formKey ?? ''} />
           </div>
           <div className="field">
             <span className="field-label">Value</span>
@@ -309,7 +377,11 @@ function DotenvxPage({ state }: { state: Extract<EditorUiState, { page: 'dotenvx
             <button className="btn btn-primary" type="submit">Save encrypted value</button>
           </div>
         </form>
-        <p className="notice notice-info">Existing encrypted values are never decrypted into this page — only the key you submit is rewritten.</p>
+        <p className="notice notice-info">
+          Saving rewrites only the submitted key — every other key keeps its encrypted value untouched.
+          Revealed values are shown one at a time and never leave this browser session.
+          Values containing <code className="inline-code">$</code> sequences are refused: dotenvx expands them on every load path.
+        </p>
       </section>
     </Page>
   )
@@ -321,7 +393,7 @@ function KeychainPage({ state }: { state: Extract<EditorUiState, { page: 'keycha
     <Page
       state={state}
       title={`Edit ${state.sourceName}`}
-      subtitle={<>Existing account names are shown; values are never revealed. OS keychain service <code className="inline-code">{state.service}</code>.</>}
+      subtitle={<>Existing account names are shown; values appear only when you reveal them — one at a time. OS keychain service <code className="inline-code">{state.service}</code>.</>}
     >
       <Card title="Existing entries" count={state.accounts.length}>
         {state.accounts.length === 0
@@ -331,10 +403,21 @@ function KeychainPage({ state }: { state: Extract<EditorUiState, { page: 'keycha
               {state.accounts.map((account, index) => (
                 <li className="account-row" key={account}>
                   <code className="src-name">{account}</code>
-                  <form id={`keychain-delete-${index}`} method="post" action={action}>
-                    <input type="hidden" name="action" value="delete" />
-                    <input type="hidden" name="account" value={account} />
-                  </form>
+                  {state.revealed?.key === account && <code className="revealed-value">{state.revealed.value}</code>}
+                  <span className="account-actions">
+                    {state.revealed?.key === account
+                      ? <a className="btn btn-ghost" href={sourcePath(state, state.sourceName)}>Hide</a>
+                      : (
+                        <form method="post" action={action} className="inline-form">
+                          <input type="hidden" name="action" value="reveal" />
+                          <input type="hidden" name="account" value={account} />
+                          <button type="submit" className="btn btn-ghost">Show value</button>
+                        </form>
+                      )}
+                    <form id={`keychain-delete-${index}`} method="post" action={action} className="hidden-form">
+                      <input type="hidden" name="action" value="delete" />
+                      <input type="hidden" name="account" value={account} />
+                    </form>
                   <AlertDialog.Root>
                     <AlertDialog.Trigger asChild>
                       <button type="button" className="btn btn-danger-ghost">Delete</button>
@@ -356,6 +439,7 @@ function KeychainPage({ state }: { state: Extract<EditorUiState, { page: 'keycha
                       </AlertDialog.Content>
                     </AlertDialog.Portal>
                   </AlertDialog.Root>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -366,7 +450,7 @@ function KeychainPage({ state }: { state: Extract<EditorUiState, { page: 'keycha
           <input type="hidden" name="action" value="set" />
           <div className="field">
             <span className="field-label">Environment key</span>
-            <input className="input" name="account" required pattern="[A-Za-z_][A-Za-z0-9_]*" autoComplete="off" spellCheck={false} />
+            <input className="input" name="account" required autoComplete="off" spellCheck={false} />
           </div>
           <div className="field">
             <span className="field-label">Value</span>
@@ -402,6 +486,11 @@ function ProviderPage({ state }: { state: Extract<EditorUiState, { page: 'provid
 }
 
 function SavedPage({ state }: { state: Extract<EditorUiState, { page: 'saved' }> }): ReactNode {
+  const detail = state.key
+    ? state.action === 'delete'
+      ? <>Key <code className="inline-code">{state.key}</code> was deleted.</>
+      : <>Key <code className="inline-code">{state.key}</code> was written.</>
+    : 'The local file was saved.'
   return (
     <Page state={state} title="Saved" subtitle={undefined}>
       <section className="card saved-card">
@@ -411,9 +500,32 @@ function SavedPage({ state }: { state: Extract<EditorUiState, { page: 'saved' }>
           </svg>
         </div>
         <h2 className="saved-title">Saved</h2>
-        <p className="saved-text">The selected source was updated. No value was written to terminal output or audit records.</p>
-        <p className="saved-hint">You can close this page — the local editor session ends automatically.</p>
-        <a className="btn btn-ghost" href={basePath(state)}>Back to overview</a>
+        <p className="saved-text">{detail} No value was written to terminal output or audit records.</p>
+        <p className="saved-hint">The session is still open — continue editing or end it explicitly. It also ends on its own after 15 minutes.</p>
+        <div className="form-actions">
+          <a className="btn btn-primary" href={`${sourcePath(state, state.sourceName)}?fileIndex=${state.fileIndex}`}>Continue editing</a>
+          <a className="btn btn-ghost" href={basePath(state)}>All sources</a>
+          <form method="post" action={basePath(state)} className="inline-form">
+            <input type="hidden" name="action" value="close" />
+            <button type="submit" className="btn btn-danger-ghost">End session</button>
+          </form>
+        </div>
+      </section>
+    </Page>
+  )
+}
+
+function ClosedPage({ state }: { state: Extract<EditorUiState, { page: 'closed' }> }): ReactNode {
+  return (
+    <Page state={state} title="Session ended" subtitle={undefined}>
+      <section className="card saved-card">
+        <div className="saved-icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <h2 className="saved-title">Session ended</h2>
+        <p className="saved-text">The local editor session is over and its server is shutting down. You can close this tab.</p>
       </section>
     </Page>
   )
@@ -421,7 +533,7 @@ function SavedPage({ state }: { state: Extract<EditorUiState, { page: 'saved' }>
 
 function ErrorPage({ state }: { state: Extract<EditorUiState, { page: 'error' }> }): ReactNode {
   return (
-    <Page state={state} title={state.title} back={false} subtitle={undefined}>
+    <Page state={state} title={state.title} subtitle={undefined}>
       <section className="card saved-card">
         <div className="saved-icon is-error" aria-hidden="true">!</div>
         <h2 className="saved-title">{state.title}</h2>
@@ -440,6 +552,7 @@ export function App({ state }: { state: EditorUiState }): ReactNode {
     case 'keychain': return <KeychainPage state={state} />
     case 'provider': return <ProviderPage state={state} />
     case 'saved': return <SavedPage state={state} />
+    case 'closed': return <ClosedPage state={state} />
     case 'error': return <ErrorPage state={state} />
   }
 }

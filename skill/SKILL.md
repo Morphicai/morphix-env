@@ -13,7 +13,7 @@ morphix-env 是密钥**组装层**，不是新的保险库：值永远留在 pro
 
 1. 绝不打印、记录、索取密钥值：不运行 `env` / `printenv` / `cat .env*` / `doppler secrets get --plain`，也不让用户把值粘贴进对话。
 2. 只用 key 名验证状态：`mx-env inspect --profile <name>` 输出 key → source 归属与状态，不含值。
-3. 增删改密钥一律走可视化编辑器：`mx-env edit --profile <name>`（或 `--source <name>`），用户在本地浏览器完成，值不经过 CLI 与对话。
+3. 增删改密钥一律走可视化编辑器：`mx-env edit`（可加 `--profile <name>` / `--source <name>` 收窄范围），用户在本地浏览器完成，值不经过 CLI 与对话。
 4. 进程获得密钥的唯一方式是 `mx-env run`；子进程 stdout/stderr 中的注入值会被替换为 `[REDACTED]`。
 
 ## 安装与检测
@@ -67,7 +67,7 @@ mx-env render <tpl> <out>                # 把 ${VAR} 渲染进不支持插值�
 mx-env inject <tpl> <out>                # 解析 mx-env://profile/KEY 引用（0600，MCP 配置入仓不落值）
 mx-env generate --out public/__env.js    # 生成浏览器公开变量（NEXT_PUBLIC_/VITE_/EXPO_PUBLIC_ 属公开配置例外）
 mx-env inspect [--profile dev]           # key 名 + source 归属 + 状态（无值）
-mx-env edit --profile dev | --source X   # 一次性可视化编辑器（loopback + 15 分钟 TTL，保存后自动关闭）
+mx-env edit [--profile dev | --source X] # 可视化编辑器（loopback + 15 分钟 TTL；查看/回显/增改删/切源，显式结束会话）
 mx-env doc                               # 生成本项目的 key→source 工作流 Skill（.agents/skills/morphix-env/）
 mx-env audit [tail]                      # 值无关的本地审计事件
 mx-env skill install [--target global|project|trellis] [--force]   # 安装本 Skill
@@ -86,7 +86,7 @@ mx-env migrate [--to dotenvx|keychain]   # local 明文迁加密存储（无 --t
 
 1. `mx-env inspect` — 看是否已有配置、哪些 key 已就绪；无配置时走 legacy `.env.local` / Infisical 兼容路径。
 2. 项目密钥来源多而杂且无 `mx-env.config.json` → 引导用户创建：给出上面模板改 source 名与 provider 选择，**不填值**。
-3. 缺值时 `mx-env edit --profile <name>` 打开本地编辑器让用户填写；macOS 浏览器自动打开，编辑器 URL 默认不打印（`--print-editor-url` 显式索取）。
+3. 缺值时 `mx-env edit` 打开本地编辑器让用户查看、填写、删除；macOS 浏览器自动打开，编辑器 URL 默认不打印（`--print-editor-url` 显式索取）。
 4. `mx-env doc` — 生成**本项目**的 key→source 表（`.agents/skills/morphix-env/SKILL.md`，0600），后续以它为准。
 5. 运行：`mx-env run --profile <name> -- <command>`。
 

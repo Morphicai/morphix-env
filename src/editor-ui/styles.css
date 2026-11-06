@@ -179,9 +179,37 @@ a:focus-visible {
   margin-bottom: 24px;
 }
 
-.back-link {
-  font-size: 13px;
-  font-weight: 550;
+.source-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.source-chip.is-current {
+  border-color: var(--brand-blue);
+  color: var(--brand-blue);
+  font-weight: 650;
+}
+
+.source-chip-provider {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
 }
 
 h1 {
@@ -195,10 +223,6 @@ h1 {
 
 .page-head > h1 {
   margin-top: 0;
-}
-
-.back-link + h1 {
-  margin-top: 10px;
 }
 
 .subtitle {
@@ -689,9 +713,33 @@ h1 {
   border-bottom: none;
 }
 
-/* The delete form only carries hidden inputs; hiding it keeps the row clean. */
-.account-row > form {
+/* Delete forms carry only hidden inputs (their submit lives in the dialog);
+ * hiding the form keeps the row clean. */
+.hidden-form {
   display: none;
+}
+
+.account-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.inline-form {
+  display: inline-flex;
+}
+
+.revealed-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--brand-deep-05);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: 3px 10px;
+  word-break: break-all;
+  max-width: 100%;
 }
 
 /* ---------- alert dialog (Radix) ---------- */

@@ -13,9 +13,15 @@ export interface AuditEvent {
   /**
    * Invocation channel. `shim` means the run came through a PATH shim. This is
    * an observational dimension, not a security assertion: the marker travels
-   * as an env var and is forgeable by any same-uid process.
+   * as an env var and is forgeable by any same-uid process. `editor` marks
+   * actions taken in the one-shot visual editor (values never enter events).
    */
-  via?: 'cli' | 'shim'
+  via?: 'cli' | 'shim' | 'editor'
+  /**
+   * Editor action kind for `via: 'editor'` events. Value-free by contract:
+   * events carry key names only, never values.
+   */
+  action?: 'set' | 'delete' | 'reveal' | 'close'
 }
 
 /** Best-effort local audit that intentionally has no values or command arguments. */

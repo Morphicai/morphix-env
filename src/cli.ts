@@ -588,10 +588,8 @@ async function cmdInject(args: Args): Promise<number> {
 }
 
 async function cmdEdit(args: Args): Promise<number> {
-  if (!args.profile && !args.source) {
-    console.error('[morphix-env] Specify --profile <name> or --source <name> to open the editor.')
-    return 1
-  }
+  // Bare `mx-env edit` opens the default composition (the implicit global on
+  // config-less machines); --profile/--source narrow the scope.
   const composition = await resolveComposition(args)
   if (args.source && !composition.sourceEntries.some((entry) => entry.name === args.source)) {
     const layers = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
@@ -635,7 +633,7 @@ Default profile context: \`${composition.profileName}\`.
 
 When a user asks to add, modify, or rotate a credential:
 
-1. Run \`mx-env edit --profile <profile>\` or \`mx-env edit --source <source>\`.
+1. Run \`mx-env edit\` (optionally with \`--profile <profile>\` or \`--source <source>\`).
 2. Tell the user to complete the change in the local visual editor or provider UI.
 3. Do not ask the user to paste a value into chat.
 4. Do not run \`env\`, \`printenv\`, \`cat .env\`, or any reveal command.
@@ -896,7 +894,7 @@ Usage:
   mx-env migrate [--to dotenvx|keychain]  Move plaintext local sources into encrypted storage
   mx-env doc [options]                    Generate a value-free project Skill
   mx-env audit [tail]                     Read value-free local audit events
-  mx-env edit --profile <name>            Open the one-shot visual editor
+  mx-env edit [--profile|--source <name>] Open the visual editor (15-min session)
   mx-env skill install [--target <t>]     Install the Agent Skill (global|project|trellis)
   mx-env skill show                       Show skill install status per target
   mx-env shell-init [--write|--remove]    Generate PATH shims for declared commands

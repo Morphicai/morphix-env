@@ -211,9 +211,10 @@ async function reloadViaKeychain(unit: MigrationUnit, newSource: SecretSource, h
  * material from the environment — so an inherited environment can both
  * false-fail verification and substitute for the `.env.keys` the check is
  * supposed to prove. PATH is pinned to reach the current Node runtime for the
- * dotenvx shebang (same rationale as resolveDotenvx).
+ * dotenvx shebang (same rationale as resolveDotenvx). Shared with the visual
+ * editor's dotenvx calls (get/set/del) for the same defense.
  */
-function verificationEnv(): NodeJS.ProcessEnv {
+export function verificationEnv(): NodeJS.ProcessEnv {
   return {
     ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
     ...(process.env.SYSTEMROOT ? { SYSTEMROOT: process.env.SYSTEMROOT } : {}),

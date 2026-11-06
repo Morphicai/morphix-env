@@ -310,6 +310,31 @@ describe('config file integration', () => {
     }).then((response) => response.text())
     expect(saved).toContain('Saved')
     expect(readFileSync(join(TMP, 'editable.env'), 'utf8')).toContain(replacement)
+
+    // The session stays open after a save; end it explicitly to avoid leaking
+    // a detached editor until its TTL.
+    await fetch(url!, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ action: 'close' }),
+    })
+  })
+
+  it('bare edit opens the default composition without --profile/--source', async () => {
+    const output = run(['edit', '--no-infisical', '--print-editor-url'], { MX_ENV_NO_OPEN: '1' })
+    const url = output.match(/Local editor URL: (http:\/\/[^\s]+)/)?.[1]
+    expect(url).toBeTruthy()
+
+    const index = await fetch(url!).then((response) => response.text())
+    // Assert the server-rendered <title>: component copy is inlined in every
+    // page's client bundle and cannot discriminate pages.
+    expect(index).toContain('<title>mx-env editor</title>')
+
+    await fetch(url!, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ action: 'close' }),
+    })
   })
 
   it('edit rejects an unknown profile without starting an editor', () => {
@@ -332,7 +357,8 @@ describe('config file integration', () => {
     const content = readFileSync(skill, 'utf8')
     expect(output).toContain('Generated value-free workflow Skill')
     expect(output).not.toContain(sentinel)
-    expect(content).toContain('mx-env edit --profile <profile>')
+    expect(content).toContain('mx-env edit')
+    expect(content).toContain('--profile <profile>')
     expect(content).toContain('MXTEST_SKILL')
     expect(content).not.toContain(sentinel)
   })
@@ -354,7 +380,7 @@ describe('mx-env skill', () => {
     expect(out).toContain('Installed skill')
     const content = readFileSync(projectSkill(), 'utf8')
     expect(content).toContain('name: morphix-env')
-    expect(content).toContain('mx-env edit --profile')
+    expect(content).toContain('mx-env edit [--profile dev | --source X]')
     expect(content).toContain('os-keychain')
     // The generic template carries no project data: it must never grow a value.
     expect(content).not.toContain('=mxenv_test_')

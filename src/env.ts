@@ -11,14 +11,15 @@ export function parseEnvFile(filePath: string): Record<string, string> {
 
 /**
  * dotenvx 加密文件的内容嗅探：加密产物头部携带 DOTENV_PUBLIC_KEY 且至少一行
- * 为 `KEY=encrypted:` 形态的密文值（行锚定，注释里出现 "encrypted:" 不算）。
- * 两个标记同时要求，避免明文文件合法定义同名 key 时被误判走 dotenvx 加载。
- * 只认标记、不解析值；读失败一律按未加密处理。
+ * 为 `KEY=encrypted:` 形态的密文值（行锚定，注释里出现 "encrypted:" 不算；
+ * 键名含点号也算——dotenv 允许 `A.B=` 形态）。两个标记同时要求，避免明文文件
+ * 合法定义同名 key 时被误判走 dotenvx 加载。只认标记、不解析值；读失败一律
+ * 按未加密处理。
  */
 export function isDotenvxEncrypted(filePath: string): boolean {
   try {
     const content = readFileSync(resolve(filePath), 'utf8')
-    return content.includes('DOTENV_PUBLIC_KEY') && /^[A-Za-z_][A-Za-z0-9_]*="?encrypted:/m.test(content)
+    return content.includes('DOTENV_PUBLIC_KEY') && /^[A-Za-z_][A-Za-z0-9_.]*="?encrypted:/m.test(content)
   } catch {
     return false
   }
