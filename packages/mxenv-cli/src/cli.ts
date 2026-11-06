@@ -235,6 +235,7 @@ Usage:
 Options:
   --write                  Also maintain a marked PATH block in your rc file
   --remove                 Remove every generated shim and the rc PATH block
+  --no-global              Generate project-declared shims only (skip the global config list)
   --help, -h               Show this help
   --version                Show version
 
