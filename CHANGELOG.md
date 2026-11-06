@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.11.0
+
+### Added
+
+- **Value reveal in `mx-env edit`**: dotenvx and Keychain source pages list existing key names and reveal stored values one key at a time on explicit request (a single revealed value is resident per page; values never leave the browser session). The stored file value always wins over same-named environment names (`dotenvx get --overload`), and every dotenvx call runs pinned to the file's directory with a per-file key-model environment, so key material stays beside its file and OS-keychain-custodied files remain readable.
+- **Delete from the editor**: dotenvx keys and Keychain entries can be removed with a destructive confirmation dialog (encrypted files go through `dotenvx del`).
+- **Source switcher + reachable index**: every page carries a source navigation row; the "All sources" index (sources + resolved key names, value-free) is reachable from any launch mode — `--source` sessions now land the browser directly on the source page instead of dead-ending the back link. Bare `mx-env edit` opens the default composition, including the implicit global on config-less machines.
+- Editor writes, deletes and reveals append value-free audit events (`via: "editor"`, `action`, key names only).
+
+### Changed
+
+- **BREAKING**: `mx-env edit` sessions no longer close after a save. A session now supports multi-step maintenance (edit/add/delete across sources) and ends via the explicit "End session" action or the 15-minute TTL.
+- `set` refuses values containing `$` sequences with an explanation (dotenvx expands `$name` on every load path, so such values cannot be stored faithfully — the same semantics `migrate` enforces) and never writes an empty value implicitly.
+- `mx-env edit --help` reflects the session model and both scope flags.
+
+### Fixed
+
+- File indexes outside the source's range clamp to a valid file instead of erroring.
+- Reveal/delete failures report read/delete-specific errors instead of a misleading "Unable to save this source".
+- Dash-leading values (e.g. `-f`) are no longer mis-parsed as dotenvx options when saving.
+- Local-file save failures are audited (previously only success was recorded).
+- The encrypted-file sniff recognizes dotted key names (`A.B=encrypted:…`).
+- "Continue editing" after a save returns to the file that was saved, not file 0.
+
 ## 0.10.1
 
 ### Fixed
