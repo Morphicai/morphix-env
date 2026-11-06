@@ -379,8 +379,8 @@ describe('mx-env skill', () => {
     const out = run(['skill', 'install', '--target', 'project'])
     expect(out).toContain('Installed skill')
     const content = readFileSync(projectSkill(), 'utf8')
-    expect(content).toContain('name: morphix-env')
-    expect(content).toContain('mx-env edit [--profile dev | --source X]')
+    expect(content).toContain('name: mxenv')
+    expect(content).toContain('mxenv edit [--profile dev | --source X]')
     expect(content).toContain('os-keychain')
     // The generic template carries no project data: it must never grow a value.
     expect(content).not.toContain('=mxenv_test_')
@@ -406,16 +406,16 @@ describe('mx-env skill', () => {
 
     const out = run(['skill', 'install', '--target', 'project', '--force'])
     expect(out).toContain('Installed skill')
-    expect(readFileSync(projectSkill(), 'utf8')).toContain('name: morphix-env')
+    expect(readFileSync(projectSkill(), 'utf8')).toContain('name: mxenv')
   })
 
   it('install --target global and --target trellis write into the home stores', () => {
     run(['skill', 'install', '--target', 'global'])
-    expect(readFileSync(join(TMP, 'home', '.claude', 'skills', 'morphix-env', 'SKILL.md'), 'utf8')).toContain('name: morphix-env')
+    expect(readFileSync(join(TMP, 'home', '.claude', 'skills', 'morphix-env', 'SKILL.md'), 'utf8')).toContain('name: mxenv')
 
     const out = run(['skill', 'install', '--target', 'trellis'])
     expect(out).toContain('trellis sync skills')
-    expect(readFileSync(join(TMP, 'home', '.trellis', 'skills', 'morphix-env', 'SKILL.md'), 'utf8')).toContain('name: morphix-env')
+    expect(readFileSync(join(TMP, 'home', '.trellis', 'skills', 'morphix-env', 'SKILL.md'), 'utf8')).toContain('name: mxenv')
   })
 
   it('rejects an unknown target and unknown subcommand', () => {

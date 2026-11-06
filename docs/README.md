@@ -1,4 +1,4 @@
-# morphix-env 文档入口
+# mxenv 文档入口
 
 本仓维护自己的实现、契约、任务与证据。单独 clone 无需父仓文档。先读 [工程与维护约定](./engineering.md)。
 
@@ -9,6 +9,8 @@
 - [已归档任务](../openspec/changes/archive/)
 
 ## 源码旁文档
+
+- [UX 与架构升级：问题与方案](./ux-architecture.md)（mxenv 品牌/分层 L0–L3/常驻面板方向；Wave A 实施 change：`mxenv-package-split` / `mxenv-naming-cutover` / `mxenv-home-migration`）
 
 
 ## 历史

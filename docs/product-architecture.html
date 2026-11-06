@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mxenv · 从产品到架构 —— 开发者如何消费</title>
+<style>
+  :root {
+    --bg: #f7f8fb;
+    --surface: #ffffff;
+    --ink: #1a2233;
+    --ink-2: #4a5568;
+    --ink-3: #7a8699;
+    --line: #e4e8f0;
+    --accent: #4f46e5;
+    --accent-2: #0d9488;
+    --accent-soft: #eef0ff;
+    --teal-soft: #e6f7f5;
+    --warn-bg: #fff7ed;
+    --warn-line: #fdba74;
+    --code-bg: #101828;
+    --code-ink: #d7e0f0;
+    --code-dim: #8b98ad;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px -12px rgba(16,24,40,.12);
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 28px; }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  p code, li code, td code {
+    background: var(--accent-soft); color: var(--accent);
+    padding: .12em .42em; border-radius: 6px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  h1, h2, h3 { line-height: 1.35; letter-spacing: -.01em; }
+  section { padding: 64px 0 8px; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: 76px 0 56px;
+    background:
+      radial-gradient(1100px 420px at 82% -60px, rgba(13,148,136,.14), transparent 62%),
+      radial-gradient(900px 420px at 8% -110px, rgba(79,70,229,.16), transparent 60%),
+      var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; letter-spacing: .08em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .eyebrow::before {
+    content: ""; width: 22px; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  }
+  .hero h1 {
+    margin: 14px 0 6px;
+    font-size: clamp(34px, 5vw, 52px); font-weight: 800;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(92deg, var(--accent) 10%, var(--accent-2) 90%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    font-family: var(--mono); font-weight: 700;
+  }
+  .hero .tagline { font-size: 19px; color: var(--ink-2); max-width: 46em; margin: 10px 0 0; }
+  .hero .tagline strong { color: var(--ink); }
+  .badges { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .badge {
+    font-size: 13px; font-weight: 600; padding: 6px 13px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line); color: var(--ink-2);
+  }
+  .badge.hot { background: var(--accent-soft); border-color: #c9cdfb; color: var(--accent); }
+  .badge.teal { background: var(--teal-soft); border-color: #b7e6df; color: var(--accent-2); }
+  nav.toc {
+    margin-top: 34px; display: flex; flex-wrap: wrap; gap: 6px 22px;
+    font-size: 14.5px; font-weight: 600;
+  }
+  nav.toc a { color: var(--ink-2); }
+  nav.toc a:hover { color: var(--accent); text-decoration: none; }
+
+  /* ---------- section heads ---------- */
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-num {
+    font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--accent);
+    background: var(--accent-soft); border-radius: 8px; padding: 3px 10px;
+  }
+  h2 { font-size: 27px; margin: 0; }
+  .sec-sub { color: var(--ink-3); margin: 4px 0 26px; font-size: 15px; }
+
+  /* ---------- cards ---------- */
+  .grid { display: grid; gap: 16px; }
+  .grid.c2 { grid-template-columns: repeat(2, 1fr); }
+  .grid.c3 { grid-template-columns: repeat(3, 1fr); }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 22px 24px; box-shadow: var(--shadow);
+  }
+  .card h3 { margin: 0 0 8px; font-size: 17px; }
+  .card p { margin: 0; color: var(--ink-2); font-size: 14.5px; }
+  .card .k {
+    display: inline-block; font-family: var(--mono); font-size: 12px; font-weight: 700;
+    color: var(--accent-2); background: var(--teal-soft); border-radius: 6px;
+    padding: 2px 8px; margin-bottom: 10px;
+  }
+  .callout {
+    border-radius: var(--radius); padding: 18px 22px; margin: 22px 0;
+    border: 1px solid var(--line); background: var(--surface);
+    font-size: 15px; color: var(--ink-2);
+  }
+  .callout strong { color: var(--ink); }
+  .callout.accent { background: var(--accent-soft); border-color: #d4d7fb; }
+  .callout.warn { background: var(--warn-bg); border-color: var(--warn-line); }
+
+  /* ---------- code ---------- */
+  pre {
+    margin: 16px 0; padding: 18px 20px; border-radius: 12px;
+    background: var(--code-bg); color: var(--code-ink);
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.7;
+    overflow-x: auto;
+  }
+  pre .c { color: var(--code-dim); }
+  pre .k { color: #93c5fd; }
+  pre .s { color: #86efac; }
+  .file-label {
+    display: inline-block; font-family: var(--mono); font-size: 12px;
+    color: var(--ink-3); margin: 18px 0 -6px; font-weight: 600;
+  }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14.5px; background: var(--surface); border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }
+  th { text-align: left; font-size: 12.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); background: #fbfcfe; }
+  th, td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td { color: var(--ink-2); }
+  td strong { color: var(--ink); }
+
+  /* ---------- composition chain ---------- */
+  .chain { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; margin: 22px 0 8px; }
+  .chain .stage {
+    flex: 1 1 150px; min-width: 150px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 14px 12px; position: relative;
+  }
+  .chain .stage .p {
+    font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--ink-3);
+  }
+  .chain .stage .t { font-weight: 700; font-size: 14.5px; margin: 2px 0 4px; }
+  .chain .stage .d { font-size: 12.5px; color: var(--ink-3); line-height: 1.55; }
+  .chain .stage.final { border-color: #c9cdfb; background: var(--accent-soft); }
+  .chain .arrow {
+    align-self: center; color: var(--ink-3); font-size: 18px; flex: 0 0 auto;
+  }
+  .chain-note { font-size: 13px; color: var(--ink-3); margin: 6px 0 0; }
+
+  /* ---------- layer stack ---------- */
+  .layers { margin: 26px 0 6px; display: grid; gap: 12px; }
+  .layer {
+    display: grid; grid-template-columns: 130px 1fr; gap: 18px; align-items: stretch;
+  }
+  .layer .lv {
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    border-radius: 12px; padding: 14px 8px; color: #fff; text-align: center;
+  }
+  .layer .lv b { font-family: var(--mono); font-size: 17px; }
+  .layer .lv span { font-size: 11.5px; opacity: .85; margin-top: 2px; }
+  .lv.l3 { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+  .lv.l2 { background: linear-gradient(135deg, #0ea5a4, #0d9488); }
+  .lv.l1 { background: linear-gradient(135deg, #334155, #1e293b); }
+  .lv.l0 { background: linear-gradient(135deg, #64748b, #475569); }
+  .layer .body {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 15px 20px; display: flex; flex-direction: column; justify-content: center;
+  }
+  .layer .body .pkg {
+    font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--ink);
+  }
+  .layer .body .desc { font-size: 13.5px; color: var(--ink-2); margin-top: 3px; }
+  .layer .body .desc code { font-size: 12.5px; }
+  .depbar {
+    margin: 4px 0 0 148px; display: flex; gap: 10px; align-items: center;
+    font-size: 12.5px; color: var(--ink-3);
+  }
+  .depbar .line {
+    flex: 1; height: 2px;
+    background: repeating-linear-gradient(90deg, var(--ink-3) 0 6px, transparent 6px 12px);
+    opacity: .5;
+  }
+  .extbar {
+    margin: 16px 0 0; border: 1.5px dashed var(--warn-line); background: var(--warn-bg);
+    border-radius: 12px; padding: 14px 20px; font-size: 13.5px; color: var(--ink-2);
+  }
+  .extbar b { color: var(--ink); }
+
+  /* ---------- value flow ---------- */
+  .vflow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 22px 0; }
+  .vflow .step {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px;
+  }
+  .vflow .step h4 { margin: 0 0 6px; font-size: 15px; }
+  .vflow .step p { margin: 0; font-size: 13px; color: var(--ink-3); line-height: 1.6; }
+  .vflow .step .pill {
+    display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700;
+    border-radius: 999px; padding: 2px 9px; margin-bottom: 8px;
+  }
+  .pill.no { background: #fee2e2; color: #b91c1c; }
+  .pill.yes { background: var(--teal-soft); color: var(--accent-2); }
+
+  /* ---------- roadmap ---------- */
+  .waves { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 22px 0; }
+  .wave {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px 24px; position: relative; overflow: hidden;
+  }
+  .wave::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+  }
+  .wave.a::before { background: var(--accent); }
+  .wave.b::before { background: var(--accent-2); }
+  .wave.c::before { background: var(--ink-3); }
+  .wave .wh { font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--ink-3); }
+  .wave h3 { margin: 4px 0 10px; font-size: 17px; }
+  .wave ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13.5px; line-height: 1.9; }
+  .wave .st { margin-top: 12px; font-size: 12px; font-weight: 700; }
+  .st.doing { color: var(--accent); }
+  .st.next { color: var(--ink-3); }
+
+  footer {
+    margin-top: 72px; padding: 36px 0 56px; border-top: 1px solid var(--line);
+    background: var(--surface); color: var(--ink-3); font-size: 13.5px;
+  }
+  footer .cols { display: flex; flex-wrap: wrap; gap: 24px 48px; justify-content: space-between; }
+  footer b { color: var(--ink-2); }
+
+  @media (max-width: 860px) {
+    .grid.c3, .grid.c2, .waves, .vflow { grid-template-columns: 1fr; }
+    .layer { grid-template-columns: 92px 1fr; gap: 12px; }
+    .depbar { margin-left: 104px; }
+    .chain .arrow { display: none; }
+    section { padding-top: 48px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">产品 · 架构 · 开发者消费指南</div>
+    <h1><span class="grad">mxenv</span> —— 密钥组装层</h1>
+    <p class="tagline">
+      不是第五个保险库。Infisical / Doppler / macOS 钥匙串 / dotenvx / 本地文件继续持有各自的值，
+      <strong>mxenv 只把 profile 选定的来源组合成一次性子进程环境</strong>，
+      并保证 inspect / audit / 编辑器 / 子进程输出全程无密钥值。
+    </p>
+    <div class="badges">
+      <span class="badge hot">Wave A 实施中 · package-split / naming-cutover / home-migration</span>
+      <span class="badge teal">三包分层 L0–L3</span>
+      <span class="badge">项目装即完整可用</span>
+      <span class="badge">MIT</span>
+      <span class="badge">mxenv:// 契约</span>
+    </div>
+    <nav class="toc">
+      <a href="#problem">① 产品：解决什么问题</a>
+      <a href="#consume">② 开发者怎么消费</a>
+      <a href="#arch">③ 架构设计</a>
+      <a href="#naming">④ 命名与迁移</a>
+      <a href="#roadmap">⑤ 落地路线</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ================= 1. 问题 ================= -->
+<section id="problem">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">01</span><h2>产品：解决什么问题</h2></div>
+    <p class="sec-sub">现状的组合 / 加密 / 审计底座是好的；弱在产品体验与形态 —— 五个具体问题，一个核心架构题。</p>
+
+    <div class="grid c3">
+      <div class="card">
+        <span class="k">问题 1</span>
+        <h3>没有统一入口，必须启动才能看</h3>
+        <p>看任何密钥状态都要起一次性编辑会话（15 分钟 TTL、随机 token、开浏览器），看完即废；来源散在四五处，没有上帝视角。</p>
+      </div>
+      <div class="card">
+        <span class="k">问题 2</span>
+        <h3>命名不好，多套名字并存</h3>
+        <p><code>mx-env</code> 带连字符难敲、品牌不响；<code>morphix-env</code> / <code>mx-env</code> / <code>~/.mx-env/</code> / <code>mx-env.config.json</code> 多名并存。决定统一为 <strong>mxenv</strong>。</p>
+      </div>
+      <div class="card">
+        <span class="k">问题 3</span>
+        <h3>管理面体验弱</h3>
+        <p>管理上游（provider 登录态、来源编排、profiles）与编辑键值只有 CLI + 一次性编辑器，没有面板级总览、健康检查和连续操作。</p>
+      </div>
+      <div class="card">
+        <span class="k">问题 4</span>
+        <h3>开源门面缺 icon</h3>
+        <p>现 logo 是通用无限环渐变图：无 <code>mx</code> 识别、无密钥/组合语义，且仅 PNG 无 SVG 源。（Wave C 重做）</p>
+      </div>
+      <div class="card">
+        <span class="k">问题 5</span>
+        <h3>开源文档不完整</h3>
+        <p>仓库已 PUBLIC、npm 挂 MIT，但缺 LICENSE 文件、SECURITY.md（密钥工具必须有漏洞披露渠道）、CONTRIBUTING 与模板。</p>
+      </div>
+      <div class="card" style="border-color:#fdba74; background:var(--warn-bg);">
+        <span class="k" style="color:#c2410c; background:#ffedd5;">核心架构题</span>
+        <h3>「随时可看」vs「短命安全」</h3>
+        <p>随时可看要求常驻服务；常驻进程意味着长驻攻击面，与现有短命会话的刻意安全设计冲突。<strong>如何常驻、如何守住「值不出机器」</strong>是本次升级的核心设计题。</p>
+      </div>
+    </div>
+
+    <div class="callout accent">
+      <strong>产品定位一句话：</strong> mxenv 是<strong>组装层</strong>而不是又一个保险库 —— 值的 ownership 永远留在 provider；
+      真实差异是「多来源组合 + 同名冲突硬报错 + Agent 上下文卫生」，而不是替代你在 Infisical 与 Doppler 之间的选型。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 2. 开发者消费 ================= -->
+<section id="consume">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">02</span><h2>开发者怎么消费</h2></div>
+    <p class="sec-sub">三条产品要求 = 三种消费姿势 = 验收口径。核心承诺：<strong>项目装即完整可用；全局装只做加法</strong>。</p>
+
+    <div class="grid c3">
+      <div class="card">
+        <span class="k">姿势 1 · 项目装（默认）</span>
+        <h3>一个 devDep，运行面全齐</h3>
+        <p>装 <code>mxenv</code>（devDep 或 npx）即获得 <strong>run / export / inspect / 来源管理 / edit / migrate</strong> 全部能力：可定制上游（sources 按项目任选编排 provider 与 profile），全局变量与项目 <code>env.local</code> 可并用。无配置项目默认吃全局库。<strong>不需要 daemon、不需要全局 CLI。</strong></p>
+      </div>
+      <div class="card">
+        <span class="k">姿势 2 · 全局装（增强）</span>
+        <h3>机器级管理面</h3>
+        <p>装 <code>mxenv-cli</code> 叠加管理能力：<code>shell-init</code> 终端 shim（裸敲 <code>pnpm dev</code> 即完成注入）、全局环境变量/密钥管理。项目命令的名称与行为<strong>不因全局安装与否而变化</strong>。</p>
+      </div>
+      <div class="card">
+        <span class="k">姿势 3 · CLI 带 GUI</span>
+        <h3>一条命令进入可视化管理</h3>
+        <p>GUI <strong>不独立发包</strong>，作为全局 CLI 内置模块分发（沿用 editor-ui 打进 dist 的既有模式）：面板级来源总览、键管理、migrate 入口、审计查看。（Wave B 交付）</p>
+      </div>
+    </div>
+
+    <h3 style="margin:38px 0 4px; font-size:20px;">60 秒上手</h3>
+    <pre><span class="c"># 与 Agent 一起用（推荐）：装上打包好的 skill，让 agent 读着安全红线干活</span>
+npx mxenv@latest skill install --target project   <span class="c"># 写入 .claude/skills/mxenv/，随仓库提交</span>
+
+<span class="c"># 不用 Agent 也能跑</span>
+npm install -g mxenv
+mxenv run -- pnpm dev      <span class="c"># 组合 profile 并执行（子进程输出自动脱敏）</span>
+mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状态 —— 永远没有值</span></pre>
+
+    <div class="callout">
+      个人机器级默认值放 <code>~/.mxenv/.env</code>（chmod 600）：每次运行以低优先级并入组合，除非 <code>--no-global</code>。
+    </div>
+
+    <h3 style="margin:38px 0 4px; font-size:20px;">配置只写接线，不写值</h3>
+    <span class="file-label">project/mxenv.config.json</span>
+    <pre>{
+  <span class="k">"sources"</span>: {
+    <span class="k">"team"</span>:    { <span class="k">"provider"</span>: <span class="s">"infisical"</span>, <span class="k">"paths"</span>: [<span class="s">"/ai/api"</span>] },
+    <span class="k">"doppler"</span>: { <span class="k">"provider"</span>: <span class="s">"doppler"</span>, <span class="k">"project"</span>: <span class="s">"morphicai-api"</span>, <span class="k">"config"</span>: <span class="s">"dev"</span> },
+    <span class="k">"local"</span>:   { <span class="k">"provider"</span>: <span class="s">"local"</span>, <span class="k">"files"</span>: [<span class="s">".env.local"</span>], <span class="k">"optional"</span>: true, <span class="k">"override"</span>: true }
+  },
+  <span class="k">"profiles"</span>: { <span class="k">"dev"</span>: { <span class="k">"sources"</span>: [<span class="s">"team"</span>, <span class="s">"doppler"</span>, <span class="s">"local"</span>] } },
+  <span class="k">"defaultProfile"</span>: <span class="s">"dev"</span>
+}</pre>
+
+    <h3 style="margin:38px 0 4px; font-size:20px;">组合链：固定的优先级顺序</h3>
+    <div class="chain">
+      <div class="stage"><div class="p">LAYER 0</div><div class="t">inherited env</div><div class="d">继承的 process.env</div></div>
+      <div class="arrow">→</div>
+      <div class="stage"><div class="p">LAYER 1</div><div class="t">~/.mxenv/.env</div><div class="d">全局库（个人默认值，恒在底层）</div></div>
+      <div class="arrow">→</div>
+      <div class="stage"><div class="p">LAYER 2</div><div class="t">全局默认 profile</div><div class="d">无项目 profile 时生效</div></div>
+      <div class="arrow">→</div>
+      <div class="stage"><div class="p">LAYER 3</div><div class="t">项目 sources</div><div class="d">含 local env.local / legacy 配置</div></div>
+      <div class="arrow">→</div>
+      <div class="stage final"><div class="p">LAYER 4</div><div class="t">-f override</div><div class="d">显式覆盖文件，最终生效</div></div>
+    </div>
+    <p class="chain-note">
+      同名 key 出现在两个来源时<strong>默认报错</strong>，靠后来源声明 <code>"override": true</code> 才覆盖（防两个环境的同名凭据静默错选）。
+      项目 / 显式 profile 生效时<strong>替代</strong>全局默认 profile —— 要叠加全局源，用 profile 的 <code>extends</code> 引入。
+    </p>
+
+    <div class="grid c2" style="margin-top:26px;">
+      <div class="card">
+        <h3>五个内置 provider + 插件协议</h3>
+        <p style="margin-top:8px;"><code>infisical</code> · <code>doppler</code> · <code>os-keychain</code>(macOS) · <code>dotenvx</code>(加密文件) · <code>local</code>(明文 dotenv，<strong>仅开发用</strong>)；
+        任何 PATH 上的 <code>mxenv-provider-&lt;name&gt;</code> 可执行文件即插件 provider（summon 式协议）。provider 登录/引导留在 provider 侧，<strong>不进仓库配置</strong>。</p>
+      </div>
+      <div class="card">
+        <h3>Agent 协作：上下文零密钥</h3>
+        <p style="margin-top:8px;">
+        <code>mxenv run --serve</code> 让值<strong>不进任何进程环境</strong>：子进程只拿 <code>MXENV_ENDPOINT</code>/<code>MXENV_TOKEN</code>，
+        经 <code>mxenv fetch &lt;KEY&gt;</code> 逐键按需取值。加上 skill 内置安全红线（禁 <code>env</code>/<code>cat .env*</code>/贴值），
+        形成「Agent 全程不碰明文」的工作链。</p>
+      </div>
+    </div>
+
+    <h3 style="margin:38px 0 4px; font-size:20px;">命令速查（L2 运行面）</h3>
+    <table>
+      <tr><th>命令</th><th>用途</th><th>值安全</th></tr>
+      <tr><td><code>mxenv run --profile dev -- &lt;cmd&gt;</code></td><td>组合环境并执行（唯一注入路径）</td><td>注入值对子进程输出 <code>[REDACTED]</code></td></tr>
+      <tr><td><code>mxenv run --serve -- &lt;cmd&gt;</code></td><td>值不进 env，loopback 按需取值</td><td>值不进任何进程环境</td></tr>
+      <tr><td><code>mxenv inspect</code> / <code>audit tail</code></td><td>key 名 + 来源归属 / 审计事件</td><td>只出名字，永不出值</td></tr>
+      <tr><td><code>mxenv edit</code></td><td>一次性可视化编辑器（loopback + 15min TTL）</td><td>值驻留浏览器会话，逐键回显</td></tr>
+      <tr><td><code>mxenv migrate [--to dotenvx|keychain]</code></td><td>明文源迁加密存储</td><td>备份 + 值级等价验证 + 可回滚</td></tr>
+      <tr><td><code>mxenv export / render / inject</code></td><td>eval 注入 / 模板渲染 / <code>mxenv://</code> 解析</td><td><code>--dry-run</code> 只报名字；输出 0600</td></tr>
+      <tr><td><code>mxenv skill install</code> / <code>doc</code></td><td>Agent Skill 安装 / 项目 key→source 清单</td><td>模板与生成物 value-free</td></tr>
+      <tr><td><code>mxenv-cli shell-init</code></td><td>生成 PATH shim（全局管理面）</td><td>audit 记 <code>via: shim|cli</code></td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ================= 3. 架构 ================= -->
+<section id="arch">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">03</span><h2>架构设计：L0–L3 严格分层</h2></div>
+    <p class="sec-sub">纪律（用户定调）：<strong>上层只依赖下层；凡出现第二个使用方的能力，即下沉到更低层共享</strong>。产品差异（命令解析、输出格式、UI）留在上层。</p>
+
+    <div class="layers">
+      <div class="layer">
+        <div class="lv l3"><b>L3</b><span>管理面 · 产品</span></div>
+        <div class="body">
+          <div class="pkg">mxenv-cli（暂名）</div>
+          <div class="desc">全局密钥/环境变量管理命令 · <strong>内置 GUI</strong>（不独立发包）· daemon（127.0.0.1 + token）· launchd · <code>shell-init</code> shim · 审计聚合 / 项目注册视图（不做文件系统扫描：审计 journal 派生 + <code>mxenv link</code>）</div>
+        </div>
+      </div>
+      <div class="depbar"><span>▼ 只向下 · L3 ⊥ L2 零互相依赖</span><div class="line"></div></div>
+      <div class="layer">
+        <div class="lv l2"><b>L2</b><span>运行面 · 产品</span></div>
+        <div class="body">
+          <div class="pkg">mxenv（默认名安装包）</div>
+          <div class="desc"><code>run</code>/<code>export</code>/<code>inspect</code>/<code>render</code>/<code>inject</code>/<code>generate</code> · 来源管理命令（定制上游）· <code>migrate</code> · <code>edit</code>（含 editor-ui / clientAssets 生成链）· <code>skill install</code> —— devDep / npx，项目装即完整可用</div>
+        </div>
+      </div>
+      <div class="depbar"><span>▼ 通用能力下沉共享</span><div class="line"></div></div>
+      <div class="layer">
+        <div class="lv l1"><b>L1</b><span>能力层 · 共享</span></div>
+        <div class="body">
+          <div class="pkg">mxenv-core 主入口</div>
+          <div class="desc">组合引擎（全局变量 ∪ 项目 env.local）· provider 适配 · 配置加载 · 审计读写 · <strong>值能力 <code>compose</code>/<code>revealSingle</code> 唯一实现</strong>（逐键揭示、单值驻留、默认锁定、值不落日志/审计）</div>
+        </div>
+      </div>
+      <div class="depbar"><span>▼ 纯契约</span><div class="line"></div></div>
+      <div class="layer">
+        <div class="lv l0"><b>L0</b><span>契约层 · 纯无 IO</span></div>
+        <div class="body">
+          <div class="pkg">mxenv-core/contracts</div>
+          <div class="desc">配置 schema · <code>mxenv://</code> 引用语法 · 组合 / 审计 / IPC 类型 · redaction 规则 —— 只要类型的消费方（如 Trellis SDK）零 IO import</div>
+        </div>
+      </div>
+    </div>
+    <div class="extbar">
+      <b>外部资源（只经 L1 访问）：</b>上游 provider（值 owner，按项目定制编排：Infisical · Doppler · Keychain · dotenvx · local(dev-only)）·
+      <code>~/.mxenv/</code> 全局库（加密）· 项目 config / env.local · 审计 journal（无值）。
+      GUI 不碰文件、不碰值，只说 daemon 的本地 API；外部 SDK（Trellis 等）直接依赖 mxenv-core。
+    </div>
+
+    <h3 style="margin:38px 0 4px; font-size:20px;">三条关键机制</h3>
+    <div class="grid c3">
+      <div class="card">
+        <h3>① 产品包零互相依赖</h3>
+        <p>项目态写操作靠 <strong>spawn 项目本地 CLI</strong> 对齐版本（解析 cwd → <code>node_modules/.bin</code> → PATH），不靠包依赖；解析不到本地 CLI 就明确失败给安装指引，绝不静默以全局版本改写项目数据 —— 消解「项目钉版本 vs 全局滚动」的错位。</p>
+      </div>
+      <div class="card">
+        <h3>② 值安全 = 单一实现 + 窄暴露</h3>
+        <p>值能力唯一实现在 L1，L2/L3/SDK 只是调用方，GUI 永不直连。同 uid 下 daemon 本就能读文件，进程隔离是神话 —— 真实边界是<strong>窄暴露（compose / revealSingle）+ 全量审计 + 值不落输出</strong>。</p>
+      </div>
+      <div class="card">
+        <h3>③ 项目注册视图不扫描磁盘</h3>
+        <p>「哪些项目在用」两个源：<strong>审计 journal 派生</strong>（run/edit 时 append-only 记录 → 聚合出项目列表、最近使用、通道）+ <code>mxenv link</code> 显式置顶。单一事实源，不做文件系统扫描。</p>
+      </div>
+    </div>
+
+    <h3 style="margin:38px 0 4px; font-size:20px;">值安全边界（诚实版）</h3>
+    <div class="vflow">
+      <div class="step">
+        <span class="pill no">无值</span>
+        <h4>Agent / 对话 / 审计 / 日志</h4>
+        <p>inspect、audit、编辑器索引、skill 模板全程只出 key 名与状态；值不进对话、不进日志、不进审计字段。</p>
+      </div>
+      <div class="step">
+        <span class="pill yes">唯一通道</span>
+        <h4>mxenv run</h4>
+        <p>组合注入是进程拿到值的唯一方式；精确注入值从子进程 stdout/stderr 被脱敏（跨 chunk）。<code>--serve</code> 模式下值甚至不进 env，逐键按需取。</p>
+      </div>
+      <div class="step">
+        <span class="pill no">边界诚实</span>
+        <h4>拿到值的进程</h4>
+        <p>这是<strong>泄露最小化，不是密码学边界</strong>：拿到值的进程仍可主动外传。高风险能力应走 provider 代理/经纪（独立安全设计），而非把凭据递进 <code>run</code>。</p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong>Wave B 安全模型升级（短命会话 → 常驻但默认锁定）：</strong>
+      面板随时可开，默认锁定态只显示键名/状态；值回显需显式解锁，沿用逐键 reveal + 单值驻留；空闲自动锁；全部操作进审计（<code>via: host</code>）。
+      <strong>红线：值全程不出机器</strong> —— 云侧（如做）只放无值拓扑，值操作一律跳回本地面板。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 4. 命名与迁移 ================= -->
+<section id="naming">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">04</span><h2>命名与迁移：一次 BREAKING 全切</h2></div>
+    <p class="sec-sub">0.12.x 一个窗口把所有命名切到 mxenv 家族；垫片保证存量用户无感升级一个 minor 周期（0.13 移除）。</p>
+
+    <table>
+      <tr><th>面</th><th>旧名</th><th>新名</th><th>过渡（0.12.x）</th></tr>
+      <tr><td>CLI bin</td><td><code>mx-env</code> / <code>morphix-env</code></td><td><strong><code>mxenv</code></strong></td><td>alias bin 转发 + stderr 弃用提示（stdout 保持纯净）</td></tr>
+      <tr><td>npm 包</td><td><code>morphix-env</code></td><td><strong><code>mxenv</code> / <code>mxenv-core</code> / <code>mxenv-cli</code></strong></td><td>旧包发收尾版 + deprecate 指路</td></tr>
+      <tr><td>URI scheme</td><td><code>mx-env://</code></td><td><strong><code>mxenv://</code></strong></td><td>无垫片直切（已实证零存量消费者），旧 scheme 报错提示</td></tr>
+      <tr><td>配置文件</td><td><code>mx-env.config.json</code></td><td><strong><code>mxenv.config.json</code></strong></td><td>读双认（新优先）；写只落新名，旧文件来源写前备份改名</td></tr>
+      <tr><td>全局目录</td><td><code>~/.mx-env/</code></td><td><strong><code>~/.mxenv/</code></strong></td><td>读回落旧目录 + 提示；<code>mxenv migrate --home</code> 搬迁</td></tr>
+      <tr><td>插件</td><td><code>mx-env-provider-&lt;name&gt;</code></td><td><strong><code>mxenv-provider-&lt;name&gt;</code></strong></td><td>解析双认（新优先）</td></tr>
+      <tr><td>keychain service</td><td><code>mx-env:&lt;source&gt;</code></td><td><strong><code>mxenv:&lt;source&gt;</code></strong></td><td>旧 service 名由配置携带照读，<strong>不要求重迁移</strong></td></tr>
+      <tr><td>shell-init</td><td><code>mx-env shell-init</code></td><td><strong><code>mxenv-cli shell-init</code></strong></td><td>随三包拆分迁往全局管理面</td></tr>
+    </table>
+
+    <div class="callout">
+      <strong><code>mxenv migrate --home</code>（全局库搬迁）：</strong>
+      copy <code>~/.mx-env/</code> → <code>~/.mxenv/</code> → <strong>值级等价验证</strong>（键集 + 逐键值比对）→ 通过后旧目录改名
+      <code>~/.mx-env.backup-&lt;ts&gt;</code> 留作回滚备份。全程值不落输出、幂等；目标已存在拒绝覆盖；验证失败删半成品还原。
+    </div>
+  </div>
+</section>
+
+<!-- ================= 5. 路线 ================= -->
+<section id="roadmap">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">05</span><h2>落地路线：三波</h2></div>
+    <p class="sec-sub">时间窗口约束：<strong><code>mxenv://</code> scheme 必须抢在 Trellis W2（SDK 消费）实施前定案</strong> —— 已在 Wave A 立项时锁定。</p>
+
+    <div class="waves">
+      <div class="wave a">
+        <div class="wh">WAVE A</div>
+        <h3>命名与品牌基础</h3>
+        <ul>
+          <li>命名全切（含 <code>mxenv://</code>）</li>
+          <li>三包拆分（mxenv / mxenv-cli / mxenv-core）</li>
+          <li><code>migrate --home</code> 迁移工具</li>
+          <li>LICENSE + SECURITY.md</li>
+          <li>同步 Trellis W2 change 文案</li>
+        </ul>
+        <div class="st doing">● 进行中 —— 实施 change：mxenv-package-split / mxenv-naming-cutover / mxenv-home-migration（原 mxenv-rebrand-layering 拆分替代）；文档先行完成</div>
+      </div>
+      <div class="wave b">
+        <div class="wh">WAVE B</div>
+        <h3>常驻 host + 面板</h3>
+        <ul>
+          <li>daemon（loopback + token）+ launchd</li>
+          <li>面板：来源/上游总览、键管理、migrate 入口、审计</li>
+          <li>审计 <code>configPath</code> + reveal API</li>
+          <li>项目注册视图（审计派生 + link）</li>
+          <li>统一命令入口定案</li>
+        </ul>
+        <div class="st next">○ 单独立 OpenSpec change</div>
+      </div>
+      <div class="wave c">
+        <div class="wh">WAVE C</div>
+        <h3>开源收尾 + 1.0</h3>
+        <ul>
+          <li>新 icon（SVG 源 + favicon + 单色版）</li>
+          <li>README 重排 / CONTRIBUTING</li>
+          <li>gitleaks 历史扫描</li>
+          <li>blog 收编 · 1.0</li>
+        </ul>
+        <div class="st next">○ 依赖 A/B</div>
+      </div>
+    </div>
+
+    <div class="callout accent">
+      <strong>验收口径（三条产品要求）：</strong>
+      ① 项目装即完整可用 + 可定制上游 + 全局变量 ∪ 项目 <code>env.local</code>；
+      ② 全局 CLI = 增强体验（装全局只做加法）；
+      ③ CLI 带 GUI 能力。任何实现偏离这三条，即视为回退。
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap cols">
+    <div>
+      <b>mxenv</b> · 密钥组装层<br>
+      权威正文：<code>docs/ux-architecture.md</code> · 实施契约：<code>openspec/changes/mxenv-package-split/</code> 等三 change
+    </div>
+    <div>
+      状态：Wave A 立项（2026-11-06，strict 通过）· 文档先行完成<br>
+      三包 npm 名已核实可用 · MIT License · Security: GitHub Private Vulnerability Reporting
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
