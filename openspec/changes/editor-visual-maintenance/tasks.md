@@ -30,4 +30,4 @@
 
 - [x] 5.1 新增 `test/editor.test.ts`（临时 HOME、真实 dotenvx 夹具）覆盖 spec 场景：索引可达、键名列表、揭示/单值驻留/文件值优先、增改删、会话不随保存关闭、审计零值；`npm test` 全绿
 - [x] 5.2 `openspec validate --strict` 通过；全量 `npm test` + `npm run build` 绿；独立代码 review（findings 修复后复查）
-- [ ] 5.3 端到端人工验收：本机用新构建拉起编辑器，完成三目标验收用例（查看11键+揭示、增/删测试键、来源切换、All sources 可达）
+- [x] 5.3 端到端人工验收：本机用新构建拉起编辑器，完成三目标验收用例（查看11键+揭示、增/删测试键、来源切换、All sources 可达）
