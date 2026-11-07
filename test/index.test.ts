@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto'
 import { createRequire } from 'module'
 
 const requireFromTests = createRequire(join(__dirname, 'index.test.ts'))
-const ROOT = join(tmpdir(), `mx-env-index-${randomUUID()}`)
+const ROOT = join(tmpdir(), `mxenv-index-${randomUUID()}`)
 const HOME = join(ROOT, 'home')
 const PROJECT = join(ROOT, 'project')
 const DIST_INDEX = join(__dirname, '..', 'dist', 'index.js')
@@ -29,16 +29,41 @@ function writeProject(): string {
 }
 
 describe('package exports', () => {
-  it('maps "." to the SDK facade and "./cli" to the CLI entry', () => {
+  it('maps "." to the SDK facade and "./cli"/bin to the forwarding stub', () => {
     const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
       main: string
       types: string
+      bin: Record<string, string>
       exports: Record<string, { types: string; default: string }>
     }
     expect(manifest.main).toBe('./dist/index.js')
     expect(manifest.types).toBe('./dist/index.d.ts')
     expect(manifest.exports['.']).toEqual({ types: './dist/index.d.ts', default: './dist/index.js' })
-    expect(manifest.exports['./cli']).toEqual({ types: './dist/cli.d.ts', default: './dist/cli.js' })
+    // 0.12.x 收尾转发 stub：旧 bin 与 ./cli 都落 forward-cli.js（不得再悬空指 dist/cli.js）。
+    expect(manifest.exports['./cli']).toEqual({ types: './bin/forward-cli.d.ts', default: './bin/forward-cli.js' })
+    expect(manifest.bin['mx-env']).toBe('./bin/forward-cli.js')
+    expect(manifest.bin['morphix-env']).toBe('./bin/forward-cli.js')
+  })
+
+  it('dist facade .d.ts 钉住公开类型面（防 tsup dts 丢 type re-export）', () => {
+    const dts = readFileSync(join(__dirname, '..', 'dist', 'index.d.ts'), 'utf8')
+    // 公开类型面=12 个（与 HEAD SDK facade 逐一一致，缺一即 .d.ts 面回归）。
+    for (const name of [
+      'ComposeOptions',
+      'EnvironmentComposition',
+      'KeyProvenance',
+      'SourceStatus',
+      'ConfigLayers',
+      'LoadedConfig',
+      'LoadConfigOptions',
+      'MxEnvConfig',
+      'ProfileDefinition',
+      'ProfileInput',
+      'SecretSource',
+      'SourceEntry',
+    ]) {
+      expect(dts, `类型导出 ${name} 丢失`).toContain(name)
+    }
   })
 })
 
@@ -51,6 +76,7 @@ describe('SDK facade from dist', () => {
     expect(typeof sdk.loadConfigLayers).toBe('function')
     expect(typeof sdk.validateConfig).toBe('function')
     expect(typeof sdk.StreamingRedactor).toBe('function')
+    expect(typeof sdk.CompositionError).toBe('function')
     // Legacy helpers mutate process.env and must not ride the facade.
     expect(sdk.loadEnvFiles).toBeUndefined()
     expect(sdk.fetchInfisicalSecrets).toBeUndefined()

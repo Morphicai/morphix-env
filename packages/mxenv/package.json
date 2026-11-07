@@ -1,0 +1,69 @@
+{
+  "name": "@morphixai/mxenv",
+  "version": "0.12.1",
+  "description": "L2 run face for mxenv — run/export/inspect, source management, edit, migrate, skills.",
+  "license": "MIT",
+  "author": "MorphixAI <dev@morphixai.com>",
+  "homepage": "https://github.com/Morphicai/morphix-env#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Morphicai/morphix-env.git",
+    "directory": "packages/mxenv"
+  },
+  "bugs": {
+    "url": "https://github.com/Morphicai/morphix-env/issues"
+  },
+  "bin": {
+    "mxenv": "./dist/cli.js",
+    "mx-env": "./dist/cli.js",
+    "morphix-env": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build-editor-ui.mjs && tsup && node scripts/copy-skill.mjs",
+    "dev": "node scripts/build-editor-ui.mjs && tsup --watch",
+    "test": "pnpm --filter @morphixai/mxenv-core build && pnpm build && vitest run",
+    "typecheck": "pnpm --filter @morphixai/mxenv-core build && node scripts/build-editor-ui.mjs && tsc --noEmit && tsc --noEmit -p tsconfig.editor-ui.json",
+    "prepublishOnly": "node ../../scripts/prepublish-guard.mjs"
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.6",
+    "dotenv": "^17.3.1",
+    "@morphixai/mxenv-core": "^0.12.0"
+  },
+  "devDependencies": {
+    "@radix-ui/react-alert-dialog": "^1.1.0",
+    "@radix-ui/react-select": "^2.1.0",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "esbuild": "^0.27.0",
+    "happy-dom": "^21.0.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.1"
+  }
+}

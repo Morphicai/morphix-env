@@ -1,0 +1,61 @@
+{
+  "name": "@morphixai/mxenv-core",
+  "version": "0.12.1",
+  "description": "L0 contracts + L1 shared capabilities for mxenv — composition engine, providers, value-safe compose (revealSingle 归 Wave B).",
+  "license": "MIT",
+  "author": "MorphixAI <dev@morphixai.com>",
+  "homepage": "https://github.com/Morphicai/morphix-env#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Morphicai/morphix-env.git",
+    "directory": "packages/mxenv-core"
+  },
+  "bugs": {
+    "url": "https://github.com/Morphicai/morphix-env/issues"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "default": "./dist/contracts.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "pnpm build && vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "node ../../scripts/prepublish-guard.mjs"
+  },
+  "dependencies": {
+    "@infisical/sdk": "^5.0.0",
+    "dotenv": "^17.3.1"
+  },
+  "optionalDependencies": {
+    "keytar": "7.9.0"
+  },
+  "devDependencies": {
+    "@dotenvx/dotenvx": "2.30.0",
+    "@types/node": "^25.5.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.1"
+  }
+}

@@ -1,7 +1,7 @@
 # plaintext-retirement Specification
 
 ## Purpose
-把 local 明文存储从"默认路径"退场为"仅开发用"：提供 `mx-env migrate` 一键迁移（dotenvx/os-keychain 两目标、备份、值级等价验证、可回滚），并在 inspect/文档/可选提醒三处钉死 local 明文的定位。
+把 local 明文存储从"默认路径"退场为"仅开发用"：提供 `mxenv migrate` 一键迁移（dotenvx/os-keychain 两目标、备份、值级等价验证、可回滚），并在 inspect/文档/可选提醒三处钉死 local 明文的定位。
 
 ## Requirements
 

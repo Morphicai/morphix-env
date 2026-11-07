@@ -1,7 +1,7 @@
 # visual-editor Specification
 
 ## Purpose
-`mx-env edit` 一次性本地可视化编辑器：在 loopback 浏览器会话里查看、揭示、修改、新增、删除 provider 中的环境变量，并在来源/文件间导航；值只进入浏览器会话，永不进入 CLI 输出与审计。
+`mxenv edit` 一次性本地可视化编辑器：在 loopback 浏览器会话里查看、揭示、修改、新增、删除 provider 中的环境变量，并在来源/文件间导航；值只进入浏览器会话，永不进入 CLI 输出与审计。
 
 ## Requirements
 

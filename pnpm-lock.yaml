@@ -8,23 +8,41 @@ importers:
 
   .:
     dependencies:
-      '@infisical/sdk':
+      '@morphixai/mxenv':
+        specifier: ^0.12.0
+        version: link:packages/mxenv
+      '@morphixai/mxenv-core':
+        specifier: ^0.12.0
+        version: link:packages/mxenv-core
+    devDependencies:
+      '@dotenvx/dotenvx':
+        specifier: 2.30.0
+        version: 2.30.0
+      cjs-module-lexer:
+        specifier: ^2.0.0
+        version: 2.3.0
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(postcss@8.5.8)(typescript@5.9.3)
+      typescript:
         specifier: ^5.0.0
-        version: 5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.1
+        version: 4.1.1(@types/node@25.5.0)(happy-dom@21.0.4)(vite@8.0.2(@types/node@25.5.0)(esbuild@0.27.4))
+
+  packages/mxenv:
+    dependencies:
+      '@morphixai/mxenv-core':
+        specifier: ^0.12.0
+        version: link:../mxenv-core
       cross-spawn:
         specifier: ^7.0.6
         version: 7.0.6
       dotenv:
         specifier: ^17.3.1
         version: 17.3.1
-    optionalDependencies:
-      keytar:
-        specifier: 7.9.0
-        version: 7.9.0
     devDependencies:
-      '@dotenvx/dotenvx':
-        specifier: 2.30.0
-        version: 2.30.0
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.0
         version: 1.1.23(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -34,6 +52,9 @@ importers:
       '@types/cross-spawn':
         specifier: ^6.0.6
         version: 6.0.6
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.0
       '@types/react':
         specifier: ^19.1.0
         version: 19.3.0
@@ -43,6 +64,9 @@ importers:
       esbuild:
         specifier: ^0.27.0
         version: 0.27.4
+      happy-dom:
+        specifier: ^21.0.4
+        version: 21.0.4
       react:
         specifier: ^19.1.0
         version: 19.3.0
@@ -57,7 +81,55 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.1
-        version: 4.1.1(@types/node@25.5.0)(vite@8.0.2(@types/node@25.5.0)(esbuild@0.27.4))
+        version: 4.1.1(@types/node@25.5.0)(happy-dom@21.0.4)(vite@8.0.2(@types/node@25.5.0)(esbuild@0.27.4))
+
+  packages/mxenv-cli:
+    dependencies:
+      '@morphixai/mxenv-core':
+        specifier: ^0.12.0
+        version: link:../mxenv-core
+    devDependencies:
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.0
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(postcss@8.5.8)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.1
+        version: 4.1.1(@types/node@25.5.0)(happy-dom@21.0.4)(vite@8.0.2(@types/node@25.5.0)(esbuild@0.27.4))
+
+  packages/mxenv-core:
+    dependencies:
+      '@infisical/sdk':
+        specifier: ^5.0.0
+        version: 5.0.0
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.3.1
+    optionalDependencies:
+      keytar:
+        specifier: 7.9.0
+        version: 7.9.0
+    devDependencies:
+      '@dotenvx/dotenvx':
+        specifier: 2.30.0
+        version: 2.30.0
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.0
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(postcss@8.5.8)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.1
+        version: 4.1.1(@types/node@25.5.0)(happy-dom@21.0.4)(vite@8.0.2(@types/node@25.5.0)(esbuild@0.27.4))
 
 packages:
 
@@ -997,6 +1069,7 @@ packages:
   '@smithy/smithy-client@4.12.7':
     resolution: {integrity: sha512-q3gqnwml60G44FECaEEsdQMplYhDMZYCtYhMCzadCnRnnHIobZJjegmdoUo6ieLQlPUzvrMdIJUpx6DoPmzANQ==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/types@4.13.1':
     resolution: {integrity: sha512-787F3yzE2UiJIQ+wYW1CVg2odHjmaWLGksnKQHUrK/lYZSEcy1msuLVvxaR/sI2/aDe9U+TBuLsXnr3vod1g0g==}
@@ -1103,6 +1176,12 @@ packages:
   '@types/react@19.3.0':
     resolution: {integrity: sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==}
 
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
+
   '@vitest/expect@4.1.1':
     resolution: {integrity: sha512-xAV0fqBTk44Rn6SjJReEQkHP3RrqbJo6JQ4zZ7/uVOiJZRarBtblzrOfFIZeYUrukp2YD6snZG6IBqhOoHTm+A==}
 
@@ -1167,6 +1246,10 @@ packages:
   bowser@2.14.1:
     resolution: {integrity: sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg==}
 
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
+
   buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
 
@@ -1194,6 +1277,9 @@ packages:
 
   chownr@1.1.4:
     resolution: {integrity: sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg==}
+
+  cjs-module-lexer@2.3.0:
+    resolution: {integrity: sha512-lmNyBzi6iYiqyrExTctfmjd8tInx+dHu9PBomTfH5RXS53c27JMFJgzNv5TyAnm3PgGf+MLy0+Ws41/HlVxdKQ==}
 
   combined-stream@1.0.8:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
@@ -1269,6 +1355,10 @@ packages:
 
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
+
+  entities@7.0.1:
+    resolution: {integrity: sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA==}
+    engines: {node: '>=0.12'}
 
   es-define-property@1.0.1:
     resolution: {integrity: sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==}
@@ -1381,6 +1471,10 @@ packages:
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
+
+  happy-dom@21.0.4:
+    resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
+    engines: {node: '>=20.0.0'}
 
   has-property-descriptors@1.0.2:
     resolution: {integrity: sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==}
@@ -1950,6 +2044,10 @@ packages:
       jsdom:
         optional: true
 
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
+
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
@@ -1962,6 +2060,18 @@ packages:
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
+
+  ws@8.22.1:
+    resolution: {integrity: sha512-oyL6OPYme/CmiFvNuGzeoxCJ4nOrZE2O1FwM9MWM1AsGri6nLXB2pg+lNA8aLeXMSav0J6eIVS1j6vUPzUtK9g==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
 
   yocto-spinner@1.2.2:
     resolution: {integrity: sha512-DODGl1wJjA/s5pnJFKau9lIYHT81lnhob1i3e1TjxZRxEhWRKl74nTbWE6H5KlkViQQTo/Z29YFdxzTZAMY3ng==}
@@ -3237,6 +3347,12 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
+  '@types/whatwg-mimetype@3.0.2': {}
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 25.5.0
+
   '@vitest/expect@4.1.1':
     dependencies:
       '@standard-schema/spec': 1.1.0
@@ -3312,6 +3428,10 @@ snapshots:
 
   bowser@2.14.1: {}
 
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 25.5.0
+
   buffer@5.7.1:
     dependencies:
       base64-js: 1.5.1
@@ -3338,6 +3458,8 @@ snapshots:
 
   chownr@1.1.4:
     optional: true
+
+  cjs-module-lexer@2.3.0: {}
 
   combined-stream@1.0.8:
     dependencies:
@@ -3403,6 +3525,8 @@ snapshots:
     dependencies:
       once: 1.4.0
     optional: true
+
+  entities@7.0.1: {}
 
   es-define-property@1.0.1: {}
 
@@ -3539,6 +3663,19 @@ snapshots:
       gopd: 1.2.0
 
   gopd@1.2.0: {}
+
+  happy-dom@21.0.4:
+    dependencies:
+      '@types/node': 25.5.0
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.2
+      buffer-image-size: 0.6.4
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.22.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   has-property-descriptors@1.0.2:
     dependencies:
@@ -4042,7 +4179,7 @@ snapshots:
       esbuild: 0.27.4
       fsevents: 2.3.3
 
-  vitest@4.1.1(@types/node@25.5.0)(vite@8.0.2(@types/node@25.5.0)(esbuild@0.27.4)):
+  vitest@4.1.1(@types/node@25.5.0)(happy-dom@21.0.4)(vite@8.0.2(@types/node@25.5.0)(esbuild@0.27.4)):
     dependencies:
       '@vitest/expect': 4.1.1
       '@vitest/mocker': 4.1.1(vite@8.0.2(@types/node@25.5.0)(esbuild@0.27.4))
@@ -4066,8 +4203,11 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 25.5.0
+      happy-dom: 21.0.4
     transitivePeerDependencies:
       - msw
+
+  whatwg-mimetype@3.0.0: {}
 
   which@2.0.2:
     dependencies:
@@ -4080,6 +4220,8 @@ snapshots:
 
   wrappy@1.0.2:
     optional: true
+
+  ws@8.22.1: {}
 
   yocto-spinner@1.2.2:
     dependencies:
