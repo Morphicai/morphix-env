@@ -30,6 +30,7 @@ import {
   discoverPlaintextUnits,
   executeUnit,
   legacyPlaintextHints,
+  migrateHome,
   type MigrateTarget,
   type MigrationUnit,
   type UnitOutcome,
@@ -72,6 +73,7 @@ interface Args {
   force: boolean
   dryRun: boolean
   /** migrate: 全局目录一次性迁移（~/.mx-env → ~/.mxenv）。 */
+  home: boolean
   serve: boolean
   write: boolean
   remove: boolean
@@ -85,7 +87,7 @@ function parseArgs(argv: string[]): Args {
     command: '', subArgs: [], positionals: [], envFiles: [], outFile: null, verbose: false,
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
-    target: null, to: null, service: null, force: false, dryRun: false, serve: false,
+    target: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
     write: false, remove: false, warnPlaintext: false, unknownFlags: [],
   }
 
@@ -133,6 +135,8 @@ function parseArgs(argv: string[]): Args {
       args.force = true
     } else if (arg === '--dry-run') {
       args.dryRun = true
+    } else if (arg === '--home') {
+      args.home = true
     } else if (arg === '--write') {
       args.write = true
     } else if (arg === '--remove') {
@@ -690,6 +694,38 @@ async function cmdMigrate(args: Args): Promise<number> {
     console.error(`[mxenv] migrate: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
     return 1
   }
+  if (args.home) {
+    // 全局目录一次性迁移是独立模式（home-migration）：与明文迁移的 --to 面互斥。
+    if (args.to || args.source || args.service || args.dryRun || args.envFiles.length) {
+      console.error('[mxenv] migrate: --home is its own mode; do not combine it with --to/--source/--service/--dry-run/--env-file.')
+      return 1
+    }
+    const startedAt = Date.now()
+    const result = await migrateHome(homedir(), { allowInsecureGlobal: args.allowInsecureGlobal })
+    if (result.status === 'migrated') {
+      console.log(`[mxenv] ${result.detail}`)
+      if (result.backupPath) console.log(`[mxenv] Backup: ${result.backupPath} — delete it by hand once verified.`)
+      // shim PATH 重接指引只走 stderr（review S-1）；stdout 保持机器可读。
+      if (result.rcHint) console.error(result.rcHint)
+      writeAudit({
+        timestamp: new Date().toISOString(),
+        profile: 'migrate',
+        sources: ['global-home'],
+        keys: result.keyNames,
+        outcome: 'success',
+        exitCode: 0,
+        durationMs: Date.now() - startedAt,
+      })
+      return 0
+    }
+    if (result.status === 'noop') {
+      console.log(`[mxenv] ${result.detail}`)
+      return 0
+    }
+    // conflict / failed：一律 stderr（值永不出现），无审计写入（conflict 场景要求零写入）。
+    console.error(`[mxenv] ${result.detail}`)
+    return result.exitCode
+  }
   if (args.to && args.to !== 'dotenvx' && args.to !== 'keychain') {
     console.error('[mxenv] migrate: --to must be "dotenvx" or "keychain".')
     return 1
@@ -805,6 +841,7 @@ Usage:
   mxenv generate [options]               Generate public __env.js
   mxenv inspect [options]                Print key names, sources, and status only
   mxenv migrate [--to dotenvx|keychain]  Move plaintext local sources into encrypted storage
+  mxenv migrate --home                  Move the global directory ~/.mx-env → ~/.mxenv (verified, timestamped backup)
   mxenv doc [options]                    Generate a value-free project Skill
   mxenv audit [tail]                     Read value-free local audit events
   mxenv edit [--profile|--source <name>] Open the visual editor (15-min session)

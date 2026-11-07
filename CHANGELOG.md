@@ -7,6 +7,8 @@
 - **Three-package layout**: `mxenv-core` (composition engine + contracts), `mxenv` (project-facing run face), `mxenv-cli` (machine-level management face, Wave A: `shell-init`). Project install (`mxenv` as devDependency) is fully self-sufficient; the global CLI is an enhancement layer.
 - **`mxenv-cli shell-init`**: declarative PATH shims with two-level (global ∪ project) manifests, recursive stripping, and rc block management. Generated shims now delegate to `mxenv run` (see Changed for legacy shims).
 - Project-local CLI resolution for write operations (`cwd` → `node_modules/.bin` → PATH) with an actionable hard failure when no local CLI is installed.
+- **`mxenv migrate --home`**: one-shot global-directory migration (copy → timestamped backup `~/.mx-env.backup-<ts>` → value-level equivalence verification; automatic full restore on failure; rc PATH re-wiring to the new shim directory). Idempotent, never prints values.
+- Global directory `~/.mxenv/` with **read fallback** to legacy `~/.mx-env/`; during the compat window writes also land on the legacy directory so `migrate --home` never sees a self-created target. A one-time stderr hint points at `migrate --home`.
 
 ### Changed
 

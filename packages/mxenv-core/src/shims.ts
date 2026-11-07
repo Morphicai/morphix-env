@@ -1,7 +1,7 @@
 import { realpathSync } from 'fs'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
-import { GLOBAL_CONFIG_DIR } from './contracts'
+import { resolveGlobalDir } from './global-home'
 
 /**
  * Shared shim PATH/list logic (L1). The L2 CLI (`mxenv`) boot-sanitizes PATH so
@@ -29,9 +29,9 @@ export const RESERVED_SHIM_NAMES = [
 
 const SHIM_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
-/** Shims live under the renamed global dir `~/.mxenv/shims`. */
+/** Shims live under the renamed global dir `~/.mxenv/shims`; before `migrate --home` the legacy dir is the active library (home-migration compat read). */
 export function shimsDir(homeDir = homedir()): string {
-  return join(homeDir, GLOBAL_CONFIG_DIR, 'shims')
+  return join(resolveGlobalDir(homeDir), 'shims')
 }
 
 /**

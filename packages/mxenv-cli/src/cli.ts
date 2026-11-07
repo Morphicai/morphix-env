@@ -37,6 +37,7 @@ interface Args {
   force: boolean
   dryRun: boolean
   /** migrate: 全局目录一次性迁移（~/.mx-env → ~/.mxenv）。 */
+  home: boolean
   serve: boolean
   write: boolean
   remove: boolean
@@ -55,7 +56,7 @@ function parseArgs(argv: string[]): Args {
     command: '', subArgs: [], positionals: [], envFiles: [], outFile: null, verbose: false,
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
-    target: null, to: null, service: null, force: false, dryRun: false, serve: false,
+    target: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
     write: false, remove: false, warnPlaintext: false, unknownFlags: [],
   }
 
@@ -103,6 +104,8 @@ function parseArgs(argv: string[]): Args {
       args.force = true
     } else if (arg === '--dry-run') {
       args.dryRun = true
+    } else if (arg === '--home') {
+      args.home = true
     } else if (arg === '--write') {
       args.write = true
     } else if (arg === '--remove') {
@@ -152,6 +155,10 @@ function cmdShellInit(args: Args): number {
   }
   if (args.unknownFlags.length) {
     console.error(`[mxenv] shell-init: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
+    return 1
+  }
+  if (args.home) {
+    console.error('[mxenv] shell-init: --home belongs to `migrate` (global directory migration) and is not accepted here.')
     return 1
   }
   if (args.write && args.remove) {

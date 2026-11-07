@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'fs'
-import { dirname, join, resolve } from 'path'
+import { dirname, resolve } from 'path'
 import { homedir } from 'os'
 import {
   CONFIG_FILE,
@@ -10,7 +10,7 @@ import {
   type LoadedConfig,
   type MxEnvConfig,
 } from './contracts'
-import { GLOBAL_CONFIG_DIR } from './contracts'
+import { resolveGlobalDir } from './global-home'
 
 // 纯 schema（常量/类型/纯校验）已抽至 ./contracts（L0）；此处 re-export 保持
 // 既有模块导入面不倒退。此模块只保留读文件的配置发现能力（L1）。
@@ -98,7 +98,7 @@ export function loadConfig(cwd = process.cwd()): MxEnvConfig {
 export function loadConfigLayers(options: LoadConfigOptions = {}): ConfigLayers {
   const cwd = options.cwd || process.cwd()
   const homeDir = options.homeDir || homedir()
-  const globalDir = join(homeDir, GLOBAL_CONFIG_DIR)
+  const globalDir = resolveGlobalDir(homeDir)
 
   return {
     global: loadConfigAt(resolve(globalDir, GLOBAL_CONFIG_FILE)),

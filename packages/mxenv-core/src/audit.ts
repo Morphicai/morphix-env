@@ -2,14 +2,14 @@ import { appendFileSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import type { AuditEvent } from './contracts'
-import { GLOBAL_CONFIG_DIR } from './contracts'
+import { resolveGlobalDir } from './global-home'
 
 // AuditEvent 类型已抽至 ./contracts（L0）；re-export 保持原导出面。
 export type { AuditEvent } from './contracts'
 
-/** 审计目录——读写单一事实源（随命名切换 `~/.mxenv/audit`）；`audit` 命令读面共用本函数。 */
+/** 审计目录——读写单一事实源（随命名切换 `~/.mxenv/audit`，未迁移回落旧目录）；`audit` 命令读面共用本函数。 */
 export function auditDir(homeDir = homedir()): string {
-  return join(homeDir, GLOBAL_CONFIG_DIR, 'audit')
+  return join(resolveGlobalDir(homeDir), 'audit')
 }
 
 /** Best-effort local audit that intentionally has no values or command arguments. */

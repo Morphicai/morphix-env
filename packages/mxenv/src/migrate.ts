@@ -1,17 +1,25 @@
 import { execFileSync } from 'child_process'
-import { chmodSync, copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
-import { homedir } from 'os'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs'
+import { homedir, tmpdir } from 'os'
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'path'
 import { parse as dotenvParse } from 'dotenv'
 import {
+  composeEnvironment,
   CONFIG_FILE,
   ensureCommand,
   expandHomePath,
+  GLOBAL_CONFIG_DIR,
   GLOBAL_DOTENV_SOURCE,
+  hasRcBlock,
   isDotenvxEncrypted,
+  LEGACY_GLOBAL_CONFIG_DIR,
+  loadConfigLayers,
   loadKeytar,
   loadSource,
   parseEnvFile,
+  replaceRcBlocks,
+  shimsDir,
+  suppressLegacyHomeHint,
   type ConfigLayers,
   type LocalSource,
   type SecretSource,
@@ -472,5 +480,272 @@ export async function executeUnit(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown failure'
     return { unit, status: 'failed', backups, warnings: [], detail: message }
+  }
+}
+
+// ─── migrate --home：全局目录一次性迁移（home-migration D4） ───────────────
+// copy → 旧目录改名留时间戳备份 → 值级等价验证（目标目录独立生效）→ 失败从
+// 备份整目录还原+清半成品。顺序取"备份先于验证"（design D4 综合裁决）：spec
+// 验证失败场景要求"从备份还原、stderr 指明备份路径"（失败时备份必须已存在），
+// 且目标独立验证能暴露显式旧路径引用断裂。验证完成前目标内留 `.mxenv-verify-pending`
+// 标记：崩溃后重跑不报 already migrated，回滚重启使验证必然发生（review N-2）。
+
+export interface HomeMigrationResult {
+  status: 'migrated' | 'noop' | 'conflict' | 'failed'
+  /** Value-free operator message: paths + key names only. */
+  detail: string
+  exitCode: number
+  /** Timestamped backup directory (success only). */
+  backupPath?: string
+  /** Global-library key names verified equivalent (value-free, base keys excluded). */
+  keyNames: string[]
+  /** shim PATH 重接指引（仅成功路径有值时，CLI 打到 stderr；review S-1）。 */
+  rcHint?: string
+}
+
+/** Recursive copy that preserves permission bits（0600 检查不变靠此保持）。 */
+function copyTree(src: string, dest: string): void {
+  mkdirSync(dest, { recursive: true })
+  chmodSync(dest, statSync(src).mode & 0o7777)
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    const from = join(src, entry.name)
+    const to = join(dest, entry.name)
+    if (entry.isSymbolicLink()) {
+      symlinkSync(readlinkSync(from), to)
+    } else if (entry.isDirectory()) {
+      copyTree(from, to)
+    } else {
+      copyFileSync(from, to)
+      chmodSync(to, statSync(from).mode & 0o7777)
+    }
+  }
+}
+
+/** 全局库组合快照：空项目 cwd 隔离项目层，verificationEnv 为底（hermetic 纪律）。
+ * 只保留有 provenance 的库键——PATH/HOME 等底座键不属全局库内容，不进等值
+ * 比对与 keyNames/审计计数（home-migration review N-7）。 */
+async function composeGlobalLibrary(homeDir: string, allowInsecureGlobal: boolean): Promise<Record<string, string>> {
+  const cwd = mkdtempSync(join(tmpdir(), 'mxenv-home-verify-'))
+  try {
+    const layers = loadConfigLayers({ cwd, homeDir })
+    const composition = await composeEnvironment(layers, {
+      homeDir,
+      baseEnvironment: verificationEnv(),
+      allowInsecureGlobal,
+    })
+    // ProcessEnv 的值类型含 undefined；组合产物里值均为字符串（快照只做等值比较）。
+    const environment = { ...composition.environment } as Record<string, string>
+    return Object.fromEntries(Object.keys(composition.provenance).map((key) => [key, environment[key]]))
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
+}
+
+/** 值级差异只出键名（值永不落输出）。 */
+function keyDiff(expected: Record<string, string>, actual: Record<string, string>): string[] {
+  const names = new Set([...Object.keys(expected), ...Object.keys(actual)])
+  return [...names].filter((key) => expected[key] !== actual[key]).sort()
+}
+
+/** 崩溃残留的半拷贝相位清扫（review N-6）：`.mxenv.partial-*` 不参与全局目录解析，但不许累积。 */
+function sweepStalePartials(homeDir: string, targetDir: string): void {
+  const prefix = `${basename(targetDir)}.partial-`
+  for (const name of readdirSync(homeDir)) {
+    if (!name.startsWith(prefix)) continue
+    try { rmSync(join(homeDir, name), { recursive: true, force: true }) } catch { /* 残留清扫尽力而为 */ }
+  }
+}
+
+/**
+ * 迁移成功后重接 shim PATH（review S-1）：rc 块烘死的是 shimsDir 绝对路径，
+ * 旧目录改名走后 PATH 条目指向空无。只动工具自有标记块（新旧双认），逐文件
+ * 如实报结果；无块/有失败时由调用方给 stderr 指引，不得静默。
+ */
+function rewriteRcBlocksForMigration(homeDir: string): { updated: string[]; failures: string[]; found: boolean } {
+  const updated: string[] = []
+  const failures: string[] = []
+  let found = false
+  for (const name of ['.zshrc', '.bashrc']) {
+    const rcPath = join(homeDir, name)
+    let existing: string
+    try { existing = readFileSync(rcPath, 'utf8') } catch { continue }
+    if (!hasRcBlock(existing)) continue
+    found = true
+    try {
+      const replaced = replaceRcBlocks(existing, homeDir)
+      if (replaced !== existing) {
+        const tmp = `${rcPath}.mxenv-${process.pid}.tmp`
+        writeFileSync(tmp, replaced.endsWith('\n') ? replaced : `${replaced}\n`)
+        chmodSync(tmp, statSync(rcPath).mode) // 保权限位（0600 rc 不得摊成 0644）
+        renameSync(tmp, rcPath)
+      }
+      updated.push(rcPath)
+    } catch (error) {
+      failures.push(`${rcPath} (${error instanceof Error ? error.message : 'unknown failure'})`)
+    }
+  }
+  return { updated, failures, found }
+}
+
+export async function migrateHome(homeDir = homedir(), options: { allowInsecureGlobal?: boolean } = {}): Promise<HomeMigrationResult> {
+  suppressLegacyHomeHint()
+  const legacyDir = resolve(homeDir, LEGACY_GLOBAL_CONFIG_DIR)
+  const targetDir = resolve(homeDir, GLOBAL_CONFIG_DIR)
+  const markerName = '.mxenv-verify-pending'
+  const markerPath = join(targetDir, markerName)
+  const allowInsecureGlobal = options.allowInsecureGlobal ?? false
+
+  const backupsOnDisk = () =>
+    readdirSync(homeDir).filter((name) => name.startsWith(`${LEGACY_GLOBAL_CONFIG_DIR}.backup-`)).sort()
+
+  if (existsSync(targetDir)) {
+    if (existsSync(markerPath)) {
+      // 上次迁移在验证完成前中断（review N-2）：回滚到迁移前状态后重走全流程，
+      // 让值级等价验证必然发生——绝不把未验证态报成 already migrated。
+      let backupDir = ''
+      try { backupDir = readFileSync(markerPath, 'utf8').trim() } catch { /* 落到磁盘扫描兜底 */ }
+      if (!backupDir || !existsSync(backupDir)) {
+        const candidates = backupsOnDisk()
+        backupDir = candidates.length ? resolve(homeDir, candidates[candidates.length - 1]) : ''
+      }
+      try {
+        rmSync(targetDir, { recursive: true, force: true })
+      } catch (error) {
+        return {
+          status: 'failed', exitCode: 1, keyNames: [],
+          detail: `interrupted migration detected (verification pending) but the incomplete ${targetDir} cannot be removed: ${error instanceof Error ? error.message : 'unknown failure'} — remove it by hand, restore the matching ${LEGACY_GLOBAL_CONFIG_DIR}.backup-<ts> directory backup to ${legacyDir}, then re-run.`,
+        }
+      }
+      if (!existsSync(legacyDir) && backupDir && existsSync(backupDir)) {
+        try {
+          renameSync(backupDir, legacyDir)
+        } catch (error) {
+          return {
+            status: 'failed', exitCode: 1, keyNames: [],
+            detail: `interrupted migration detected (verification pending); restoring the directory backup ${backupDir} failed: ${error instanceof Error ? error.message : 'unknown failure'} — rename it to ${legacyDir} by hand, then re-run.`,
+          }
+        }
+      }
+      if (!existsSync(legacyDir)) {
+        return {
+          status: 'failed', exitCode: 1, keyNames: [],
+          detail: `interrupted migration detected (verification pending) but neither ${legacyDir} nor a directory backup to restore from was found — resolve by hand, then re-run.`,
+        }
+      }
+      // 已回到迁移前状态：落入下方正常流程（重新快照、copy、备份、验证）。
+    } else if (existsSync(legacyDir)) {
+      return {
+        status: 'conflict', exitCode: 1, keyNames: [],
+        detail: `both ${targetDir} and ${legacyDir} exist — refusing to overwrite (no writes made). Resolve by hand: inspect both, keep what you need in ${targetDir}, then rename ${legacyDir} away and re-run.`,
+      }
+    } else {
+      return { status: 'noop', exitCode: 0, keyNames: [], detail: `already migrated: ${targetDir} is in use.` }
+    }
+  }
+  if (!existsSync(legacyDir)) {
+    // 还原失败的残局（数据只在目录备份里）不得报 nothing to migrate（review N-5）。
+    const orphans = backupsOnDisk()
+    if (orphans.length) {
+      return {
+        status: 'failed', exitCode: 1, keyNames: [],
+        detail: `nothing at ${legacyDir} or ${targetDir}, but directory backup(s) hold the global library: ${orphans.join(', ')} — a previous restore likely failed; restore manually by renaming the right backup to ${legacyDir}, then re-run.`,
+      }
+    }
+    return { status: 'noop', exitCode: 0, keyNames: [], detail: `nothing to migrate: no legacy ${legacyDir} found.` }
+  }
+
+  sweepStalePartials(homeDir, targetDir)
+
+  // 迁移前快照（目标不在场，回落读旧目录）。
+  let before: Record<string, string>
+  try {
+    before = await composeGlobalLibrary(homeDir, allowInsecureGlobal)
+  } catch (error) {
+    return {
+      status: 'failed', exitCode: 1, keyNames: [],
+      detail: `cannot load the global library before migrating: ${error instanceof Error ? error.message : 'unknown failure'}; nothing was changed.`,
+    }
+  }
+
+  /** 清理如实报（review N-5）：失败不吞，返回可进 detail 的说明。 */
+  const cleanup = (path: string): string | null => {
+    try {
+      rmSync(path, { recursive: true, force: true })
+      return null
+    } catch (error) {
+      return `cleanup incomplete for ${path} (${error instanceof Error ? error.message : 'unknown failure'}) — remove it by hand`
+    }
+  }
+
+  // 半拷贝不落生效名（review N-6）：先拷到临时名，整树就绪（含验证标记）再改名
+  // 入位——并存读者在任何相位都只会读到完整的旧库或完整的新库。
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupDir = resolve(homeDir, `${LEGACY_GLOBAL_CONFIG_DIR}.backup-${stamp}`)
+  const partialDir = `${targetDir}.partial-${stamp}`
+  try {
+    copyTree(legacyDir, partialDir)
+    // 验证标记随整树入位（review N-2）：验证通过才删除；崩溃后重跑走回滚重启。
+    writeFileSync(join(partialDir, markerName), `${backupDir}\n`)
+    renameSync(partialDir, targetDir)
+  } catch (error) {
+    // rename 是原子的：catch 里目标绝不是本进程产物（并发抢先建目标时误删即事故），
+    // 只清自己的临时名。
+    const cleanupIssue = cleanup(partialDir)
+    return {
+      status: 'failed', exitCode: 1, keyNames: [],
+      detail: `copy failed: ${error instanceof Error ? error.message : 'unknown failure'}; ${cleanupIssue ?? `removed partial copy`}, original preserved at ${legacyDir}.`,
+    }
+  }
+
+  // 迁移前留时间戳备份：旧目录改名（验证失败可整目录原子还原）。
+  try {
+    renameSync(legacyDir, backupDir)
+  } catch (error) {
+    const cleanupIssue = [cleanup(partialDir), cleanup(targetDir)].find(Boolean) ?? null
+    return {
+      status: 'failed', exitCode: 1, keyNames: [],
+      detail: `backup rename failed: ${error instanceof Error ? error.message : 'unknown failure'}; ${cleanupIssue ?? `removed partial copy`}, original preserved at ${legacyDir}.`,
+    }
+  }
+
+  // 迁移后值级等价验证：目标目录独立生效（旧目录已改名，显式旧路径引用在此暴露）。
+  const restoreFromBackup = (why: string): HomeMigrationResult => {
+    // 还原是否成立只认 rename 结果（review N-5：existsSync 兜底会谎报成功）。
+    let restored = false
+    try { renameSync(backupDir, legacyDir); restored = true } catch { /* 判定在 detail 里如实落 */ }
+    const cleanupIssue = cleanup(targetDir)
+    return {
+      status: 'failed', exitCode: 1, keyNames: [],
+      detail: `verification failed: ${why}; ${restored ? `restored from backup ${backupDir} (directory backup)` : `RESTORE FAILED — restore manually by renaming the directory backup ${backupDir} to ${legacyDir}`}; ${cleanupIssue ?? `removed partial ${targetDir}`}.`,
+    }
+  }
+  let after: Record<string, string>
+  try {
+    after = await composeGlobalLibrary(homeDir, allowInsecureGlobal)
+  } catch (error) {
+    return restoreFromBackup(error instanceof Error ? error.message : 'unknown failure')
+  }
+  const diff = keyDiff(before, after)
+  if (diff.length) {
+    // 失败 detail 给成因与下一步（review N-4）：差异键名 + 典型断裂面 + 可重跑。
+    return restoreFromBackup(
+      `keys differ after migration: ${diff.join(', ')} — likely a source in the global config explicitly references the legacy path (${legacyDir}/…); fix those references (values stay in place) and re-run`,
+    )
+  }
+
+  try { rmSync(markerPath) } catch { /* 标记残留会被下次重跑当中断处理并自愈 */ }
+
+  // shim PATH 重接（review S-1）：rc 块烘死旧 shimsDir，不重写即断供。
+  const rc = rewriteRcBlocksForMigration(homeDir)
+  const rcSummary = rc.updated.length ? `; rc PATH block rewired in ${rc.updated.join(', ')}` : ''
+  const rcHint = (!rc.found || rc.failures.length)
+    ? `[mxenv] shim PATH wiring: run \`mxenv-cli shell-init --write\` to point your rc block at ${shimsDir(homeDir)}${rc.failures.length ? ` (rc rewrite failed: ${rc.failures.join('; ')})` : ' (no marked rc block found)'}.`
+    : undefined
+  return {
+    status: 'migrated', exitCode: 0,
+    keyNames: Object.keys(before).sort(),
+    detail: `global directory migrated: ${legacyDir} -> ${targetDir} (${Object.keys(before).length} keys verified equivalent)${rcSummary}.`,
+    backupPath: backupDir,
+    rcHint,
   }
 }
