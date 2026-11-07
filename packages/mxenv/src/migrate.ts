@@ -1,9 +1,10 @@
 import { execFileSync } from 'child_process'
-import { chmodSync, copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
-import { delimiter, dirname, isAbsolute, join, resolve } from 'path'
+import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'path'
 import { parse as dotenvParse } from 'dotenv'
 import {
+  CONFIG_FILE,
   ensureCommand,
   expandHomePath,
   GLOBAL_DOTENV_SOURCE,
@@ -21,7 +22,7 @@ export type MigrateTarget = 'dotenvx' | 'keychain'
 
 /**
  * One migratable plaintext unit. `global-implicit` is the hardcoded
- * ~/.mx-env/.env source (dotenvx target only — its loading does not go through
+ * ~/.mxenv/.env source (dotenvx target only — its loading does not go through
  * profiles, so no config declaration can take it over; design decision 3).
  */
 export interface MigrationUnit {
@@ -112,30 +113,51 @@ export function legacyPlaintextHints(layers: ConfigLayers, units: MigrationUnit[
     .filter((file) => existsSync(file) && !covered.has(file) && !isDotenvxEncrypted(file))
 }
 
+const BACKUP_MARK = '.mxenv-backup-'
+// 解析侧双认旧后缀：备份同一次运行内生成即消费，但手工恢复/跨版本残留的
+// 旧名备份仍须能解析出还原目标（写侧只产新名）。
+const LEGACY_BACKUP_MARK = '.mx-env-backup-'
+
 function backupFile(file: string, stamp: string): string {
-  const backup = `${file}.mx-env-backup-${stamp}`
+  const backup = `${file}${BACKUP_MARK}${stamp}`
   copyFileSync(file, backup)
   chmodSync(backup, 0o600)
   return backup
 }
 
-const BACKUP_MARK = '.mx-env-backup-'
+/** 还原目标推导：取两种后缀中实际出现的位置（lastIndexOf：源文件名自身可含标记串）。 */
+function backupOriginalPath(backup: string): string {
+  const at = Math.max(backup.lastIndexOf(BACKUP_MARK), backup.lastIndexOf(LEGACY_BACKUP_MARK))
+  return at >= 0 ? backup.slice(0, at) : ''
+}
 
 /**
- * Restores every backup over its original. Returns the paths that could NOT be
- * restored — the caller must surface them instead of claiming a clean restore,
- * otherwise a half-restored unit would leave ciphertext being loaded as
- * plaintext with no alarm.
+ * Restores every backup over the path the read side will actually consult.
+ * `renamedTo` maps pre-rename path → post-rename path for config files that
+ * `rewriteDeclaredSource` moved to the new-name location mid-run: restoring
+ * such a backup to the old name would be ignored by dual-read (new name wins)
+ * and silently leave the rewritten config in force (review S2). Returns the
+ * paths that could NOT be restored — the caller must surface them instead of
+ * claiming a clean restore, otherwise a half-restored unit would leave
+ * ciphertext being loaded as plaintext with no alarm.
  */
-function restoreBackups(backups: string[]): string[] {
+function restoreBackups(backups: string[], renamedTo: Map<string, string>): string[] {
   const failed: string[] = []
   for (const backup of backups) {
-    // lastIndexOf: a source file may itself carry the mark in its name.
-    const original = backup.slice(0, backup.lastIndexOf(BACKUP_MARK))
+    const original = backupOriginalPath(backup)
+    const target = (original && renamedTo.get(original)) || original
     try {
-      if (original && existsSync(backup)) copyFileSync(backup, original)
+      if (!target || !existsSync(backup)) continue
+      // 未受损文件（如删除失败残留的原件）与备份逐字节一致即视作已还原：复制会
+      // 因文件锁定失败，但状态本就闭合，不应误报 RESTORE FAILED。
+      if (existsSync(target) && readFileSync(target).equals(readFileSync(backup))) continue
+      copyFileSync(backup, target)
+      // 改名后旧路径理论上已被 rename 移除；防御性清残留以维持单一配置事实源。
+      if (original && target !== original && existsSync(original)) {
+        try { rmSync(original) } catch { /* 残留清理是防御性的，失败不改变还原结果 */ }
+      }
     } catch {
-      if (original) failed.push(original)
+      if (target) failed.push(target)
     }
   }
   return failed
@@ -144,7 +166,7 @@ function restoreBackups(backups: string[]): string[] {
 /** Appends the restore outcome to a failure message; never claims a restore that did not happen. */
 function withRestoreOutcome(message: string, failed: string[], backups: string[]): string {
   if (failed.length) {
-    return `${message} RESTORE FAILED for: ${failed.join(', ')} — restore manually from the .mx-env-backup-* copies${backups.length ? ` (${backups.join(', ')})` : ''}.`
+    return `${message} RESTORE FAILED for: ${failed.join(', ')} — restore manually from the .mxenv-backup-* file backups${backups.length ? ` (${backups.join(', ')})` : ''}.`
   }
   return `${message} Plaintext and configuration were restored from backup${backups.length ? ` (${backups.join(', ')})` : ''}.`
 }
@@ -168,11 +190,21 @@ function droppedDeclaredFiles(unit: MigrationUnit, homeDir: string): string[] {
   return unit.source.files.filter((file) => !existing.has(resolveUnitFile(file, unit.baseDir, homeDir)))
 }
 
-function rewriteDeclaredSource(unit: MigrationUnit, newSource: SecretSource, stamp: string, backups: string[]): void {
-  const configPath = unit.configPath!
+function rewriteDeclaredSource(unit: MigrationUnit, newSource: SecretSource, stamp: string, backups: string[], renamedTo: Map<string, string>): void {
+  let configPath = unit.configPath!
   backups.push(backupFile(configPath, stamp))
   const parsed = JSON.parse(readFileSync(configPath, 'utf8')) as { sources?: Record<string, SecretSource> }
   parsed.sources![unit.name] = newSource
+  // 写只落新名（naming-migration「旧名垫片与弃用窗口」）：本次读取自旧名文件
+  // 且新名文件不存在时，改名至 mxenv.config.json 再写，维持单一配置事实源
+  // （备份已在上方落好，可回滚）。双文件并存时读侧本就优先新名，此处不可达。
+  const targetPath = resolve(dirname(configPath), CONFIG_FILE)
+  if (basename(configPath) !== CONFIG_FILE && !existsSync(targetPath)) {
+    renameSync(configPath, targetPath)
+    // 回滚目标=改名后的生效路径（读侧双读优先新名）；记账给 restoreBackups。
+    renamedTo.set(configPath, targetPath)
+    configPath = targetPath
+  }
   writeFileSync(configPath, `${JSON.stringify(parsed, null, 2)}\n`)
 }
 
@@ -189,7 +221,7 @@ export function gitIgnoreWarnings(paths: string[]): string[] {
       execFileSync('git', ['check-ignore', '-q', path], { cwd: dirname(path), stdio: ['ignore', 'ignore', 'ignore'] })
     } catch (error: any) {
       if (error?.status === 1) {
-        warnings.push(`[morphix-env] WARNING: ${path} is inside a git repository and NOT git-ignored — this file holds the decryption key and must never be committed.`)
+        warnings.push(`[mxenv] WARNING: ${path} is inside a git repository and NOT git-ignored — this file holds the decryption key and must never be committed.`)
       }
     }
   }
@@ -262,7 +294,7 @@ function decryptValues(command: string, files: string[]): Record<string, string>
   return values
 }
 
-async function migrateToDotenvx(unit: MigrationUnit, stamp: string, homeDir: string, backups: string[]): Promise<{ warnings: string[] }> {
+async function migrateToDotenvx(unit: MigrationUnit, stamp: string, homeDir: string, backups: string[], renamedTo: Map<string, string>): Promise<{ warnings: string[] }> {
   const snapshot = snapshotValues(unit)
   // Push one at a time: a mid-map throw must not leave unregistered plaintext
   // copies on disk that the failure output never mentions (review M2).
@@ -325,14 +357,14 @@ async function migrateToDotenvx(unit: MigrationUnit, stamp: string, homeDir: str
         ...(unit.source.override ? { override: true } : {}),
         ...(unit.source.optional ? { optional: true } : {}),
       }
-      rewriteDeclaredSource(unit, newSource, stamp, backups)
+      rewriteDeclaredSource(unit, newSource, stamp, backups, renamedTo)
       for (const dropped of droppedDeclaredFiles(unit, homeDir)) {
-        warnings.push(`[morphix-env] Warning: declared file "${dropped}" did not exist at migration time and was dropped from the rewritten source; re-add it to the config if it returns.`)
+        warnings.push(`[mxenv] Warning: declared file "${dropped}" did not exist at migration time and was dropped from the rewritten source; re-add it to the config if it returns.`)
       }
     }
     return { warnings: [...warnings, ...gitIgnoreWarnings(keysFiles)] }
   } catch (error) {
-    const failed = restoreBackups(backups)
+    const failed = restoreBackups(backups, renamedTo)
     // Remove `.env.keys` files this run created — they hold the private key for
     // ciphertext that no longer exists after the restore. Pre-existing ones are
     // covered by their backup restore above.
@@ -347,17 +379,19 @@ async function migrateToDotenvx(unit: MigrationUnit, stamp: string, homeDir: str
 /**
  * Verification for the keychain target is a **subset** check over the snapshot's
  * keys — a service may legitimately carry other accounts (the default name
- * `mx-env:<source>` collides across projects, and manual entries exist). Foreign
+ * `mxenv:<source>` collides across projects, and manual entries exist; configs
+ * that recorded a legacy `mx-env:<source>` service keep reading it as-is).
+ * Foreign
  * accounts are reported as a warning, never a failure (review H1).
  */
 function snapshotCovered(expected: Record<string, string>, actual: Record<string, string>): boolean {
   return Object.keys(expected).every((key) => actual[key] === expected[key])
 }
 
-async function migrateToKeychain(unit: MigrationUnit, service: string, stamp: string, homeDir: string, backups: string[]): Promise<{ warnings: string[] }> {
+async function migrateToKeychain(unit: MigrationUnit, service: string, stamp: string, homeDir: string, backups: string[], renamedTo: Map<string, string>): Promise<{ warnings: string[] }> {
   if (process.platform !== 'darwin') throw new Error('the os-keychain target is supported on macOS only; use --to dotenvx on this machine.')
   const keytar = await loadKeytar()
-  if (!keytar) throw new Error('the os-keychain target needs the optional native module "keytar"; reinstall morphix-env or use --to dotenvx.')
+  if (!keytar) throw new Error('the os-keychain target needs the optional native module "keytar"; reinstall mxenv or use --to dotenvx.')
 
   const snapshot = snapshotValues(unit)
   for (const file of unit.files) backups.push(backupFile(file, stamp))
@@ -378,15 +412,15 @@ async function migrateToKeychain(unit: MigrationUnit, service: string, stamp: st
     }
     const foreign = Object.keys(values).filter((key) => !(key in snapshot))
     const warnings = foreign.length
-      ? [`[morphix-env] Warning: keychain service "${service}" also holds ${foreign.length} unrelated account(s) (e.g. "${foreign[0]}"); verify the service is not shared unexpectedly.`]
+      ? [`[mxenv] Warning: keychain service "${service}" also holds ${foreign.length} unrelated account(s) (e.g. "${foreign[0]}"); verify the service is not shared unexpectedly.`]
       : []
-    rewriteDeclaredSource(unit, newSource, stamp, backups)
+    rewriteDeclaredSource(unit, newSource, stamp, backups, renamedTo)
     // Verification passed against the new store; the plaintext copies go away
     // (0600 backups remain until the operator deletes them).
     for (const file of unit.files) rmSync(file)
     return { warnings }
   } catch (error) {
-    const failed = restoreBackups(backups)
+    const failed = restoreBackups(backups, renamedTo)
     for (const key of Object.keys(snapshot)) {
       if (preExisting.has(key)) {
         // Restore the overwritten old value — never leave the new value in place.
@@ -422,6 +456,9 @@ export async function executeUnit(
   }
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const backups: string[] = []
+  // 改名记账：rewriteDeclaredSource 把旧名配置 rename 至新名后，回滚必须还原到
+  // 新名（读侧生效路径），否则回滚形同虚设（review S2）。
+  const renamedTo = new Map<string, string>()
   // A zero-key unit has nothing to move; dotenvx encrypt would report "no
   // change" and leave a plaintext file behind while the report claims success.
   if (!unit.keyNames.length) {
@@ -429,8 +466,8 @@ export async function executeUnit(
   }
   try {
     const { warnings } = target === 'dotenvx'
-      ? await migrateToDotenvx(unit, stamp, homeDir, backups)
-      : await migrateToKeychain(unit, options.service || `mx-env:${unit.name}`, stamp, homeDir, backups)
+      ? await migrateToDotenvx(unit, stamp, homeDir, backups, renamedTo)
+      : await migrateToKeychain(unit, options.service || `mxenv:${unit.name}`, stamp, homeDir, backups, renamedTo)
     return { unit, status: 'migrated', backups, warnings, detail: '' }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown failure'

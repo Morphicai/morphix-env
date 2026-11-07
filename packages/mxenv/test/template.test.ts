@@ -15,7 +15,7 @@ import {
   writePrivateFile,
 } from '../src/template'
 
-const ROOT = join(tmpdir(), `mx-env-template-${randomUUID()}`)
+const ROOT = join(tmpdir(), `mxenv-template-${randomUUID()}`)
 
 function file(name: string): string {
   return join(ROOT, name)

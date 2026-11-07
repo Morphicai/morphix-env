@@ -6,7 +6,7 @@ import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { loadSource } from '../src/sources'
 
-const ROOT = join(tmpdir(), `mx-env-dotenvx-${randomUUID()}`)
+const ROOT = join(tmpdir(), `mxenv-dotenvx-${randomUUID()}`)
 const dotenvx = join(process.cwd(), 'node_modules', '.bin', 'dotenvx')
 
 afterEach(() => {

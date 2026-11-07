@@ -180,7 +180,7 @@ mxenv render <template> <output>       # substitute ${VAR} into a config file (m
 mxenv inject <template> <output>       # resolve mxenv://profile/KEY references into a file (mode 0600)
 mxenv inspect [--profile dev]          # key names + provenance, no values
 mxenv migrate [--to dotenvx|keychain]  # move plaintext local sources into encrypted storage
-mxenv edit [--profile dev | --source s] # one-shot visual editor
+mxenv edit [--profile dev | --source s] # session-based local visual editor (stays open across saves)
 mxenv generate --out public/__env.js   # public browser runtime config
 mxenv doc                              # write this project's key→source skill
 mxenv skill install | show             # packaged Agent Skill (global / project / trellis)
@@ -229,6 +229,8 @@ Existing `infisical` + `envFiles` config keeps working unchanged. Migrate to `so
 Compatibility shims last one minor cycle (0.12.x) and warn on stderr: old bin names still run, `mx-env.config.json` / `~/.mx-env/` / `mx-env-provider-*` are still read when the new name is absent, and writes always use the new names. `mx-env://` references are rejected with a rename hint (no silent compatibility). Move the global store with `mxenv migrate --home`: copies the store, verifies value-level equivalence, then renames the old directory to `~/.mx-env.backup-<timestamp>` as the rollback backup — never prints values, idempotent, and refuses to overwrite an existing `~/.mxenv/`.
 
 The npm package `morphix-env` ships one final release and is deprecated in favor of the three packages above; the repository rename follows separately.
+
+Two migration caveats: **do not install `mxenv` and `mxenv-cli` globally side by side** — both register the `mxenv`/`mx-env`/`morphix-env` bin names and the later install silently takes over the symlinks (pick `mxenv-cli` for machine-level management, or `mxenv` as a project devDependency); and **the global CLI no longer ships project commands** — `run`/`export`/`inspect`/`migrate`/`edit` come from the project-facing `mxenv` package, so the 0.11 `mx-env run …`-from-global pattern becomes a project-local invocation.
 
 ## License
 

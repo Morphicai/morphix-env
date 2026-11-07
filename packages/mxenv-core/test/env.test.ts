@@ -5,7 +5,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 
-const TMP = join(tmpdir(), 'mx-env-test-' + Date.now())
+const TMP = join(tmpdir(), 'mxenv-test-' + Date.now())
 const testValue = (label: string) => `mxenv_test_${label}_${randomUUID().replace(/-/g, '')}`
 
 beforeEach(() => {

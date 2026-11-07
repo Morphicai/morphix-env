@@ -47,7 +47,7 @@ function Page({ state, title, subtitle, children }: {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">mx</span>
-          <span className="brand-name">mx-env</span>
+          <span className="brand-name">mxenv</span>
           <span className="brand-divider" aria-hidden="true" />
           <span className="brand-crumb">Secret editor</span>
         </div>
@@ -340,7 +340,7 @@ function DotenvxPage({ state }: { state: Extract<EditorUiState, { page: 'dotenvx
                         <AlertDialog.Content className="dialog-content">
                           <AlertDialog.Title className="dialog-title">Delete “{key}”?</AlertDialog.Title>
                           <AlertDialog.Description className="dialog-description">
-                            This removes the key from the encrypted file. The stored value is destroyed and cannot be recovered from mx-env.
+                            This removes the key from the encrypted file. The stored value is destroyed and cannot be recovered from mxenv.
                           </AlertDialog.Description>
                           <div className="dialog-actions">
                             <AlertDialog.Cancel className="btn btn-ghost">Cancel</AlertDialog.Cancel>
@@ -428,7 +428,7 @@ function KeychainPage({ state }: { state: Extract<EditorUiState, { page: 'keycha
                         <AlertDialog.Title className="dialog-title">Delete “{account}”?</AlertDialog.Title>
                         <AlertDialog.Description className="dialog-description">
                           This removes the entry from the OS keychain service <code className="inline-code">{state.service}</code>.
-                          The stored value is destroyed and cannot be recovered from mx-env.
+                          The stored value is destroyed and cannot be recovered from mxenv.
                         </AlertDialog.Description>
                         <div className="dialog-actions">
                           <AlertDialog.Cancel className="btn btn-ghost">Cancel</AlertDialog.Cancel>
@@ -474,8 +474,8 @@ function ProviderPage({ state }: { state: Extract<EditorUiState, { page: 'provid
     >
       <section className="card provider-card">
         <p className="provider-hint">
-          mx-env composes keys from this provider but cannot edit them locally. Open the provider console to review or rotate values,
-          then validate with <code className="inline-code">mx-env inspect</code>.
+          mxenv composes keys from this provider but cannot edit them locally. Open the provider console to review or rotate values,
+          then validate with <code className="inline-code">mxenv inspect</code>.
         </p>
         {state.url
           ? <a className="btn btn-primary" href={state.url} target="_blank" rel="noreferrer">Open provider editor <ExternalIcon /></a>

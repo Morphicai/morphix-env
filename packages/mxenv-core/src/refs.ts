@@ -9,13 +9,13 @@ import {
 import { composeEnvironment, type ComposeOptions, type EnvironmentComposition } from './composition'
 import type { ConfigLayers } from './config'
 
-// `mx-env://` 引用语法的纯解析层（pattern/类型/find/has）已抽至 ./contracts
+// `mxenv://` 引用语法的纯解析层（pattern/类型/find/has）已抽至 ./contracts
 // （L0）；re-export 保持原导出面。此模块只保留依赖组合能力的解析器（L1）。
 export { findMxEnvReferences, hasMxEnvReference } from './contracts'
 export type { MxEnvReference, ReferenceResolution, UnresolvedReference } from './contracts'
 
 /**
- * Resolves `mx-env://` references against composed profiles without mutating
+ * Resolves `mxenv://` references against composed profiles without mutating
  * process.env. Compositions are cached per resolver; the `chain` argument only
  * travels down one resolution path so a reference loop is reported as a cycle
  * instead of recursing forever.

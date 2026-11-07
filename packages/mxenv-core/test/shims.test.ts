@@ -46,6 +46,20 @@ describe('validateShimList', () => {
     expect(RESERVED_SHIM_NAMES).toContain('gui')
   })
 
+  it('bin 主名/旧名与保留入口全部在册（回归护栏，防 RESERVED 清单被修剪）', () => {
+    for (const name of ['mxenv', 'mx-env', 'morphix-env', '__mx_editor', 'run', 'shell-init', 'gui', 'global', 'host']) {
+      expect(RESERVED_SHIM_NAMES, name).toContain(name)
+    }
+    // 名字形态合法者必须命中 reserved 文案；__mx_editor 以 _ 开头被名称形态规则
+    // 先拒（同为拒绝，护栏语义=一律不可作 shim 名）。
+    for (const name of ['mxenv', 'mx-env', 'morphix-env', 'run', 'shell-init', 'gui', 'global', 'host']) {
+      const errors = validateShimList([name], 'cfg')
+      expect(errors, name).toHaveLength(1)
+      expect(errors[0], name).toContain('reserved')
+    }
+    expect(validateShimList(['__mx_editor'], 'cfg'), '__mx_editor').toHaveLength(1)
+  })
+
   it('大小写不敏感查重', () => {
     expect(validateShimList(['Node', 'node'], 'cfg')[0]).toContain('duplicate')
     expect(

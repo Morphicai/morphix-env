@@ -136,7 +136,7 @@ steps:
 
 ---
 
-## morphix-env：最终方案
+## morphix-env：最终方案（0.12.0 起产品更名 mxenv）
 
 ### 核心设计
 

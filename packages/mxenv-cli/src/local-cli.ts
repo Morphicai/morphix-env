@@ -13,13 +13,14 @@ import { delimiter, join, resolve } from 'path'
  */
 
 /** L2 CLI 的 bin 名（命名全切归 mxenv-naming-cutover，此处不改名）。 */
-export const LOCAL_CLI_BIN_NAMES = ['mx-env', 'morphix-env'] as const
+/** 新名 `mxenv` 优先；旧名 alias 于 0.12.x 垫片窗口内照认（naming-migration）。 */
+export const LOCAL_CLI_BIN_NAMES = ['mxenv', 'mx-env', 'morphix-env'] as const
 
 export class LocalCliMissingError extends Error {
   readonly cwd: string
   constructor(cwd: string) {
     super(
-      `[morphix-env] No project-local mxenv CLI found for ${cwd} (checked node_modules/.bin and PATH).\n` +
+      `[mxenv] No project-local mxenv CLI found for ${cwd} (checked node_modules/.bin and PATH).\n` +
         `Install it in the project so writes run the project-pinned version: npm i -D mxenv (or: pnpm add -D mxenv).\n` +
         `Refusing to write project data with the global CLI.`,
     )
@@ -77,7 +78,7 @@ export function spawnLocalCliWrite(
     stdio: ['ignore', 'inherit', 'inherit'],
   })
   if (result.error) {
-    throw new Error(`[morphix-env] Failed to execute the project-local CLI (${cli}): ${result.error.message}`)
+    throw new Error(`[mxenv] Failed to execute the project-local CLI (${cli}): ${result.error.message}`)
   }
   return result.status ?? 1
 }

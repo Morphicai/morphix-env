@@ -213,7 +213,7 @@ function localUiState(state: EditorState, entry: SourceEntry, fileIndex: number,
 
 async function requireKeytar() {
   const keytar = await loadKeytar()
-  if (!keytar) throw new Error('[morphix-env] Keychain editing needs the optional native module "keytar", which is not usable on this machine.')
+  if (!keytar) throw new Error('[mxenv] Keychain editing needs the optional native module "keytar", which is not usable on this machine.')
   return keytar
 }
 
@@ -308,7 +308,7 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
           }
           return respond(res, 400, renderEditorHtml('Invalid request', errorUiState(state, 400, 'Invalid request', 'This editor accepts only a close action on the session root.')))
         }
-        return respond(res, 200, renderEditorHtml('mx-env editor', profileUiState(state)))
+        return respond(res, 200, renderEditorHtml('mxenv editor', profileUiState(state)))
       }
       const match = /^\/source\/([^/]+)(?:\/(local|dotenvx|keychain))?$/.exec(rest)
       if (!match) return respond(res, 404, renderEditorHtml('Not found', errorUiState(state, 404, 'Not found', 'This editor path does not exist.')))
@@ -448,7 +448,7 @@ export interface LaunchedEditor {
 
 export async function launchEditor(entryScript: string, composition: EnvironmentComposition, selectedSource?: string): Promise<LaunchedEditor> {
   if (selectedSource && !composition.sourceEntries.some((entry) => entry.name === selectedSource)) {
-    throw new Error(`[morphix-env] Unknown source "${selectedSource}" in the selected profile.`)
+    throw new Error(`[mxenv] Unknown source "${selectedSource}" in the selected profile.`)
   }
   const state: EditorState = {
     token: randomBytes(24).toString('base64url'),
@@ -465,8 +465,8 @@ export async function launchEditor(entryScript: string, composition: Environment
     stdio: ['ignore', 'pipe', 'ignore'],
   }) as import('child_process').ChildProcess
   const url = await new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('[morphix-env] Timed out starting local editor.')), 5_000)
-    child.once('error', () => { clearTimeout(timer); reject(new Error('[morphix-env] Could not start local editor.')) })
+    const timer = setTimeout(() => reject(new Error('[mxenv] Timed out starting local editor.')), 5_000)
+    child.once('error', () => { clearTimeout(timer); reject(new Error('[mxenv] Could not start local editor.')) })
     child.stdout?.once('data', (chunk: Buffer) => {
       clearTimeout(timer)
       const url = chunk.toString('utf8').trim()

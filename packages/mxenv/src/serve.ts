@@ -74,7 +74,7 @@ export async function startSecretServer(values: Record<string, string>): Promise
       // already-settled promise.
       server.removeListener('error', reject)
       server.on('error', (error) => {
-        console.error(`[morphix-env] Secret server error: ${error instanceof Error ? error.message : 'unknown'}`)
+        console.error(`[mxenv] Secret server error: ${error instanceof Error ? error.message : 'unknown'}`)
       })
       resolvePromise()
     })
@@ -83,7 +83,7 @@ export async function startSecretServer(values: Record<string, string>): Promise
   const address = server.address()
   if (!address || typeof address === 'string') {
     server.close()
-    throw new Error('[morphix-env] Secret server did not receive a loopback port.')
+    throw new Error('[mxenv] Secret server did not receive a loopback port.')
   }
 
   let closed = false

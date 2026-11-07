@@ -23,7 +23,7 @@ vi.mock('mxenv-core', async (importOriginal) => {
   }
 })
 
-const ROOT = join(tmpdir(), `mx-env-editor-${randomUUID()}`)
+const ROOT = join(tmpdir(), `mxenv-editor-${randomUUID()}`)
 const HOME = join(ROOT, 'home')
 const TOKEN = 'testtoken'
 // The dotenvx CLI is shared test tooling held at the workspace root (product
@@ -76,7 +76,7 @@ async function openEditor(overrides: StateOverrides = {}): Promise<RunningEditor
     provenance: {},
     sourceEntries: [
       { name: 'enc', source: { provider: 'dotenvx', files: ['enc.env'] }, baseDir: ROOT },
-      { name: 'kc', source: { provider: 'os-keychain', platform: 'macos', service: 'mx-env-editor-test' }, baseDir: ROOT },
+      { name: 'kc', source: { provider: 'os-keychain', platform: 'macos', service: 'mxenv-editor-test' }, baseDir: ROOT },
     ],
     homeDir: HOME,
   }
@@ -102,7 +102,7 @@ function sourceRoot(name: string): string {
 }
 
 function auditEvents(): Array<Record<string, unknown>> {
-  const dir = join(HOME, '.mx-env', 'audit')
+  const dir = join(HOME, '.mxenv', 'audit')
   if (!existsSync(dir)) return []
   return readdirSync(dir).flatMap((file) =>
     readFileSync(join(dir, file), 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)),
@@ -118,7 +118,7 @@ describe('visual editor', () => {
     // Page identity lives in <title> (server-side literal); component copy is
     // also present in every page's inlined client bundle and cannot be used
     // for presence/absence assertions.
-    expect(index).toContain('<title>mx-env editor</title>')
+    expect(index).toContain('<title>mxenv editor</title>')
 
     const sourcePage = await get(`${sourceRoot('enc')}?fileIndex=0`)
     expect(sourcePage).toContain('<title>Edit dotenvx source</title>')

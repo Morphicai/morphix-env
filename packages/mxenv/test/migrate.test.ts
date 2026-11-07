@@ -25,13 +25,15 @@ const REPO_DOTENVX = findDotenvxBin()
 const TMP = join(tmpdir(), `mx-env-migrate-${randomUUID()}`)
 const HOME = join(TMP, 'home')
 const secretValue = (label: string) => `mxenv_migrate_${label}_${randomUUID().replace(/-/g, '')}`
+// 失败注入用 macOS 独有的 chflags uchg——非 darwin 跳过而非假红（Linux/CI 可移植性）。
+const itDarwin = process.platform === 'darwin' ? it : it.skip
 
 function layers(cwd = TMP) {
   return loadConfigLayers({ cwd, homeDir: HOME })
 }
 
 function writeProjectConfig(config: unknown) {
-  writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify(config, null, 2))
+  writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify(config, null, 2))
 }
 
 beforeEach(() => {
@@ -45,12 +47,12 @@ afterEach(() => {
 
 describe('discoverPlaintextUnits / legacyPlaintextHints', () => {
   it('discovers the global implicit file plus declared local sources from both layers', () => {
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), `GLOBALKEY=${secretValue('g')}\n`)
-    writeFileSync(join(HOME, '.mx-env', 'config.json'), JSON.stringify({
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), `GLOBALKEY=${secretValue('g')}\n`)
+    writeFileSync(join(HOME, '.mxenv', 'config.json'), JSON.stringify({
       sources: { g: { provider: 'local', files: ['./g.env'] } },
     }))
-    writeFileSync(join(HOME, '.mx-env', 'g.env'), `GKEY=${secretValue('gd')}\n`)
+    writeFileSync(join(HOME, '.mxenv', 'g.env'), `GKEY=${secretValue('gd')}\n`)
     writeProjectConfig({
       sources: {
         plain: { provider: 'local', files: ['.env.local'] },
@@ -71,8 +73,8 @@ describe('discoverPlaintextUnits / legacyPlaintextHints', () => {
   })
 
   it('excludes an already-encrypted implicit file (idempotency)', () => {
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), 'DOTENV_PUBLIC_KEY="03abc"\nKEY="encrypted:deadbeef"\n')
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), 'DOTENV_PUBLIC_KEY="03abc"\nKEY="encrypted:deadbeef"\n')
     expect(discoverPlaintextUnits(layers(), HOME)).toEqual([])
   })
 
@@ -101,7 +103,7 @@ describe('executeUnit -> dotenvx', () => {
       defaultProfile: 'dev',
     })
     writeFileSync(join(TMP, marked), `MARK_A=${value}\n`)
-    chmodSync(join(TMP, 'mx-env.config.json'), 0o444)
+    chmodSync(join(TMP, 'mxenv.config.json'), 0o444)
 
     try {
       const [unit] = discoverPlaintextUnits(layers(), HOME)
@@ -112,7 +114,65 @@ describe('executeUnit -> dotenvx', () => {
       expect(outcome.status).toBe('failed')
       expect(readFileSync(join(TMP, marked), 'utf8')).toContain(value)
     } finally {
-      chmodSync(join(TMP, 'mx-env.config.json'), 0o644)
+      chmodSync(join(TMP, 'mxenv.config.json'), 0o644)
+    }
+  }, 30_000)
+
+  it('写只落新名：读自旧名 mx-env.config.json 的改写先备份再改名至 mxenv.config.json', async () => {
+    const value = secretValue('rename')
+    // 仅旧名配置存在（读回落路径）：改写 SHALL 落新名并维持单一配置事实源。
+    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+      sources: { plain: { provider: 'local', files: ['.env.local'] } },
+      profiles: { dev: { sources: ['plain'] } },
+      defaultProfile: 'dev',
+    }, null, 2))
+    writeFileSync(join(TMP, '.env.local'), `REN_A=${value}\n`)
+
+    const [unit] = discoverPlaintextUnits(layers(), HOME)
+    expect(unit.configPath!.endsWith('mx-env.config.json')).toBe(true)
+    const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
+    expect(outcome.status).toBe('migrated')
+
+    // 新名文件是唯一事实源：改写落 mxenv.config.json，旧名文件已改名不复存在。
+    expect(existsSync(join(TMP, 'mxenv.config.json'))).toBe(true)
+    expect(existsSync(join(TMP, 'mx-env.config.json'))).toBe(false)
+    const rewritten = JSON.parse(readFileSync(join(TMP, 'mxenv.config.json'), 'utf8'))
+    expect(rewritten.sources.plain.provider).toBe('dotenvx')
+    // 改名前备份在场（可回滚）。
+    const backup = outcome.backups.find((b) => b.includes('mx-env.config.json'))
+    expect(backup).toBeTruthy()
+    expect(existsSync(backup!)).toBe(true)
+
+    const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
+    expect(composition.environment.REN_A).toBe(value)
+  }, 30_000)
+
+  itDarwin('回滚闭合：rename 失败（配置锁定）时还原回原路径、组合等值', async () => {
+    const value = secretValue('rbrenfail')
+    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+      sources: { plain: { provider: 'local', files: ['.env.local'] } },
+      profiles: { dev: { sources: ['plain'] } },
+      defaultProfile: 'dev',
+    }, null, 2))
+    writeFileSync(join(TMP, '.env.local'), `RB_B=${value}\n`)
+    // uchg 锁定配置：rename 必败——命中"改名未发生"分支的还原目标语义。
+    expect(spawnSync('chflags', ['uchg', join(TMP, 'mx-env.config.json')]).status).toBe(0)
+    try {
+      const [unit] = discoverPlaintextUnits(layers(), HOME)
+      const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
+      expect(outcome.status).toBe('failed')
+      expect(outcome.detail).toContain('restored from backup')
+      // rename 未发生：还原目标=原路径，不产生新名文件。
+      expect(existsSync(join(TMP, 'mxenv.config.json'))).toBe(false)
+      const config = JSON.parse(readFileSync(join(TMP, 'mx-env.config.json'), 'utf8'))
+      expect(config.sources.plain.provider).toBe('local')
+      // encrypt 已就地改写明文——回滚须靠备份回写，组合等值迁移前。
+      expect(readFileSync(join(TMP, '.env.local'), 'utf8')).toContain(value)
+      expect(existsSync(join(TMP, '.env.keys'))).toBe(false)
+      const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
+      expect(composition.environment.RB_B).toBe(value)
+    } finally {
+      spawnSync('chflags', ['nouchg', join(TMP, 'mx-env.config.json')])
     }
   }, 30_000)
 
@@ -156,7 +216,7 @@ describe('executeUnit -> dotenvx', () => {
       expect((statSync(backup).mode & 0o777).toString(8)).toBe('600')
     }
 
-    const rewritten = JSON.parse(readFileSync(join(TMP, 'mx-env.config.json'), 'utf8'))
+    const rewritten = JSON.parse(readFileSync(join(TMP, 'mxenv.config.json'), 'utf8'))
     expect(rewritten.sources.plain.provider).toBe('dotenvx')
     expect(rewritten.sources.plain.override).toBe(true)
 
@@ -170,15 +230,15 @@ describe('executeUnit -> dotenvx', () => {
 
   it('migrates the global implicit file with zero config changes; composition sniffs encryption', async () => {
     const value = secretValue('implicit')
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), `GLOB_A=${value}\n`)
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), `GLOB_A=${value}\n`)
 
     const [unit] = discoverPlaintextUnits(layers(), HOME)
     expect(unit.kind).toBe('global-implicit')
     const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
     expect(outcome.status).toBe('migrated')
-    expect(existsSync(join(HOME, '.mx-env', 'config.json'))).toBe(false)
-    expect(readFileSync(join(HOME, '.mx-env', '.env'), 'utf8')).not.toContain(value)
+    expect(existsSync(join(HOME, '.mxenv', 'config.json'))).toBe(false)
+    expect(readFileSync(join(HOME, '.mxenv', '.env'), 'utf8')).not.toContain(value)
 
     const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
     expect(composition.environment.GLOB_A).toBe(value)
@@ -186,8 +246,8 @@ describe('executeUnit -> dotenvx', () => {
 
   it('verification is immune to same-named process env vars shadowing the file', async () => {
     const value = secretValue('shadow')
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), `GLOB_SHADOW=${value}\n`)
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), `GLOB_SHADOW=${value}\n`)
 
     // dotenvx `decrypt --stdout` merges same-named parent-env variables over
     // file values (no --overload), so a stale export with a different value
@@ -212,8 +272,8 @@ describe('executeUnit -> dotenvx', () => {
 
   it('a file declaring toolchain keys like PATH still migrates (verification child keeps a runnable PATH)', async () => {
     const value = secretValue('pathkey')
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), `PATH=/opt/tooling/bin\nGLOB_PATH=${value}\n`)
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), `PATH=/opt/tooling/bin\nGLOB_PATH=${value}\n`)
 
     const [unit] = discoverPlaintextUnits(layers(), HOME)
     const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
@@ -224,37 +284,37 @@ describe('executeUnit -> dotenvx', () => {
   }, 30_000)
 
   it('refuses migration for values with $ expansion sequences, naming the affected key', async () => {
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), 'GLOB_DOLLAR=ab$cd\n')
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), 'GLOB_DOLLAR=ab$cd\n')
 
     const [unit] = discoverPlaintextUnits(layers(), HOME)
     const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
     expect(outcome.status).toBe('failed')
     expect(outcome.detail).toMatch(/GLOB_DOLLAR/)
     // Refusal rolls the plaintext back untouched.
-    expect(readFileSync(join(HOME, '.mx-env', '.env'), 'utf8')).toBe('GLOB_DOLLAR=ab$cd\n')
-    expect(existsSync(join(HOME, '.mx-env', '.env.keys'))).toBe(false)
+    expect(readFileSync(join(HOME, '.mxenv', '.env'), 'utf8')).toBe('GLOB_DOLLAR=ab$cd\n')
+    expect(existsSync(join(HOME, '.mxenv', '.env.keys'))).toBe(false)
   }, 30_000)
 
   it('refuses a reserved DOTENV_PUBLIC_KEY* key up front with the key named', async () => {
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), 'DOTENV_PUBLIC_KEY_NOTE=userkey\n')
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), 'DOTENV_PUBLIC_KEY_NOTE=userkey\n')
 
     const [unit] = discoverPlaintextUnits(layers(), HOME)
     const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
     expect(outcome.status).toBe('failed')
     expect(outcome.detail).toMatch(/rename key "DOTENV_PUBLIC_KEY_NOTE"/)
-    expect(readFileSync(join(HOME, '.mx-env', '.env'), 'utf8')).toContain('userkey')
-    expect(existsSync(join(HOME, '.mx-env', '.env.keys'))).toBe(false)
+    expect(readFileSync(join(HOME, '.mxenv', '.env'), 'utf8')).toContain('userkey')
+    expect(existsSync(join(HOME, '.mxenv', '.env.keys'))).toBe(false)
   }, 30_000)
 
   it('rejects a permissive global .env.keys at composition time', async () => {
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), `GLOB_B=${secretValue('gate')}\n`)
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), `GLOB_B=${secretValue('gate')}\n`)
     const [unit] = discoverPlaintextUnits(layers(), HOME)
     await executeUnit(unit, 'dotenvx', {}, HOME)
 
-    chmodSync(join(HOME, '.mx-env', '.env.keys'), 0o644)
+    chmodSync(join(HOME, '.mxenv', '.env.keys'), 0o644)
     await expect(composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })).rejects.toThrow('0600')
     // --allow-insecure-global waives it.
     const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true, allowInsecureGlobal: true })
@@ -286,7 +346,7 @@ describe('executeUnit -> dotenvx', () => {
   it('warns when .env.keys lands unignored inside a git work tree', async () => {
     const repoDir = join(TMP, 'repo')
     mkdirSync(repoDir, { recursive: true })
-    writeFileSync(join(repoDir, 'mx-env.config.json'), JSON.stringify({ sources: { plain: { provider: 'local', files: ['.env.local'] } } }))
+    writeFileSync(join(repoDir, 'mxenv.config.json'), JSON.stringify({ sources: { plain: { provider: 'local', files: ['.env.local'] } } }))
     writeFileSync(join(repoDir, '.env.local'), `GITK=${secretValue('git')}\n`)
     spawnSync('git', ['init', '-q'], { cwd: repoDir })
 
@@ -303,23 +363,21 @@ describe('executeUnit -> dotenvx', () => {
 
 describe('executeUnit -> keychain', () => {
   it('skips the global implicit unit with a dotenvx hint', async () => {
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), `GLOB_C=${secretValue('skip')}\n`)
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), `GLOB_C=${secretValue('skip')}\n`)
     const [unit] = discoverPlaintextUnits(layers(), HOME)
     const outcome = await executeUnit(unit, 'keychain', {}, HOME)
     expect(outcome.status).toBe('skipped')
     expect(outcome.detail).toContain('dotenvx')
   })
 
-  const itDarwin = process.platform === 'darwin' ? it : it.skip
-
   itDarwin('tolerates foreign accounts in the target service and warns', async () => {
     const keytar = await loadKeytar()
     if (!keytar) {
-      console.warn('[mx-env test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
+      console.warn('[mxenv test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
       return
     }
-    const service = `mx-env-test-${randomUUID()}`
+    const service = `mxenv-test-${randomUUID()}`
     const value = secretValue('foreign')
     writeProjectConfig({
       sources: { plain: { provider: 'local', files: ['.env.local'] } },
@@ -347,10 +405,10 @@ describe('executeUnit -> keychain', () => {
   itDarwin('rollback restores overwritten same-named accounts (no silent data loss)', async () => {
     const keytar = await loadKeytar()
     if (!keytar) {
-      console.warn('[mx-env test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
+      console.warn('[mxenv test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
       return
     }
-    const service = `mx-env-test-${randomUUID()}`
+    const service = `mxenv-test-${randomUUID()}`
     const oldValue = secretValue('old')
     const newValue = secretValue('new')
     writeProjectConfig({
@@ -361,7 +419,7 @@ describe('executeUnit -> keychain', () => {
     writeFileSync(join(TMP, '.env.local'), `KC_A=${newValue}\n`)
     // Force failure AFTER setPassword: the config rewrite throws on a
     // read-only config file.
-    chmodSync(join(TMP, 'mx-env.config.json'), 0o444)
+    chmodSync(join(TMP, 'mxenv.config.json'), 0o444)
 
     try {
       await keytar.setPassword(service, 'KC_A', oldValue)
@@ -374,7 +432,49 @@ describe('executeUnit -> keychain', () => {
       // Plaintext restored.
       expect(readFileSync(join(TMP, '.env.local'), 'utf8')).toContain(newValue)
     } finally {
-      chmodSync(join(TMP, 'mx-env.config.json'), 0o644)
+      chmodSync(join(TMP, 'mxenv.config.json'), 0o644)
+      for (const credential of await keytar.findCredentials(service)) {
+        await keytar.deletePassword(service, credential.account)
+      }
+    }
+  }, 30_000)
+
+  itDarwin('回滚闭合：改名已发生的配置还原到新名生效路径（rmSync 失败注入）', async () => {
+    const keytar = await loadKeytar()
+    if (!keytar) {
+      console.warn('[mxenv test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
+      return
+    }
+    const service = `mxenv-test-${randomUUID()}`
+    const value = secretValue('rbrename')
+    // 仅旧名配置存在 → rewriteDeclaredSource 走 rename 分支（改名至新名再写）。
+    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+      sources: { plain: { provider: 'local', files: ['.env.local'] } },
+      profiles: { dev: { sources: ['plain'] } },
+      defaultProfile: 'dev',
+    }, null, 2))
+    writeFileSync(join(TMP, '.env.local'), `RB_A=${value}\n`)
+    // 锁定明文：rewrite（含 rename）之后的 rmSync 必败——命中"删除失败"窗口。
+    // uchg 在 finally 解锁，保证 afterEach 可清理。
+    expect(spawnSync('chflags', ['uchg', join(TMP, '.env.local')]).status).toBe(0)
+    try {
+      const [unit] = discoverPlaintextUnits(layers(), HOME)
+      expect(unit.configPath!.endsWith('mx-env.config.json')).toBe(true)
+      const outcome = await executeUnit(unit, 'keychain', { service }, HOME)
+      expect(outcome.status).toBe('failed')
+      // 声称还原时状态必须真的闭合：否则回滚形同虚设（review S2）。
+      expect(outcome.detail).toContain('restored from backup')
+      // 生效配置=新名文件且内容=迁移前声明（读侧双读优先新名，还原到旧名即断链）。
+      const effective = JSON.parse(readFileSync(join(TMP, 'mxenv.config.json'), 'utf8'))
+      expect(effective.sources.plain.provider).toBe('local')
+      expect(existsSync(join(TMP, 'mx-env.config.json'))).toBe(false)
+      // 明文完好、keychain 无孤儿键 → 组合等值迁移前。
+      expect(readFileSync(join(TMP, '.env.local'), 'utf8')).toContain(value)
+      expect(await keytar.findCredentials(service)).toEqual([])
+      const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
+      expect(composition.environment.RB_A).toBe(value)
+    } finally {
+      spawnSync('chflags', ['nouchg', join(TMP, '.env.local')])
       for (const credential of await keytar.findCredentials(service)) {
         await keytar.deletePassword(service, credential.account)
       }
@@ -402,10 +502,10 @@ describe('executeUnit -> keychain', () => {
     const keytar = await loadKeytar()
     if (!keytar) {
       // Explicit, loud skip — never a silent green: the keychain path went untested here.
-      console.warn('[mx-env test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
+      console.warn('[mxenv test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
       return
     }
-    const service = `mx-env-test-${randomUUID()}`
+    const service = `mxenv-test-${randomUUID()}`
     const value = secretValue('kc')
     writeProjectConfig({
       sources: { plain: { provider: 'local', files: ['.env.local'] } },
@@ -420,7 +520,7 @@ describe('executeUnit -> keychain', () => {
       expect(outcome.status).toBe('migrated')
       expect(existsSync(join(TMP, '.env.local'))).toBe(false)
 
-      const rewritten = JSON.parse(readFileSync(join(TMP, 'mx-env.config.json'), 'utf8'))
+      const rewritten = JSON.parse(readFileSync(join(TMP, 'mxenv.config.json'), 'utf8'))
       expect(rewritten.sources.plain).toEqual({ provider: 'os-keychain', service })
 
       const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
@@ -428,6 +528,47 @@ describe('executeUnit -> keychain', () => {
     } finally {
       for (const credential of await keytar.findCredentials(service)) {
         await keytar.deletePassword(service, credential.account)
+      }
+    }
+  }, 30_000)
+
+  itDarwin('默认 keychain service 为 mxenv:<source名>；旧名 service 配置携带照读', async () => {
+    const keytar = await loadKeytar()
+    if (!keytar) {
+      console.warn('[mxenv test] keytar native module unavailable; default keychain service NOT exercised on this machine.')
+      return
+    }
+    const value = secretValue('kcdef')
+    writeProjectConfig({
+      sources: { plain: { provider: 'local', files: ['.env.local'] } },
+      profiles: { dev: { sources: ['plain'] } },
+      defaultProfile: 'dev',
+    })
+    writeFileSync(join(TMP, '.env.local'), `KC_DEF=${value}\n`)
+    const defaultService = 'mxenv:plain'
+    const legacyService = 'mx-env:legacy-src'
+    try {
+      const [unit] = discoverPlaintextUnits(layers(), HOME)
+      const outcome = await executeUnit(unit, 'keychain', {}, HOME)
+      expect(outcome.status).toBe('migrated')
+      const rewritten = JSON.parse(readFileSync(join(TMP, 'mxenv.config.json'), 'utf8'))
+      expect(rewritten.sources.plain).toEqual({ provider: 'os-keychain', service: defaultService })
+
+      // 命名切换前的迁移产物：配置已记录旧名 service，读取照常、不重迁移。
+      const legacyValue = secretValue('kclegacy')
+      await keytar.setPassword(legacyService, 'KC_LEG', legacyValue)
+      writeProjectConfig({
+        sources: { legacy: { provider: 'os-keychain', service: legacyService } },
+        profiles: { dev: { sources: ['legacy'] } },
+        defaultProfile: 'dev',
+      })
+      const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
+      expect(composition.environment.KC_LEG).toBe(legacyValue)
+    } finally {
+      for (const service of [defaultService, legacyService]) {
+        for (const credential of await keytar.findCredentials(service)) {
+          await keytar.deletePassword(service, credential.account)
+        }
       }
     }
   }, 30_000)
@@ -490,7 +631,7 @@ describe('migrate CLI e2e', () => {
     expect(child.stdout).toContain('match:true')
 
     const day = new Date().toISOString().slice(0, 10)
-    const audit = readFileSync(join(HOME, '.mx-env', 'audit', `${day}.jsonl`), 'utf8')
+    const audit = readFileSync(join(HOME, '.mxenv', 'audit', `${day}.jsonl`), 'utf8')
     expect(audit).toContain('"profile":"migrate"')
     expect(audit).toContain('CYCLE_A')
     expect(audit).not.toContain(value)
@@ -551,9 +692,9 @@ describe('migrate CLI e2e', () => {
   it('sniff is not fooled by a plaintext file that merely mentions the markers', () => {
     // DOTENV_PUBLIC_KEY defined as a real key + "encrypted:" in a comment must
     // NOT route the global file through the dotenvx provider.
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
     const value = secretValue('sniff')
-    const globalEnv = join(HOME, '.mx-env', '.env')
+    const globalEnv = join(HOME, '.mxenv', '.env')
     writeFileSync(globalEnv, `# later we may use encrypted: values\nDOTENV_PUBLIC_KEY="not-a-marker"\nSNIFF_A=${value}\n`)
     chmodSync(globalEnv, 0o600) // the global implicit file carries the 0600 gate
     const result = runCli(['run', '--no-infisical', '--', 'node', '-e', 'console.log(process.env.SNIFF_A ? "got" : "missing")'])

@@ -2,7 +2,7 @@ import { spawnSync } from 'child_process'
 import { chmodSync, mkdirSync, writeFileSync } from 'fs'
 import { basename, dirname, resolve } from 'path'
 
-/** POSIX single-quote escaping so `eval "$(mx-env export)"` round-trips any value. */
+/** POSIX single-quote escaping so `eval "$(mxenv export)"` round-trips any value. */
 export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`
 }
@@ -102,8 +102,8 @@ export function gitOutputStatus(path: string): GitOutputStatus {
 export function warnOutputGitRisk(path: string): void {
   const status = gitOutputStatus(path)
   if (status === 'tracked') {
-    console.warn(`[morphix-env] Warning: ${path} is tracked by git; a rendered value could be committed. Add it to .gitignore and untrack it.`)
+    console.warn(`[mxenv] Warning: ${path} is tracked by git; a rendered value could be committed. Add it to .gitignore and untrack it.`)
   } else if (status === 'untracked') {
-    console.warn(`[morphix-env] Warning: ${path} is not git-ignored; add it to .gitignore before committing.`)
+    console.warn(`[mxenv] Warning: ${path} is not git-ignored; add it to .gitignore before committing.`)
   }
 }

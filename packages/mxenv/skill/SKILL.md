@@ -95,7 +95,9 @@ mxenv-cli shell-init [--write|--remove] # 为声明的命令生成 PATH shim（�
 
 ## 旧名迁移（0.12.x 过渡期）
 
-旧名 `mx-env` / `morphix-env` 在 0.12.x 仍可运行（stderr 弃用提示）：旧 bin、`mx-env.config.json`、`~/.mx-env/`、`mxenv-provider-*` 读侧兼容，写侧一律落新名；keychain 旧 service 名（`mx-env:<source>`）由配置携带照读，**无需重迁移**；`mx-env://` 引用已切换 `mxenv://`（旧 scheme 报错提示改用新名）。`shell-init` 已迁全局管理面 `mxenv-cli`（旧 bin 上不可用）。见到旧配置/旧路径时引导用户跑 `mxenv migrate --home`（copy → 值级等价验证 → 旧目录改名 `~/.mx-env.backup-<ts>` 留备份；全程值不落输出、幂等）并改用新名，不必手工搬运。
+旧名 `mx-env` / `morphix-env` 在 0.12.x 仍可运行（stderr 弃用提示）：旧 bin、`mx-env.config.json`、`~/.mx-env/`、`mx-env-provider-*` 读侧兼容，写侧一律落新名；keychain 旧 service 名（`mx-env:<source>`）由配置携带照读，**无需重迁移**；`mx-env://` 引用已切换 `mxenv://`（旧 scheme 报错提示改用新名）。`shell-init` 已迁全局管理面 `mxenv-cli`（旧名 bin 经 alias 转发到当值入口仍可用，0.13 摘除 alias 后须用新名）。见到旧配置/旧路径时引导用户跑 `mxenv migrate --home`（copy → 旧目录改名 `~/.mx-env.backup-<ts>` 留备份 → 值级等价验证，失败自动还原；成功后重接 shim PATH；全程值不落输出、幂等）并改用新名，不必手工搬运。
+
+> 时序注：`~/.mx-env/` 读回落与 `migrate --home` 随 mxenv-home-migration 落地；兼容窗持续到用户跑完 `migrate --home` 为止（其间写也落旧目录，`migrate --home` 后读写统一切到 `~/.mxenv/`）。
 
 ## 故障排查
 

@@ -11,12 +11,14 @@ import {
   findMxEnvReferences,
   hasMxEnvReference,
   isPublicKey,
+  auditDir,
   loadConfigLayers,
   ReferenceResolver,
   sanitizeBootEnv,
   StreamingRedactor,
   stripShimsFromPath,
   validateShimList,
+  warnDeprecatedBinInvocation,
   writeAudit,
   type ComposeOptions,
   type ConfigLayers,
@@ -69,6 +71,7 @@ interface Args {
   service: string | null
   force: boolean
   dryRun: boolean
+  /** migrate: 全局目录一次性迁移（~/.mx-env → ~/.mxenv）。 */
   serve: boolean
   write: boolean
   remove: boolean
@@ -192,7 +195,7 @@ function warnInvalidShims(layers: ConfigLayers, includeGlobal: boolean): void {
     ...validateShimList(layers.project.config.shims, layers.project.path),
   ]
   if (problems.length) {
-    console.warn(`[morphix-env] Ignoring invalid "shims" entries (${problems.length} problem(s)); run \`mx-env shell-init\` for the details.`)
+    console.warn(`[mxenv] Ignoring invalid "shims" entries (${problems.length} problem(s)); run \`mxenv-cli shell-init\` for the details.`)
   }
 }
 
@@ -205,7 +208,7 @@ function resolveComposition(args: Args): Promise<EnvironmentComposition> {
 /**
  * Opt-in plaintext reminder (issue #7): off by default, enabled per-invocation
  * via --warn-plaintext or globally via MXENV_WARN_PLAINTEXT=1 (the env knob
- * exists because shimmed commands cannot take mx-env flags). Value-free: only
+ * exists because shimmed commands cannot take mxenv flags). Value-free: only
  * source names are mentioned. Once per process.
  */
 let plaintextWarned = false
@@ -218,7 +221,7 @@ function warnPlaintextSources(composition: EnvironmentComposition, args: Args): 
     (source) => source.provider === 'local' && source.availability === 'loaded' && source.keyCount > 0,
   )
   if (!loaded.length) return
-  console.warn(`[morphix-env] Plaintext local source(s) in use: ${loaded.map((source) => source.name).join(', ')} — local plaintext files are dev-only; run \`mx-env migrate\` to move them into encrypted storage.`)
+  console.warn(`[mxenv] Plaintext local source(s) in use: ${loaded.map((source) => source.name).join(', ')} — local plaintext files are dev-only; run \`mxenv migrate\` to move them into encrypted storage.`)
 }
 
 function generatedOptions(args: Args): { outFile: string; filter: string | null } {
@@ -234,7 +237,7 @@ function generateClientEnv(outFile: string, filter: string | null, environment: 
   if (filter) vars = Object.fromEntries(Object.entries(vars).filter(([key]) => key.startsWith(filter)))
   mkdirSync(dirname(outFile), { recursive: true })
   writeFileSync(outFile, `window.__ENV=${JSON.stringify(vars)};`)
-  console.log(`[morphix-env] Generated ${outFile} (${Object.keys(vars).length} client vars)`)
+  console.log(`[mxenv] Generated ${outFile} (${Object.keys(vars).length} client vars)`)
 }
 
 async function runChild(command: string, commandArgs: string[], composition: EnvironmentComposition): Promise<number> {
@@ -252,7 +255,7 @@ async function runChild(command: string, commandArgs: string[], composition: Env
     child.stdout?.on('data', (chunk: Buffer) => process.stdout.write(stdout.write(chunk)))
     child.stderr?.on('data', (chunk: Buffer) => process.stderr.write(stderr.write(chunk)))
     child.on('error', () => {
-      console.error(`[morphix-env] Failed to execute: ${command}`)
+      console.error(`[mxenv] Failed to execute: ${command}`)
       resolve(1)
     })
     child.on('close', (code) => {
@@ -301,17 +304,17 @@ async function startServeFor(composition: EnvironmentComposition, verbose: boole
   // The token is injected, so an accidental echo is redacted like any value.
   composition.redactionValues = [...new Set([...composition.redactionValues, server.token])]
   if (verbose) {
-    console.error(`[morphix-env] Secret server listening on ${server.endpoint} (${Object.keys(values).length} keys; token is visible to the child only).`)
+    console.error(`[mxenv] Secret server listening on ${server.endpoint} (${Object.keys(values).length} keys; token is visible to the child only).`)
   }
   return server
 }
 
 function warnUnresolvedReference(reference: UnresolvedReference, context: string): void {
-  console.warn(`[morphix-env] Unresolved mx-env://${reference.profile}/${reference.key} reference ${context} (${reference.reason}); left as-is.`)
+  console.warn(`[mxenv] Unresolved mxenv://${reference.profile}/${reference.key} reference ${context} (${reference.reason}); left as-is.`)
 }
 
 /**
- * Resolves `mx-env://` references inside composed values before a child run.
+ * Resolves `mxenv://` references inside composed values before a child run.
  * Resolved values join the redaction set so the new material is covered by the
  * same output redaction as directly composed values.
  */
@@ -350,7 +353,7 @@ async function resolveEnvironmentReferences(composition: EnvironmentComposition,
 
 async function cmdRun(args: Args): Promise<number> {
   if (!args.subArgs.length) {
-    console.error('[morphix-env] No command specified. Usage: mx-env run -- <command>')
+    console.error('[mxenv] No command specified. Usage: mxenv run -- <command>')
     return 1
   }
   const startedAt = Date.now()
@@ -358,7 +361,7 @@ async function cmdRun(args: Args): Promise<number> {
   warnPlaintextSources(composition, args)
   if (args.verbose) {
     for (const source of composition.sourceStatuses) {
-      console.log(`[morphix-env] ${source.name}: ${source.availability} (${source.keyCount} keys)`)
+      console.log(`[mxenv] ${source.name}: ${source.availability} (${source.keyCount} keys)`)
     }
   }
   if (args.dryRun) {
@@ -396,13 +399,13 @@ async function cmdRun(args: Args): Promise<number> {
 async function cmdFetch(args: Args): Promise<number> {
   const key = args.positionals[0]
   if (!key) {
-    console.error('[morphix-env] Usage: mx-env fetch <key-name>')
+    console.error('[mxenv] Usage: mxenv fetch <key-name>')
     return 1
   }
   const endpoint = process.env.MXENV_ENDPOINT
   const token = process.env.MXENV_TOKEN
   if (!endpoint || !token) {
-    console.error('[morphix-env] mx-env fetch needs MXENV_ENDPOINT and MXENV_TOKEN; run it inside "mx-env run --serve -- <command>".')
+    console.error('[mxenv] mxenv fetch needs MXENV_ENDPOINT and MXENV_TOKEN; run it inside "mxenv run --serve -- <command>".')
     return 1
   }
   // The token authorizes reads of composed secrets, so it must never leave
@@ -412,11 +415,11 @@ async function cmdFetch(args: Args): Promise<number> {
   try {
     endpointUrl = new URL(endpoint)
   } catch {
-    console.error('[morphix-env] MXENV_ENDPOINT is not a valid URL.')
+    console.error('[mxenv] MXENV_ENDPOINT is not a valid URL.')
     return 1
   }
   if (!['127.0.0.1', 'localhost', '[::1]'].includes(endpointUrl.hostname)) {
-    console.error('[morphix-env] MXENV_ENDPOINT is not a loopback address; refusing to send the fetch token off-machine.')
+    console.error('[mxenv] MXENV_ENDPOINT is not a loopback address; refusing to send the fetch token off-machine.')
     return 1
   }
   try {
@@ -428,13 +431,13 @@ async function cmdFetch(args: Args): Promise<number> {
       return 0
     }
     if (response.status === 404) {
-      console.error(`[morphix-env] Unknown key on the secret server: ${key}`)
+      console.error(`[mxenv] Unknown key on the secret server: ${key}`)
       return 1
     }
-    console.error(`[morphix-env] Secret server rejected the request (HTTP ${response.status}).`)
+    console.error(`[mxenv] Secret server rejected the request (HTTP ${response.status}).`)
     return 1
   } catch {
-    console.error('[morphix-env] Secret server is unreachable; the parent process may have exited.')
+    console.error('[mxenv] Secret server is unreachable; the parent process may have exited.')
     return 1
   }
 }
@@ -442,7 +445,7 @@ async function cmdFetch(args: Args): Promise<number> {
 async function cmdGenerate(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
-  // Resolve mx-env:// references first: a generated client env must contain
+  // Resolve mxenv:// references first: a generated client env must contain
   // the same values a run child would receive, not literal reference strings.
   await resolveEnvironmentReferences(composition, args)
   const { outFile, filter } = generatedOptions(args)
@@ -479,16 +482,16 @@ async function cmdExport(args: Args): Promise<number> {
     for (const key of keys) console.log(key)
     return 0
   }
-  // Resolve mx-env:// references so export matches run's semantics: consumers
-  // of `eval "$(mx-env export)"` get the same values a run child would.
+  // Resolve mxenv:// references so export matches run's semantics: consumers
+  // of `eval "$(mxenv export)"` get the same values a run child would.
   await resolveEnvironmentReferences(composition, args)
   // stdout carries eval-able statements only — any extra line would break
-  // `eval "$(mx-env export --profile …)"`. Keys that are not shell
+  // `eval "$(mxenv export --profile …)"`. Keys that are not shell
   // identifiers (FOO-BAR, 1LEAD — legal in dotenv, illegal in shell) would be
   // silently dropped by eval, so they are warned about on stderr and skipped.
   for (const key of keys) {
     if (!isShellIdentifier(key)) {
-      console.warn(`[morphix-env] Warning: key "${key}" is not a valid shell identifier; skipped in export output.`)
+      console.warn(`[mxenv] Warning: key "${key}" is not a valid shell identifier; skipped in export output.`)
       continue
     }
     console.log(`export ${key}=${shellQuote(composition.environment[key] ?? '')}`)
@@ -501,11 +504,11 @@ async function cmdRender(args: Args): Promise<number> {
   const startedAt = Date.now()
   const [templatePath, outPath] = args.positionals
   if (!templatePath || !outPath) {
-    console.error('[morphix-env] Usage: mx-env render <template-file> <output-file> [options]')
+    console.error('[mxenv] Usage: mxenv render <template-file> <output-file> [options]')
     return 1
   }
   if (!existsSync(templatePath)) {
-    console.error(`[morphix-env] Template not found: ${templatePath}`)
+    console.error(`[mxenv] Template not found: ${templatePath}`)
     return 1
   }
   const template = readFileSync(templatePath, 'utf8')
@@ -516,22 +519,22 @@ async function cmdRender(args: Args): Promise<number> {
 
   // Warn before rendering: unresolved names and unsupported constructs stay
   // literal in the output, so neither may pass silently.
-  if (missing.length) console.warn(`[morphix-env] Missing variables: ${missing.join(', ')} (left unresolved)`)
-  for (const anomaly of findTemplateAnomalies(template)) console.warn(`[morphix-env] ${anomaly}`)
+  if (missing.length) console.warn(`[mxenv] Missing variables: ${missing.join(', ')} (left unresolved)`)
+  for (const anomaly of findTemplateAnomalies(template)) console.warn(`[mxenv] ${anomaly}`)
 
   if (args.dryRun) {
     for (const name of names) console.log(`${name}: ${missing.includes(name) ? 'missing' : 'resolved'}`)
     return 0
   }
 
-  // Resolve mx-env:// references so rendered output matches run's semantics
+  // Resolve mxenv:// references so rendered output matches run's semantics
   // instead of embedding literal reference strings.
   await resolveEnvironmentReferences(composition, args)
   const { output } = renderTemplate(template, composition.environment)
   warnOutputGitRisk(outPath)
   writePrivateFile(outPath, output)
   writeRunAudit(composition, startedAt, 'success', 0)
-  console.log(`[morphix-env] Rendered ${templatePath} -> ${outPath} (${names.length} variables, ${missing.length} unresolved)`)
+  console.log(`[mxenv] Rendered ${templatePath} -> ${outPath} (${names.length} variables, ${missing.length} unresolved)`)
   return 0
 }
 
@@ -539,11 +542,11 @@ async function cmdInject(args: Args): Promise<number> {
   const startedAt = Date.now()
   const [templatePath, outPath] = args.positionals
   if (!templatePath || !outPath) {
-    console.error('[morphix-env] Usage: mx-env inject <template-file> <output-file> [options]')
+    console.error('[mxenv] Usage: mxenv inject <template-file> <output-file> [options]')
     return 1
   }
   if (!existsSync(templatePath)) {
-    console.error(`[morphix-env] Template not found: ${templatePath}`)
+    console.error(`[mxenv] Template not found: ${templatePath}`)
     return 1
   }
   const template = readFileSync(templatePath, 'utf8')
@@ -577,12 +580,12 @@ async function cmdInject(args: Args): Promise<number> {
     exitCode: 0,
     durationMs: Date.now() - startedAt,
   })
-  console.log(`[morphix-env] Injected ${templatePath} -> ${outPath} (${references.length} references, ${resolved.missing.length} unresolved)`)
+  console.log(`[mxenv] Injected ${templatePath} -> ${outPath} (${references.length} references, ${resolved.missing.length} unresolved)`)
   return 0
 }
 
 async function cmdEdit(args: Args): Promise<number> {
-  // Bare `mx-env edit` opens the default composition (the implicit global on
+  // Bare `mxenv edit` opens the default composition (the implicit global on
   // config-less machines); --profile/--source narrow the scope.
   const composition = await resolveComposition(args)
   if (args.source && !composition.sourceEntries.some((entry) => entry.name === args.source)) {
@@ -593,29 +596,29 @@ async function cmdEdit(args: Args): Promise<number> {
         ? { source: layers.global.config.sources[args.source], baseDir: layers.global.baseDir }
         : null)
     if (!declared) {
-      console.error(`[morphix-env] Unknown source "${args.source}".`)
+      console.error(`[mxenv] Unknown source "${args.source}".`)
       return 1
     }
     composition.sourceEntries.push({ name: args.source, ...declared })
     composition.sourceStatuses.push({ name: args.source, provider: declared.source.provider, availability: 'skipped', keyCount: 0 })
   }
   const editor = await launchEditor(__filename, composition, args.source || undefined)
-  if (args.printEditorUrl) console.log(`[morphix-env] Local editor URL: ${editor.url}`)
-  else if (editor.opened) console.log('[morphix-env] Opened local editor in your browser.')
-  else console.log('[morphix-env] Local editor started. Run again with --print-editor-url to display its one-time URL.')
-  console.log('[morphix-env] Values remain in the provider or browser session and are not printed here.')
+  if (args.printEditorUrl) console.log(`[mxenv] Local editor URL: ${editor.url}`)
+  else if (editor.opened) console.log('[mxenv] Opened local editor in your browser.')
+  else console.log('[mxenv] Local editor started. Run again with --print-editor-url to display its one-time URL.')
+  console.log('[mxenv] Values remain in the provider or browser session and are not printed here.')
   return 0
 }
 
 async function cmdDoc(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
-  const outFile = args.outFile || join(process.cwd(), '.agents', 'skills', 'morphix-env', 'SKILL.md')
+  const outFile = args.outFile || join(process.cwd(), '.agents', 'skills', 'mxenv', 'SKILL.md')
   const keyRows = Object.entries(composition.provenance)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, provenance]) => `| \`${key}\` | ${provenance.source} (${provenance.provider}) |`)
     .join('\n') || '| _No resolved keys_ | — |'
   const skill = `---
-name: morphix-env
+name: mxenv
 description: Safely use and edit this project's composed environment profiles without placing values in Agent context.
 ---
 
@@ -627,16 +630,16 @@ Default profile context: \`${composition.profileName}\`.
 
 When a user asks to add, modify, or rotate a credential:
 
-1. Run \`mx-env edit\` (optionally with \`--profile <profile>\` or \`--source <source>\`).
+1. Run \`mxenv edit\` (optionally with \`--profile <profile>\` or \`--source <source>\`).
 2. Tell the user to complete the change in the local visual editor or provider UI.
 3. Do not ask the user to paste a value into chat.
 4. Do not run \`env\`, \`printenv\`, \`cat .env\`, or any reveal command.
-5. Validate only through \`mx-env inspect --profile <profile>\`; it reports names, source, and status without values.
+5. Validate only through \`mxenv inspect --profile <profile>\`; it reports names, source, and status without values.
 
 ## Running commands
 
-Use \`mx-env run --profile <profile> -- <command>\` for normal runs.
-Use \`mx-env run --no-global -- <command>\` when a project-only, reproducible environment is required.
+Use \`mxenv run --profile <profile> -- <command>\` for normal runs.
+Use \`mxenv run --no-global -- <command>\` when a project-only, reproducible environment is required.
 
 ## Available key names and sources
 
@@ -648,7 +651,7 @@ Secret values and value prefixes do not belong in this Skill, command output, au
 `
   mkdirSync(dirname(outFile), { recursive: true })
   writeFileSync(outFile, skill, { mode: 0o600 })
-  console.log(`[morphix-env] Generated value-free workflow Skill: ${outFile}`)
+  console.log(`[mxenv] Generated value-free workflow Skill: ${outFile}`)
   return 0
 }
 
@@ -662,7 +665,7 @@ Secret values and value prefixes do not belong in this Skill, command output, au
  */
 function printMigratePlan(units: MigrationUnit[], hints: string[], target: string | null): void {
   if (!units.length) {
-    console.log('[morphix-env] No plaintext units in scope; nothing to migrate.')
+    console.log('[mxenv] No plaintext units in scope; nothing to migrate.')
   }
   for (const unit of units) {
     const where = unit.kind === 'global-implicit' ? 'global implicit' : `${unit.scope}, declared in ${unit.configPath}`
@@ -675,7 +678,7 @@ function printMigratePlan(units: MigrationUnit[], hints: string[], target: strin
       : '  --to keychain: move values to a keychain service, rewrite config, delete plaintext')
   }
   for (const hint of hints) {
-    console.log(`legacy plaintext (not auto-migrated): ${hint} — declare it as a source in mx-env.config.json to migrate it.`)
+    console.log(`legacy plaintext (not auto-migrated): ${hint} — declare it as a source in mxenv.config.json to migrate it.`)
   }
   if (units.length && !target) {
     console.log('\nPlan only. Re-run with --to dotenvx|keychain to execute; every unit gets a 0600 backup and a post-migration equivalence check before its config changes.')
@@ -684,19 +687,19 @@ function printMigratePlan(units: MigrationUnit[], hints: string[], target: strin
 
 async function cmdMigrate(args: Args): Promise<number> {
   if (args.unknownFlags.length) {
-    console.error(`[morphix-env] migrate: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
+    console.error(`[mxenv] migrate: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
     return 1
   }
   if (args.to && args.to !== 'dotenvx' && args.to !== 'keychain') {
-    console.error('[morphix-env] migrate: --to must be "dotenvx" or "keychain".')
+    console.error('[mxenv] migrate: --to must be "dotenvx" or "keychain".')
     return 1
   }
   if (args.service && args.to !== 'keychain') {
-    console.error('[morphix-env] migrate: --service is only valid with --to keychain.')
+    console.error('[mxenv] migrate: --service is only valid with --to keychain.')
     return 1
   }
   if (args.service && !args.source) {
-    console.error('[morphix-env] migrate: --service requires --source (one service per migrated source).')
+    console.error('[mxenv] migrate: --service requires --source (one service per migrated source).')
     return 1
   }
   const layers = configLayers()
@@ -720,15 +723,15 @@ async function cmdMigrate(args: Args): Promise<number> {
     }
   }
   for (const collision of collisions) {
-    if (!args.to || args.dryRun) console.warn(`[morphix-env] Warning: ${collision}; split them into separate files (or sources) before migrating.`)
+    if (!args.to || args.dryRun) console.warn(`[mxenv] Warning: ${collision}; split them into separate files (or sources) before migrating.`)
     else {
-      console.error(`[morphix-env] migrate: ${collision}; split them into separate files (or sources) before migrating.`)
+      console.error(`[mxenv] migrate: ${collision}; split them into separate files (or sources) before migrating.`)
       return 1
     }
   }
   const selected = args.source ? units.filter((unit) => unit.name === args.source) : units
   if (args.source && !selected.length) {
-    console.error(`[morphix-env] migrate: no plaintext unit named "${args.source}" in scope (already migrated or unknown).`)
+    console.error(`[mxenv] migrate: no plaintext unit named "${args.source}" in scope (already migrated or unknown).`)
     return 1
   }
 
@@ -738,7 +741,7 @@ async function cmdMigrate(args: Args): Promise<number> {
   }
 
   if (!selected.length) {
-    console.log('[morphix-env] No plaintext units in scope; nothing to migrate.')
+    console.log('[mxenv] No plaintext units in scope; nothing to migrate.')
     return 0
   }
 
@@ -749,14 +752,14 @@ async function cmdMigrate(args: Args): Promise<number> {
     const outcome = await executeUnit(unit, target, { service: args.service || undefined }, home)
     outcomes.push(outcome)
     if (outcome.status === 'migrated') {
-      console.log(`[morphix-env] Migrated ${unit.name} -> ${target} (${unit.keyNames.length} keys).`)
+      console.log(`[mxenv] Migrated ${unit.name} -> ${target} (${unit.keyNames.length} keys).`)
       for (const warning of outcome.warnings) console.warn(warning)
-      for (const backup of outcome.backups) console.log(`[morphix-env] Backup (0600): ${backup}`)
+      for (const backup of outcome.backups) console.log(`[mxenv] Backup (0600): ${backup}`)
     } else if (outcome.status === 'skipped') {
-      console.warn(`[morphix-env] Skipped ${unit.name}: ${outcome.detail}`)
+      console.warn(`[mxenv] Skipped ${unit.name}: ${outcome.detail}`)
     } else {
-      console.error(`[morphix-env] Failed ${unit.name}: ${outcome.detail}`)
-      for (const backup of outcome.backups) console.error(`[morphix-env] Backup retained (0600): ${backup} — delete it by hand once verified.`)
+      console.error(`[mxenv] Failed ${unit.name}: ${outcome.detail}`)
+      for (const backup of outcome.backups) console.error(`[mxenv] Backup retained (0600): ${backup} — delete it by hand once verified.`)
     }
   }
   const failed = outcomes.filter((outcome) => outcome.status === 'failed')
@@ -771,15 +774,16 @@ async function cmdMigrate(args: Args): Promise<number> {
     durationMs: Date.now() - startedAt,
   })
   if (outcomes.some((outcome) => outcome.backups.length)) {
-    console.log('[morphix-env] Backups are 0600 copies of the original plaintext — delete them once your workflows are verified.')
+    console.log('[mxenv] Backups are 0600 copies of the original plaintext — delete them once your workflows are verified.')
   }
   return exitCode
 }
 
 function cmdAudit(args: Args): number {
-  const file = join(homedir(), '.mx-env', 'audit', `${new Date().toISOString().slice(0, 10)}.jsonl`)
+  // 读面与 writeAudit 共用 auditDir 单一事实源（review S1：两侧目录必须同源）。
+  const file = join(auditDir(), `${new Date().toISOString().slice(0, 10)}.jsonl`)
   if (!existsSync(file)) {
-    console.log('[morphix-env] No audit events for today.')
+    console.log('[mxenv] No audit events for today.')
     return 0
   }
   const lines = readFileSync(file, 'utf8').trim().split('\n').filter(Boolean)
@@ -790,24 +794,24 @@ function cmdAudit(args: Args): number {
 
 function showHelp(): void {
   console.log(`
-morphix-env v${VERSION} — secret composition and environment delivery
+mxenv v${VERSION} — secret composition and environment delivery
 
 Usage:
-  mx-env run [options] -- <command>       Compose env + execute command
-  mx-env fetch <key-name>                 Print one value from a run --serve secret server
-  mx-env export [options]                 Print eval-able export KEY='value' lines
-  mx-env render <template> <output>       Substitute \${VAR} into a file (mode 0600)
-  mx-env inject <template> <output>       Resolve mx-env:// references into a file (mode 0600)
-  mx-env generate [options]               Generate public __env.js
-  mx-env inspect [options]                Print key names, sources, and status only
-  mx-env migrate [--to dotenvx|keychain]  Move plaintext local sources into encrypted storage
-  mx-env doc [options]                    Generate a value-free project Skill
-  mx-env audit [tail]                     Read value-free local audit events
-  mx-env edit [--profile|--source <name>] Open the visual editor (15-min session)
-  mx-env skill install [--target <t>]     Install the Agent Skill (global|project|trellis)
-  mx-env skill show                       Show skill install status per target
+  mxenv run [options] -- <command>       Compose env + execute command
+  mxenv fetch <key-name>                 Print one value from a run --serve secret server
+  mxenv export [options]                 Print eval-able export KEY='value' lines
+  mxenv render <template> <output>       Substitute \${VAR} into a file (mode 0600)
+  mxenv inject <template> <output>       Resolve mxenv:// references into a file (mode 0600)
+  mxenv generate [options]               Generate public __env.js
+  mxenv inspect [options]                Print key names, sources, and status only
+  mxenv migrate [--to dotenvx|keychain]  Move plaintext local sources into encrypted storage
+  mxenv doc [options]                    Generate a value-free project Skill
+  mxenv audit [tail]                     Read value-free local audit events
+  mxenv edit [--profile|--source <name>] Open the visual editor (15-min session)
+  mxenv skill install [--target <t>]     Install the Agent Skill (global|project|trellis)
+  mxenv skill show                       Show skill install status per target
 
-Both mx-env and morphix-env are supported.
+The legacy bin names (mx-env, morphix-env) remain as deprecated aliases in 0.12.x.
 
 Options:
   -p, --profile <name>     Select a named source profile
@@ -818,7 +822,7 @@ Options:
   --serve                  Keep composed values out of env; serve them to the child over loopback
   --dry-run                Report key/variable names only, never values
   --no-infisical           Do not load Infisical sources
-  --no-global              Ignore ~/.mx-env/.env and ~/.mx-env/config.json
+  --no-global              Ignore ~/.mxenv/.env and ~/.mxenv/config.json
   --allow-insecure-global  Allow a global .env with permissive file mode
   --warn-plaintext         Warn once on stderr when plaintext local sources supply keys
   --print-editor-url       Explicitly print the one-time local editor URL
@@ -834,6 +838,9 @@ Options:
 }
 
 async function main(): Promise<number> {
+  // 旧名 bin（mx-env/morphix-env）经 symlink 调用时 argv[1] 保留调用名，
+  // stderr 弃用提示一次；stdout 纯净（export/eval 场景）。
+  warnDeprecatedBinInvocation(process.argv[1])
   // Sanitize before anything composes: provider subprocesses spawned during
   // composition inherit PATH, so a shimmed provider CLI would recurse
   // shim → run → provider → shim. See design decision 3.
@@ -861,7 +868,7 @@ async function main(): Promise<number> {
     case 'help': showHelp(); return 0
     case '--version': console.log(VERSION); return 0
     default:
-      if (args.command) console.error(`[morphix-env] Unknown command: ${args.command}`)
+      if (args.command) console.error(`[mxenv] Unknown command: ${args.command}`)
       showHelp()
       return args.command ? 1 : 0
   }
@@ -874,7 +881,7 @@ if (process.argv[2] === '__mx_editor') {
   main()
     .then((code) => { process.exitCode = code })
     .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : '[morphix-env] Failed to compose environment.'
+      const message = error instanceof Error ? error.message : '[mxenv] Failed to compose environment.'
       console.error(message)
       process.exitCode = 1
     })

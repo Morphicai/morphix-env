@@ -46,7 +46,7 @@ describe('renderEditorHtml state inlining is script-safe (N-2)', () => {
   for (const { label, value } of HOSTILE_VALUES) {
     it(`state value with ${label} cannot break out of the state script`, () => {
       const state = dotenvxStateWithRevealed(value)
-      const html = renderEditorHtml('mx-env editor', state)
+      const html = renderEditorHtml('mxenv editor', state)
       const { state: stateBody } = extractInlineScripts(html)
 
       // No bare script closer or comment opener may appear inside the state
@@ -61,7 +61,7 @@ describe('renderEditorHtml state inlining is script-safe (N-2)', () => {
 
     it(`state value with ${label} round-trips verbatim through the inlined state`, () => {
       const state = dotenvxStateWithRevealed(value)
-      const html = renderEditorHtml('mx-env editor', state)
+      const html = renderEditorHtml('mxenv editor', state)
       // 解析回等值：读出的 state 与写入的 state 完全一致（敌意字符以本体
       // 形式驻留值中，只是不能驻留在脚本字面里）。
       expect(extractEditorState(html)).toEqual(state)
@@ -69,13 +69,13 @@ describe('renderEditorHtml state inlining is script-safe (N-2)', () => {
   }
 
   it('the page carries exactly the two structural </script> closers', () => {
-    const html = renderEditorHtml('mx-env editor', dotenvxStateWithRevealed('</script>'))
+    const html = renderEditorHtml('mxenv editor', dotenvxStateWithRevealed('</script>'))
     const closers = html.match(/<\/script/gi) ?? []
     expect(closers).toHaveLength(2)
   })
 
   it('the client bundle body contains no bare </script (safeScriptBody contract)', () => {
-    const html = renderEditorHtml('mx-env editor', dotenvxStateWithRevealed('x'))
+    const html = renderEditorHtml('mxenv editor', dotenvxStateWithRevealed('x'))
     const { bundle } = extractInlineScripts(html)
     expect(bundle).not.toMatch(/<\/script/i)
   })

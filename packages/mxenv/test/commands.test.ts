@@ -6,7 +6,7 @@ import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 
 const CLI = join(__dirname, '..', 'dist', 'cli.js')
-const TMP = join(tmpdir(), `mx-env-commands-${randomUUID()}`)
+const TMP = join(tmpdir(), `mxenv-commands-${randomUUID()}`)
 const HOME = join(TMP, 'home')
 
 function value(label: string): string {
@@ -31,7 +31,7 @@ function run(args: string[], env: Record<string, string> = {}) {
 function ok(args: string[], env: Record<string, string> = {}) {
   const result = run(args, env)
   if (result.status !== 0) {
-    throw new Error(`mx-env ${args.join(' ')} exited ${result.status}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`)
+    throw new Error(`mxenv ${args.join(' ')} exited ${result.status}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`)
   }
   return result
 }
@@ -49,9 +49,9 @@ afterEach(() => {
   rmSync(TMP, { recursive: true, force: true })
 })
 
-// ─── mx-env export ────────────────────────────────────────
+// ─── mxenv export ────────────────────────────────────────
 
-describe('mx-env export', () => {
+describe('mxenv export', () => {
   it('emits only eval-able export lines with POSIX-quoted values', () => {
     const expected = `val'ue with spaces`
     write('.env.local', `MXTEST_EXPORT=${expected}\n`)
@@ -112,15 +112,15 @@ describe('mx-env export', () => {
     ok(['export', '--no-infisical'])
 
     const day = new Date().toISOString().slice(0, 10)
-    const audit = readFileSync(join(HOME, '.mx-env', 'audit', `${day}.jsonl`), 'utf8')
+    const audit = readFileSync(join(HOME, '.mxenv', 'audit', `${day}.jsonl`), 'utf8')
     expect(audit).toContain('MXTEST_EXPORT_AUDIT')
     expect(audit).not.toContain(expected)
   })
 })
 
-// ─── mx-env render ────────────────────────────────────────
+// ─── mxenv render ────────────────────────────────────────
 
-describe('mx-env render', () => {
+describe('mxenv render', () => {
   it('substitutes ${VAR} and writes the output with mode 0600', () => {
     const expected = value('render')
     write('.env.local', `MXTEST_RENDER=${expected}\n`)
@@ -157,7 +157,7 @@ describe('mx-env render', () => {
   it('requires both positional arguments', () => {
     const result = run(['render', 'only-template.json', '--no-infisical'])
     expect(result.status).toBe(1)
-    expect(result.stderr).toContain('Usage: mx-env render')
+    expect(result.stderr).toContain('Usage: mxenv render')
   })
 
   it('warns about unsupported template constructs and keeps them literal', () => {
@@ -181,44 +181,44 @@ describe('mx-env render', () => {
 
     ok(['render', 'audit-tpl.json', 'audit-out.json', '--no-infisical'])
     const day = new Date().toISOString().slice(0, 10)
-    const audit = readFileSync(join(HOME, '.mx-env', 'audit', `${day}.jsonl`), 'utf8')
+    const audit = readFileSync(join(HOME, '.mxenv', 'audit', `${day}.jsonl`), 'utf8')
     expect(audit).toContain('MXTEST_RENDER_AUDIT')
     expect(audit).not.toContain(expected)
   })
 })
 
-// ─── mx-env inject ────────────────────────────────────────
+// ─── mxenv inject ────────────────────────────────────────
 
-describe('mx-env inject', () => {
+describe('mxenv inject', () => {
   function writeConfig(): void {
     write('inject-base.env', `MXTEST_INJECT=${value('inject')}\n`)
-    write('mx-env.config.json', JSON.stringify({
+    write('mxenv.config.json', JSON.stringify({
       sources: { base: { provider: 'local', files: ['inject-base.env'] } },
       profiles: { dev: { sources: ['base'] } },
       defaultProfile: 'dev',
     }))
   }
 
-  it('resolves mx-env:// references into the output file with mode 0600', () => {
+  it('resolves mxenv:// references into the output file with mode 0600', () => {
     writeConfig()
     const expected = readFileSync(join(TMP, 'inject-base.env'), 'utf8').trim().split('=')[1]
     write('mcp.tpl.json', JSON.stringify({
-      mcpServers: { x: { env: { API: 'mx-env://dev/MXTEST_INJECT', MISSING: 'mx-env://dev/NOPE' } } },
+      mcpServers: { x: { env: { API: 'mxenv://dev/MXTEST_INJECT', MISSING: 'mxenv://dev/NOPE' } } },
     }))
 
     const result = ok(['inject', 'mcp.tpl.json', 'mcp.json', '--no-infisical'])
     const output = readFileSync(join(TMP, 'mcp.json'), 'utf8')
     expect(output).toContain(expected)
-    expect(output).toContain('mx-env://dev/NOPE')
-    expect(output).not.toContain('mx-env://dev/MXTEST_INJECT')
+    expect(output).toContain('mxenv://dev/NOPE')
+    expect(output).not.toContain('mxenv://dev/MXTEST_INJECT')
     expect(fileMode(join(TMP, 'mcp.json'))).toBe(0o600)
-    expect(result.stderr).toContain('Unresolved mx-env://dev/NOPE reference')
+    expect(result.stderr).toContain('Unresolved mxenv://dev/NOPE reference')
     expect(result.stdout).toContain('Injected mcp.tpl.json -> mcp.json (2 references, 1 unresolved)')
   })
 
   it('--dry-run lists reference status without values or output', () => {
     writeConfig()
-    write('mcp.tpl.json', '{"api":"mx-env://dev/MXTEST_INJECT","missing":"mx-env://dev/NOPE"}')
+    write('mcp.tpl.json', '{"api":"mxenv://dev/MXTEST_INJECT","missing":"mxenv://dev/NOPE"}')
 
     const result = ok(['inject', 'mcp.tpl.json', 'dry.json', '--dry-run', '--no-infisical'])
     expect(result.stdout).toContain('dev/MXTEST_INJECT: resolved')
@@ -230,31 +230,31 @@ describe('mx-env inject', () => {
   it('requires both positional arguments', () => {
     const result = run(['inject', '--no-infisical'])
     expect(result.status).toBe(1)
-    expect(result.stderr).toContain('Usage: mx-env inject')
+    expect(result.stderr).toContain('Usage: mxenv inject')
   })
 
   it('writes a value-free audit event naming the referenced profile and keys', () => {
     writeConfig()
     const expected = readFileSync(join(TMP, 'inject-base.env'), 'utf8').trim().split('=')[1]
-    write('mcp.tpl.json', '{"api":"mx-env://dev/MXTEST_INJECT"}')
+    write('mcp.tpl.json', '{"api":"mxenv://dev/MXTEST_INJECT"}')
 
     ok(['inject', 'mcp.tpl.json', 'audit-mcp.json', '--no-infisical'])
     const day = new Date().toISOString().slice(0, 10)
-    const audit = readFileSync(join(HOME, '.mx-env', 'audit', `${day}.jsonl`), 'utf8')
+    const audit = readFileSync(join(HOME, '.mxenv', 'audit', `${day}.jsonl`), 'utf8')
     expect(audit).toContain('"profile":"dev"')
     expect(audit).toContain('MXTEST_INJECT')
     expect(audit).not.toContain(expected)
   })
 })
 
-// ─── mx-env run with references and --dry-run ─────────────
+// ─── mxenv run with references and --dry-run ─────────────
 
-describe('mx-env run references and dry-run', () => {
-  it('resolves mx-env:// values before spawn (verified by comparison, never echoed)', () => {
+describe('mxenv run references and dry-run', () => {
+  it('resolves mxenv:// values before spawn (verified by comparison, never echoed)', () => {
     const expected = value('runref')
     write('base.env', `MXTEST_DIRECT=${expected}\n`)
-    write('ref.env', 'MXTEST_INDIRECT=mx-env://dev/MXTEST_DIRECT\n')
-    write('mx-env.config.json', JSON.stringify({
+    write('ref.env', 'MXTEST_INDIRECT=mxenv://dev/MXTEST_DIRECT\n')
+    write('mxenv.config.json', JSON.stringify({
       sources: {
         base: { provider: 'local', files: ['base.env'] },
         refs: { provider: 'local', files: ['ref.env'] },
@@ -285,8 +285,8 @@ describe('mx-env run references and dry-run', () => {
   it('redacts a resolved value even when the referencing key is browser-public', () => {
     const expected = value('pubref')
     write('secret.env', `MX_PUBREF_SECRET=${expected}\n`)
-    write('ref.env', 'VITE_MX_PUBREF=mx-env://prod/MX_PUBREF_SECRET\n')
-    write('mx-env.config.json', JSON.stringify({
+    write('ref.env', 'VITE_MX_PUBREF=mxenv://prod/MX_PUBREF_SECRET\n')
+    write('mxenv.config.json', JSON.stringify({
       sources: {
         secret: { provider: 'local', files: ['secret.env'] },
         refs: { provider: 'local', files: ['ref.env'] },
@@ -304,7 +304,7 @@ describe('mx-env run references and dry-run', () => {
     ])
     expect(result.stdout).toContain('public_ref:[REDACTED]')
     expect(result.stdout).not.toContain(expected)
-    expect(result.stdout).not.toContain('mx-env://')
+    expect(result.stdout).not.toContain('mxenv://')
   })
 })
 
@@ -313,9 +313,9 @@ describe('mx-env run references and dry-run', () => {
 describe('help', () => {
   it('lists the new commands and --dry-run', () => {
     const result = ok(['--help'])
-    expect(result.stdout).toContain('mx-env export')
-    expect(result.stdout).toContain('mx-env render <template> <output>')
-    expect(result.stdout).toContain('mx-env inject <template> <output>')
+    expect(result.stdout).toContain('mxenv export')
+    expect(result.stdout).toContain('mxenv render <template> <output>')
+    expect(result.stdout).toContain('mxenv inject <template> <output>')
     expect(result.stdout).toContain('--dry-run')
   })
 })

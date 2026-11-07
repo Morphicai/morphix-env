@@ -53,7 +53,7 @@ function assertSafeGlobalFile(file: string, context: SourceContext, entry: Sourc
     throw new SourceError(
       entry.name,
       entry.source.provider,
-      `[morphix-env] Global env file ${file} is readable by group or other users; set mode 0600 or pass --allow-insecure-global.`,
+      `[mxenv] Global env file ${file} is readable by group or other users; set mode 0600 or pass --allow-insecure-global.`,
     )
   }
 }
@@ -74,7 +74,7 @@ function resolveLocal(entry: SourceEntry, source: LocalSource, context: SourceCo
     if (source.optional) {
       return { name: entry.name, provider: source.provider, values: {}, availability: 'missing-optional' }
     }
-    throw new SourceError(entry.name, source.provider, `[morphix-env] Local source "${entry.name}" has no available env file.`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] Local source "${entry.name}" has no available env file.`)
   }
 
   return { name: entry.name, provider: source.provider, values, availability: 'loaded' }
@@ -102,25 +102,25 @@ async function resolveInfisical(entry: SourceEntry, source: InfisicalSource, con
       }, source.envPrefix)
       return { name: entry.name, provider: source.provider, values: result.values, availability: 'loaded' }
     } catch {
-      throw new SourceError(entry.name, source.provider, `[morphix-env] Infisical source "${entry.name}" could not authenticate or load.`)
+      throw new SourceError(entry.name, source.provider, `[mxenv] Infisical source "${entry.name}" could not authenticate or load.`)
     }
   }
 
   if (!hasInfisicalCLI()) {
     if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped' }
-    throw new SourceError(entry.name, source.provider, `[morphix-env] Infisical source "${entry.name}" needs Machine Identity credentials or an installed Infisical CLI.`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] Infisical source "${entry.name}" needs Machine Identity credentials or an installed Infisical CLI.`)
   }
 
   if (!isInfisicalLoggedIn()) {
     if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped' }
-    throw new SourceError(entry.name, source.provider, `[morphix-env] Infisical source "${entry.name}" is not logged in; run infisical login.`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] Infisical source "${entry.name}" is not logged in; run infisical login.`)
   }
 
   const result = fetchSecretsViaCLI(environment, source.paths, source.envPrefix)
   const firstError = result.errors[0]
   if (firstError) {
     if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped' }
-    throw new SourceError(entry.name, source.provider, `[morphix-env] Infisical source "${entry.name}" could not load (${firstError.kind}).`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] Infisical source "${entry.name}" could not load (${firstError.kind}).`)
   }
 
   return { name: entry.name, provider: source.provider, values: result.values, availability: 'loaded' }
@@ -146,7 +146,7 @@ export function ensureCommand(command: string, sourceName: string, provider: Sec
     } catch {
       // Fall through to the value-free availability error below.
     }
-    throw new SourceError(sourceName, provider, `[morphix-env] ${provider} source "${sourceName}" requires the ${command} CLI.`)
+    throw new SourceError(sourceName, provider, `[mxenv] ${provider} source "${sourceName}" requires the ${command} CLI.`)
   }
 }
 
@@ -155,10 +155,10 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
   const existingFiles = files.filter(existsSync)
   if (!existingFiles.length) {
     if (source.optional) return { name: entry.name, provider: source.provider, values: {}, availability: 'missing-optional' }
-    throw new SourceError(entry.name, source.provider, `[morphix-env] dotenvx source "${entry.name}" has no available env file.`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] dotenvx source "${entry.name}" has no available env file.`)
   }
   if (existingFiles.length !== files.length) {
-    throw new SourceError(entry.name, source.provider, `[morphix-env] dotenvx source "${entry.name}" is missing a declared env file.`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] dotenvx source "${entry.name}" is missing a declared env file.`)
   }
   // The implicit global file's `.env.keys` is the plaintext-equivalent secret
   // after migration — it gets the same 0600 gate the plaintext .env had.
@@ -168,7 +168,7 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
       throw new SourceError(
         entry.name,
         source.provider,
-        `[morphix-env] Global dotenvx keys file ${keysFile} is readable by group or other users; set mode 0600 or pass --allow-insecure-global.`,
+        `[mxenv] Global dotenvx keys file ${keysFile} is readable by group or other users; set mode 0600 or pass --allow-insecure-global.`,
       )
     }
   }
@@ -213,7 +213,7 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
     const sniffHint = entry.globalImplicit
       ? ' The global file looks dotenvx-encrypted; if it is actually plaintext, remove the DOTENV_PUBLIC_KEY / encrypted: markers.'
       : ''
-    throw new SourceError(entry.name, source.provider, `[morphix-env] dotenvx source "${entry.name}" could not decrypt or load (${stage}:${category}).${sniffHint}`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] dotenvx source "${entry.name}" could not decrypt or load (${stage}:${category}).${sniffHint}`)
   }
 }
 
@@ -238,10 +238,10 @@ export async function loadKeytar(): Promise<KeytarModule | null> {
 
 async function resolveKeychain(entry: SourceEntry, source: KeychainSource): Promise<LoadedSource> {
   if (source.platform === 'macos' && process.platform !== 'darwin') {
-    throw new SourceError(entry.name, source.provider, `[morphix-env] os-keychain source "${entry.name}" is only available on macOS.`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" is only available on macOS.`)
   }
   if (process.platform !== 'darwin') {
-    throw new SourceError(entry.name, source.provider, `[morphix-env] os-keychain source "${entry.name}" is currently supported on macOS only.`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" is currently supported on macOS only.`)
   }
 
   const keytar = await loadKeytar()
@@ -249,7 +249,7 @@ async function resolveKeychain(entry: SourceEntry, source: KeychainSource): Prom
     throw new SourceError(
       entry.name,
       source.provider,
-      `[morphix-env] os-keychain source "${entry.name}" needs the optional native module "keytar", which is not usable on this machine. Reinstall morphix-env to rebuild it, or remove this source from the profile.`,
+      `[mxenv] os-keychain source "${entry.name}" needs the optional native module "keytar", which is not usable on this machine. Reinstall mxenv to rebuild it, or remove this source from the profile.`,
     )
   }
 
@@ -262,7 +262,7 @@ async function resolveKeychain(entry: SourceEntry, source: KeychainSource): Prom
       availability: 'loaded',
     }
   } catch {
-    throw new SourceError(entry.name, source.provider, `[morphix-env] os-keychain source "${entry.name}" could not be accessed.`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" could not be accessed.`)
   }
 }
 
@@ -276,7 +276,7 @@ function resolveDoppler(entry: SourceEntry, source: DopplerSource, context: Sour
     )
     return { name: entry.name, provider: source.provider, values: parseDotenvText(output), availability: 'loaded' }
   } catch {
-    throw new SourceError(entry.name, source.provider, `[morphix-env] Doppler source "${entry.name}" could not authenticate or load.`)
+    throw new SourceError(entry.name, source.provider, `[mxenv] Doppler source "${entry.name}" could not authenticate or load.`)
   }
 }
 
@@ -288,30 +288,41 @@ function parseDotenvText(text: string): Record<string, string> {
 const PLUGIN_TIMEOUT_MS = 30_000
 
 /**
- * Runs `mx-env-provider-<plugin> <KEY>` once per declared key. The plugin's
- * stdout is the value (one trailing line ending stripped); its stderr never
- * reaches the terminal because it may contain sensitive material.
+ * Runs `mxenv-provider-<plugin> <KEY>` once per declared key (legacy
+ * `mx-env-provider-<plugin>` accepted as fallback while the 0.12.x shim window
+ * lasts; new name wins when both exist). The plugin's stdout is the value (one
+ * trailing line ending stripped); its stderr never reaches the terminal
+ * because it may contain sensitive material.
  */
 function resolvePlugin(entry: SourceEntry, source: PluginSource, context: SourceContext): LoadedSource {
-  const command = `mx-env-provider-${source.plugin}`
+  const primary = `mxenv-provider-${source.plugin}`
+  const legacy = `mx-env-provider-${source.plugin}`
+  // 首个成功执行的候选名对本源全程沿用，保证一次加载内行为一致。
+  let command: string | null = null
   const values: Record<string, string> = {}
 
   for (const key of source.keys) {
-    let output: string
-    try {
-      output = execFileSync(command, [key], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, ...context.environment },
-        timeout: PLUGIN_TIMEOUT_MS,
-      })
-    } catch (error: any) {
-      if (error?.code === 'ENOENT') {
-        if (source.optional) return { name: entry.name, provider: source.provider, values: {}, availability: 'missing-optional' }
-        throw new SourceError(entry.name, source.provider, `[morphix-env] plugin source "${entry.name}" needs ${command} on PATH.`)
+    let output: string | null = null
+    const candidates: string[] = command ? [command] : [primary, legacy]
+    for (const candidate of candidates) {
+      try {
+        output = execFileSync(candidate, [key], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: { ...process.env, ...context.environment },
+          timeout: PLUGIN_TIMEOUT_MS,
+        })
+        command = candidate
+        break
+      } catch (error: any) {
+        if (error?.code === 'ENOENT') continue
+        const reason = typeof error?.code === 'string' ? error.code : `exit ${error?.status ?? 'unknown'}`
+        throw new SourceError(entry.name, source.provider, `[mxenv] plugin source "${entry.name}" failed for key "${key}" (${reason}).`)
       }
-      const reason = typeof error?.code === 'string' ? error.code : `exit ${error?.status ?? 'unknown'}`
-      throw new SourceError(entry.name, source.provider, `[morphix-env] plugin source "${entry.name}" failed for key "${key}" (${reason}).`)
+    }
+    if (output === null) {
+      if (source.optional) return { name: entry.name, provider: source.provider, values: {}, availability: 'missing-optional' }
+      throw new SourceError(entry.name, source.provider, `[mxenv] plugin source "${entry.name}" needs ${primary} on PATH (0.12.x 内旧名 ${legacy} 亦可).`)
     }
     values[key] = output.endsWith('\r\n') ? output.slice(0, -2) : output.endsWith('\n') ? output.slice(0, -1) : output
   }

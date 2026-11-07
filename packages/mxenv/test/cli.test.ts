@@ -1,12 +1,12 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync, spawnSync } from 'child_process'
-import { writeFileSync, unlinkSync, existsSync, readFileSync, mkdirSync, rmSync } from 'fs'
+import { writeFileSync, unlinkSync, existsSync, readFileSync, mkdirSync, rmSync, symlinkSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 
 const CLI = join(__dirname, '..', 'dist', 'cli.js')
-const TMP = join(tmpdir(), 'mx-env-cli-test-' + Date.now())
+const TMP = join(tmpdir(), 'mxenv-cli-test-' + Date.now())
 const testValue = (label: string) => `mxenv_test_${label}_${randomUUID().replace(/-/g, '')}`
 
 function run(args: string[], env?: Record<string, string>): string {
@@ -29,7 +29,7 @@ mkdirSync(TMP, { recursive: true })
 
 afterEach(() => {
   // 清理临时文件
-  for (const f of ['.env.local', '.env.staging', 'editable.env', 'workflow-skill.md', 'mx-env.config.json']) {
+  for (const f of ['.env.local', '.env.staging', 'editable.env', 'workflow-skill.md', 'mxenv.config.json']) {
     const p = join(TMP, f)
     if (existsSync(p)) unlinkSync(p)
   }
@@ -41,15 +41,55 @@ afterEach(() => {
 // ─── CLI 基本功能 ─────────────────────────────────────────
 
 describe('CLI basic', () => {
-  it('publishes mx-env and morphix-env as the same binary entry', () => {
+  it('publishes mxenv as the primary bin, with mx-env/morphix-env as deprecated aliases', () => {
     const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as { bin: Record<string, string> }
-    expect(manifest.bin['mx-env']).toBe('./dist/cli.js')
-    expect(manifest.bin['morphix-env']).toBe(manifest.bin['mx-env'])
+    expect(manifest.bin['mxenv']).toBe('./dist/cli.js')
+    expect(manifest.bin['mx-env']).toBe(manifest.bin['mxenv'])
+    expect(manifest.bin['morphix-env']).toBe(manifest.bin['mxenv'])
+  })
+
+  it('旧名 bin 调用行为等价且 stderr 一行弃用提示（export stdout 纯净）', () => {
+    writeFileSync(join(TMP, '.env.local'), 'MXTEST_ALIAS=alias-value-visible-in-export\n')
+    const binDir = join(TMP, 'bin')
+    mkdirSync(binDir, { recursive: true })
+    for (const legacy of ['mx-env', 'morphix-env']) {
+      const link = join(binDir, legacy)
+      rmSync(link, { force: true })
+      symlinkSync(CLI, link)
+      const result = spawnSync('node', [link, 'export', '--no-infisical'], {
+        encoding: 'utf8',
+        env: { ...process.env, HOME: join(TMP, 'home') },
+        cwd: TMP,
+      })
+      expect(result.status).toBe(0)
+      const lines = result.stdout.trim().split('\n').filter(Boolean)
+      expect(lines.length).toBeGreaterThan(0)
+      for (const line of lines) expect(line.startsWith('export ')).toBe(true)
+      expect(result.stderr).toContain('已弃用')
+      expect(result.stdout).not.toContain('已弃用')
+    }
+  })
+
+  it('新名调用（mxenv / 直接 node dist/cli.js）不出弃用提示', () => {
+    const binDir = join(TMP, 'bin')
+    mkdirSync(binDir, { recursive: true })
+    const link = join(binDir, 'mxenv')
+    rmSync(link, { force: true })
+    symlinkSync(CLI, link)
+    for (const argv1 of [link, CLI]) {
+      const result = spawnSync('node', [argv1, '--version'], {
+        encoding: 'utf8',
+        env: { ...process.env, HOME: join(TMP, 'home') },
+        cwd: TMP,
+      })
+      expect(result.status).toBe(0)
+      expect(result.stderr).not.toContain('已弃用')
+    }
   })
 
   it('--help 输出帮助', () => {
     const out = run(['--help'])
-    expect(out).toContain('mx-env')
+    expect(out).toContain('mxenv')
     expect(out).toContain('Usage:')
   })
 
@@ -73,9 +113,9 @@ describe('CLI basic', () => {
   })
 })
 
-// ─── mx-env run ───────────────────────────────────────────
+// ─── mxenv run ───────────────────────────────────────────
 
-describe('mx-env run', () => {
+describe('mxenv run', () => {
   it('注入 .env.local 变量到子进程', () => {
     writeFileSync(join(TMP, '.env.local'), 'MXTEST_RUN=injected\n')
 
@@ -140,9 +180,9 @@ describe('mx-env run', () => {
   })
 })
 
-// ─── mx-env generate ─────────────────────────────────────
+// ─── mxenv generate ─────────────────────────────────────
 
-describe('mx-env generate', () => {
+describe('mxenv generate', () => {
   it('生成 __env.js 包含公开变量', () => {
     const outDir = join(TMP, 'public')
     mkdirSync(outDir, { recursive: true })
@@ -180,9 +220,9 @@ describe('mx-env generate', () => {
   })
 })
 
-// ─── mx-env inspect ──────────────────────────────────────
+// ─── mxenv inspect ──────────────────────────────────────
 
-describe('mx-env inspect', () => {
+describe('mxenv inspect', () => {
   it('显示 .env.local key 和 provenance，不显示任何值', () => {
     const longValue = testValue('inspect-long')
     const shortValue = testValue('inspect-short')
@@ -223,7 +263,7 @@ describe('plaintext marking and optional reminder', () => {
   })
 
   it('inspect 不标记 dotenvx 源', () => {
-    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({
       sources: { enc: { provider: 'dotenvx', files: ['.env.missing'], optional: true } },
       profiles: { dev: { sources: ['enc'] } },
       defaultProfile: 'dev',
@@ -246,7 +286,7 @@ describe('plaintext marking and optional reminder', () => {
     const result = runCapture(['run', '--no-infisical', '--warn-plaintext', '--', 'node', '-e', 'process.exit(0)'])
     expect(result.status).toBe(0)
     expect(result.stderr).toContain('Plaintext local source')
-    expect(result.stderr).toContain('mx-env migrate')
+    expect(result.stderr).toContain('mxenv migrate')
   })
 
   it('MXENV_WARN_PLAINTEXT=1 等效于 flag（shim 场景传不了 flag）', () => {
@@ -267,11 +307,11 @@ describe('plaintext marking and optional reminder', () => {
   })
 })
 
-// ─── mx-env.config.json ──────────────────────────────────
+// ─── mxenv.config.json ─────────────────────────────────
 
 describe('config file integration', () => {
   it('从 config 读取 envFiles', () => {
-    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({
       envFiles: ['.env.staging'],
     }))
     writeFileSync(join(TMP, '.env.staging'), 'MXTEST_CFG=from-config\n')
@@ -285,7 +325,7 @@ describe('config file integration', () => {
     const initial = `mxenv_test_editor_${Date.now()}_initial`
     const replacement = `mxenv_test_editor_${Date.now()}_replacement`
     writeFileSync(join(TMP, 'editable.env'), `MXTEST_EDITOR=${initial}\n`)
-    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({
       sources: { local: { provider: 'local', files: ['editable.env'] } },
       profiles: { editable: { sources: ['local'] } },
     }))
@@ -328,7 +368,7 @@ describe('config file integration', () => {
     const index = await fetch(url!).then((response) => response.text())
     // Assert the server-rendered <title>: component copy is inlined in every
     // page's client bundle and cannot discriminate pages.
-    expect(index).toContain('<title>mx-env editor</title>')
+    expect(index).toContain('<title>mxenv editor</title>')
 
     await fetch(url!, {
       method: 'POST',
@@ -357,17 +397,17 @@ describe('config file integration', () => {
     const content = readFileSync(skill, 'utf8')
     expect(output).toContain('Generated value-free workflow Skill')
     expect(output).not.toContain(sentinel)
-    expect(content).toContain('mx-env edit')
+    expect(content).toContain('mxenv edit')
     expect(content).toContain('--profile <profile>')
     expect(content).toContain('MXTEST_SKILL')
     expect(content).not.toContain(sentinel)
   })
 })
 
-// ─── mx-env skill ─────────────────────────────────────────
+// ─── mxenv skill ─────────────────────────────────────────
 
-describe('mx-env skill', () => {
-  const projectSkill = () => join(TMP, '.claude', 'skills', 'morphix-env', 'SKILL.md')
+describe('mxenv skill', () => {
+  const projectSkill = () => join(TMP, '.claude', 'skills', 'mxenv', 'SKILL.md')
 
   it('--help lists the skill command and targets', () => {
     const out = run(['--help'])
@@ -411,11 +451,11 @@ describe('mx-env skill', () => {
 
   it('install --target global and --target trellis write into the home stores', () => {
     run(['skill', 'install', '--target', 'global'])
-    expect(readFileSync(join(TMP, 'home', '.claude', 'skills', 'morphix-env', 'SKILL.md'), 'utf8')).toContain('name: mxenv')
+    expect(readFileSync(join(TMP, 'home', '.claude', 'skills', 'mxenv', 'SKILL.md'), 'utf8')).toContain('name: mxenv')
 
     const out = run(['skill', 'install', '--target', 'trellis'])
     expect(out).toContain('trellis sync skills')
-    expect(readFileSync(join(TMP, 'home', '.trellis', 'skills', 'morphix-env', 'SKILL.md'), 'utf8')).toContain('name: mxenv')
+    expect(readFileSync(join(TMP, 'home', '.trellis', 'skills', 'mxenv', 'SKILL.md'), 'utf8')).toContain('name: mxenv')
   })
 
   it('rejects an unknown target and unknown subcommand', () => {
@@ -438,5 +478,26 @@ describe('mx-env skill', () => {
     const out = run(['skill', 'show'])
     expect(out).toContain('project: installed (matches this version)')
     expect(out).toContain('global: not installed')
+  })
+})
+
+// ─── mxenv audit（读写同目录 e2e，review S1）────────────────
+
+describe('mxenv audit', () => {
+  it('run 产生审计后 audit 命令能读到（值不落输出）', () => {
+    const auditValue = testValue('audit-e2e')
+    writeFileSync(join(TMP, '.env.local'), `MXTEST_AUDIT=${auditValue}\n`)
+
+    run(['run', '--', 'node', '-e', 'process.exit(0)'])
+
+    // 真正执行 audit 命令：读面漏切旧目录时此用例必红（写面落 ~/.mxenv/audit）。
+    const out = run(['audit'])
+    expect(out).toContain('"outcome"')
+    expect(out).toContain('MXTEST_AUDIT')
+    expect(out).not.toContain(auditValue)
+
+    const tail = run(['audit', 'tail'])
+    expect(tail).toContain('"outcome"')
+    expect(tail).not.toContain(auditValue)
   })
 })

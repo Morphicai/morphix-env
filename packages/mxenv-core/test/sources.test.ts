@@ -28,7 +28,7 @@ vi.mock('../src/infisical', () => ({
 
 import { loadSource, type SourceEntry } from '../src/sources'
 
-const ROOT = join('/tmp', `mx-env-sources-${randomUUID()}`)
+const ROOT = join('/tmp', `mxenv-sources-${randomUUID()}`)
 const context = () => ({ homeDir: ROOT, environment: { ...process.env } })
 const value = (label: string) => `mxenv_test_${label}_${randomUUID().replace(/-/g, '')}`
 
@@ -139,10 +139,10 @@ describe('provider source adapters', () => {
     const platform = Object.getOwnPropertyDescriptor(process, 'platform')
     Object.defineProperty(process, 'platform', { value: 'darwin' })
     try {
-      const loaded = await loadSource(entry('machine', { provider: 'os-keychain', service: 'com.example.mx-env', platform: 'macos' }), context())
+      const loaded = await loadSource(entry('machine', { provider: 'os-keychain', service: 'com.example.mxenv', platform: 'macos' }), context())
 
       expect(loaded.values.MXTEST_KEYCHAIN).toBe(sentinel)
-      expect(mocks.findCredentials).toHaveBeenCalledWith('com.example.mx-env')
+      expect(mocks.findCredentials).toHaveBeenCalledWith('com.example.mxenv')
     } finally {
       Object.defineProperty(process, 'platform', platform as PropertyDescriptor)
     }

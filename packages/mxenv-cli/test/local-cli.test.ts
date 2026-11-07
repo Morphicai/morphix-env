@@ -62,6 +62,14 @@ describe('resolveLocalCli', () => {
     expect(resolveLocalCli(PROJECT, { PATH: pathDir })).toBe(local)
   })
 
+  it('新名 mxenv 优先于旧名 alias（本地并存时取新名）', () => {
+    const marker = join(TMP, 'm4')
+    const binDir = join(PROJECT, 'node_modules', '.bin')
+    const primary = writeStubCli(binDir, 'mxenv', marker, 'new-name')
+    writeStubCli(binDir, 'mx-env', marker, 'legacy-name')
+    expect(resolveLocalCli(PROJECT, { PATH: '' })).toBe(primary)
+  })
+
   it('falls back to PATH when the project has no local install', () => {
     const marker = join(TMP, 'm2')
     const pathDir = join(TMP, 'pathbin')

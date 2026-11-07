@@ -62,6 +62,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "v${{ steps.tag.outputs.version }}" \
-            --title "morphix-env v${{ steps.tag.outputs.version }}" \
+            --title "mxenv v${{ steps.tag.outputs.version }}" \
             --generate-notes \
             --prerelease="$([ "${{ steps.tag.outputs.tag }}" != "latest" ] && echo true || echo false)"

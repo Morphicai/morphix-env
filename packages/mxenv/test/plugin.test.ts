@@ -6,7 +6,7 @@ import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 
 const CLI = join(__dirname, '..', 'dist', 'cli.js')
-const ROOT = join(tmpdir(), `mx-env-plugin-${randomUUID()}`)
+const ROOT = join(tmpdir(), `mxenv-plugin-${randomUUID()}`)
 const PLUGIN_DIR = join(ROOT, 'bin')
 const HOME = join(ROOT, 'home')
 
@@ -45,7 +45,7 @@ afterEach(() => {
 
 describe('plugin source through the CLI', () => {
   it('composes plugin values into a run and reports provenance as plugin', () => {
-    write('mx-env.config.json', JSON.stringify({
+    write('mxenv.config.json', JSON.stringify({
       sources: { vault: { provider: 'plugin', plugin: 'fake', keys: ['MXTEST_PLUGIN_A'] } },
       profiles: { dev: { sources: ['vault'] } },
       defaultProfile: 'dev',

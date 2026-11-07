@@ -1,4 +1,4 @@
-// L0 契约层（纯，无 IO）—— config schema、`mx-env://` 引用语法、组合/审计类型、
+// L0 契约层（纯，无 IO）—— config schema、`mxenv://` 引用语法、组合/审计类型、
 // redaction 规则的唯一定义地。L1 能力模块（config/refs/composition/audit/
 // sources/redaction）从此处 import 并 re-export 原符号，既有导入面不倒退；
 // 主入口 index.ts 同样 re-export。此入口的零 IO 副作用与导出面（不含值能力
@@ -6,8 +6,8 @@
 
 // ─── config schema：常量与纯类型/结构定义 ─────────────────────────
 
-export const CONFIG_FILE = 'mx-env.config.json'
-export const GLOBAL_CONFIG_DIR = '.mx-env'
+export const CONFIG_FILE = 'mxenv.config.json'
+export const GLOBAL_CONFIG_DIR = '.mxenv'
 export const GLOBAL_CONFIG_FILE = 'config.json'
 export const GLOBAL_ENV_FILE = '.env'
 
@@ -52,10 +52,12 @@ export interface DopplerSource extends SourceBase {
 }
 
 /**
- * External provider plugin: any executable named `mx-env-provider-<plugin>`
- * found on PATH. It is invoked once per key with the key name as argv[1] and
- * writes the value to stdout (one trailing line ending stripped). Provider
- * login/bootstrap stays inside the plugin, never in repository config.
+ * External provider plugin: any executable named `mxenv-provider-<plugin>`
+ * found on PATH (legacy `mx-env-provider-<plugin>` accepted as fallback while
+ * the 0.12.x shim window lasts; new name wins when both exist). It is invoked
+ * once per key with the key name as argv[1] and writes the value to stdout
+ * (one trailing line ending stripped). Provider login/bootstrap stays inside
+ * the plugin, never in repository config.
  */
 export interface PluginSource extends SourceBase {
   provider: 'plugin'
@@ -95,7 +97,7 @@ export interface MxEnvConfig {
   /** Profile selected when a caller does not pass --profile. */
   defaultProfile?: string
   /**
-   * Commands that get a PATH shim via `mx-env shell-init` (global and project
+   * Commands that get a PATH shim via `mxenv-cli shell-init` (global and project
    * lists are unioned). Wiring only — never values. Deliberately excluded from
    * validateConfig's hard errors: a convenience layer must not break the core
    * injection path, so `shell-init` validates and hard-fails while composition
@@ -289,19 +291,34 @@ export interface AuditEvent {
   action?: 'set' | 'delete' | 'reveal' | 'close'
 }
 
-// ─── `mx-env://` 引用语法（纯解析层） ─────────────────────────────
+// ─── `mxenv://` 引用语法（纯解析层） ──────────────────────────────
 
 /**
  * 1Password-style reference (`op://vault/item/field`) for value-free files:
- * `mx-env://<profile>/<KEY>` is written into MCP configs and dotenv templates
- * and resolved at the consumption point (`mx-env inject` / `mx-env run`), so
+ * `mxenv://<profile>/<KEY>` is written into MCP configs and dotenv templates
+ * and resolved at the consumption point (`mxenv inject` / `mxenv run`), so
  * those files can be committed without carrying a value.
  */
-const MX_ENV_REFERENCE_SOURCE = 'mx-env:\\/\\/([A-Za-z0-9][A-Za-z0-9_-]*)\\/([A-Za-z0-9_][A-Za-z0-9_.-]*)'
+const MXENV_REFERENCE_SOURCE = 'mxenv:\\/\\/([A-Za-z0-9][A-Za-z0-9_-]*)\\/([A-Za-z0-9_][A-Za-z0-9_.-]*)'
+
+/**
+ * 0.11 时代的 scheme。零存量消费者（已核 `~/.trellis` 与全仓无真实引用），
+ * 故不设垫片：解析面命中即拒绝并提示改用 `mxenv://`（naming-migration「引用
+ * 语法直切」）。
+ */
+const LEGACY_REFERENCE_PATTERN = /mx-env:\/\//
+
+function rejectLegacyReference(text: string): void {
+  if (LEGACY_REFERENCE_PATTERN.test(text)) {
+    throw new Error(
+      '[mxenv] 旧引用语法 `mx-env://` 已拒绝：请改用 `mxenv://<profile>/<KEY>`（0.12.0 起 scheme 唯一生效）',
+    )
+  }
+}
 
 /** Fresh global-flag pattern each call; callers may keep no state across matches. */
 export function referencePattern(): RegExp {
-  return new RegExp(MX_ENV_REFERENCE_SOURCE, 'g')
+  return new RegExp(MXENV_REFERENCE_SOURCE, 'g')
 }
 
 export interface MxEnvReference {
@@ -318,8 +335,9 @@ export interface ReferenceResolution {
   missing: UnresolvedReference[]
 }
 
-/** Unique `mx-env://profile/KEY` references in declaration order. */
+/** Unique `mxenv://profile/KEY` references in declaration order. */
 export function findMxEnvReferences(text: string): MxEnvReference[] {
+  rejectLegacyReference(text)
   const found = new Map<string, MxEnvReference>()
   for (const match of text.matchAll(referencePattern())) {
     const reference: MxEnvReference = { profile: match[1], key: match[2] }
@@ -329,6 +347,7 @@ export function findMxEnvReferences(text: string): MxEnvReference[] {
 }
 
 export function hasMxEnvReference(text: string): boolean {
+  rejectLegacyReference(text)
   return referencePattern().test(text)
 }
 
@@ -336,7 +355,7 @@ export function hasMxEnvReference(text: string): boolean {
 
 /**
  * Values worth redacting from child output: every non-public sourced value
- * still present in the environment. Also used after `mx-env://` reference
+ * still present in the environment. Also used after `mxenv://` reference
  * resolution, which can introduce new values for the same keys.
  */
 export function collectRedactionValues(

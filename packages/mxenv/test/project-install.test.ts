@@ -120,7 +120,7 @@ describe('项目装即完整可用（验收口径①）', () => {
 
     // 零全局依赖：临时 HOME 下无全局库目录即全绿（本用例已跑通），
     // 且只读命令不得顺手创建全局目录。
-    expect(existsSync(join(HOME, '.mx-env')), '只读命令创建了 ~/.mx-env').toBe(false)
+    expect(existsSync(join(HOME, '.mxenv')), '只读命令创建了 ~/.mxenv').toBe(false)
     expect(existsSync(join(HOME, '.mxenv')), '只读命令创建了 ~/.mxenv').toBe(false)
     // 依赖图自洽：mxenv 的传递依赖由 tarball 解析，不借任何全局安装。
     expect(existsSync(join(CONSUMER, 'node_modules', 'mxenv-core'))).toBe(true)
@@ -153,7 +153,7 @@ describe('项目装即完整可用（验收口径①）', () => {
     writeFileSync(join(CONSUMER, 'upstream.env'), `MXTEST_PI_UP=${upstreamValue}\n`)
     // profile 语义：sources 是完整清单（隐式 legacy 在 profile 下不叠加），
     // .env.local 以显式声明源进 profile 与定制上游并列。
-    writeFileSync(join(CONSUMER, 'mx-env.config.json'), JSON.stringify({
+    writeFileSync(join(CONSUMER, 'mxenv.config.json'), JSON.stringify({
       sources: {
         local: { provider: 'local', files: ['.env.local'] },
         upstream: { provider: 'local', files: ['upstream.env'] },
@@ -177,11 +177,11 @@ describe('项目装即完整可用（验收口径①）', () => {
     const uval = secret('up')
     const procval = secret('proc')
     // 全局库数据层（0600 安全模式；这是数据不是安装）
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', '.env'), `MXTEST_PI_GKEY=${gval}\n`, { mode: 0o600 })
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), `MXTEST_PI_GKEY=${gval}\n`, { mode: 0o600 })
     writeFileSync(join(CONSUMER, '.env.local'), `MXTEST_PI_PKEY=${pval}\n`)
     writeFileSync(join(CONSUMER, 'upstream.env'), `MXTEST_PI_UKEY=${uval}\n`)
-    writeFileSync(join(CONSUMER, 'mx-env.config.json'), JSON.stringify({
+    writeFileSync(join(CONSUMER, 'mxenv.config.json'), JSON.stringify({
       sources: {
         local: { provider: 'local', files: ['.env.local'] },
         upstream: { provider: 'local', files: ['upstream.env'] },
@@ -208,13 +208,13 @@ describe('项目装即完整可用（验收口径①）', () => {
     expect(inspect).toContain('upstream (local)')
     for (const v of [gval, pval, uval]) expect(inspect).not.toContain(v)
     // 用后即焚全局数据层，维持零全局目录基线
-    rmSync(join(HOME, '.mx-env'), { recursive: true, force: true })
+    rmSync(join(HOME, '.mxenv'), { recursive: true, force: true })
   })
 
   it('migrate：项目明文 --to dotenvx 全链（备份→加密→等价），值不落输出', { timeout: 60_000 }, () => {
     const value = secret('migrate')
     writeFileSync(join(CONSUMER, '.env.local'), `MXTEST_PI_MIG=${value}\n`)
-    writeFileSync(join(CONSUMER, 'mx-env.config.json'), JSON.stringify({
+    writeFileSync(join(CONSUMER, 'mxenv.config.json'), JSON.stringify({
       sources: { plain: { provider: 'local', files: ['.env.local'] } },
     }, null, 2))
 
@@ -240,7 +240,7 @@ describe('项目装即完整可用（验收口径①）', () => {
   it('编辑：--print-editor-url 起会话→索引页→来源视图→关闭', { timeout: 30_000 }, async () => {
     const value = secret('edit')
     writeFileSync(join(CONSUMER, 'editable.env'), `MXTEST_PI_EDIT=${value}\n`)
-    writeFileSync(join(CONSUMER, 'mx-env.config.json'), JSON.stringify({
+    writeFileSync(join(CONSUMER, 'mxenv.config.json'), JSON.stringify({
       sources: { local: { provider: 'local', files: ['editable.env'] } },
       profiles: { editable: { sources: ['local'] } },
     }, null, 2))
@@ -253,7 +253,7 @@ describe('项目装即完整可用（验收口径①）', () => {
     expect(url!).not.toContain(value)
 
     const index = await fetch(url!).then((r) => r.text())
-    expect(index).toContain('<title>mx-env editor</title>')
+    expect(index).toContain('<title>mxenv editor</title>')
 
     // 来源管理视图：本地源值仅在浏览器会话内可见（现有语义）
     const source = await fetch(`${url}/source/local`).then((r) => r.text())
@@ -264,13 +264,14 @@ describe('项目装即完整可用（验收口径①）', () => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ action: 'close' }),
     })
-    // 零全局依赖的正确边界：审计数据（writeAudit → ~/.mx-env/audit）合法存在，
-    // 但不得合成全局配置或全局密钥库——全局安装/预置目录始终不在场。
-    const globalDir = join(HOME, '.mx-env')
+    // 零全局依赖的正确边界：审计数据（writeAudit → ~/.mxenv/audit，随全局目录
+    // 新名）合法存在，但不得合成全局配置或全局密钥库——全局安装/预置目录始终
+    // 不在场；旧名全局目录不得再出现（写出面只用新名）。
+    const globalDir = join(HOME, '.mxenv')
     if (existsSync(globalDir)) {
       expect(existsSync(join(globalDir, 'config.json')), '编辑器合成了全局配置').toBe(false)
       expect(existsSync(join(globalDir, '.env')), '编辑器合成了全局密钥库').toBe(false)
     }
-    expect(existsSync(join(HOME, '.mxenv'))).toBe(false)
+    expect(existsSync(join(HOME, '.mx-env')), '写出面出现旧名全局目录').toBe(false)
   })
 })

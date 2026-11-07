@@ -11,7 +11,7 @@ import { startSecretServer } from '../src/serve'
 const execFileAsync = promisify(execFile)
 
 const CLI = join(__dirname, '..', 'dist', 'cli.js')
-const TMP = join(tmpdir(), `mx-env-serve-${randomUUID()}`)
+const TMP = join(tmpdir(), `mxenv-serve-${randomUUID()}`)
 const HOME = join(TMP, 'home')
 
 function value(label: string): string {
@@ -97,7 +97,7 @@ describe('startSecretServer', () => {
   })
 })
 
-describe('mx-env run --serve', () => {
+describe('mxenv run --serve', () => {
   it('keeps values out of env, serves them on demand, and destroys the server with the child', async () => {
     const expected = value('serve')
     write('.env.local', `MXTEST_SERVE=${expected}\n`)
@@ -163,14 +163,14 @@ describe('mx-env run --serve', () => {
 
     // Audit stays value-free.
     const day = new Date().toISOString().slice(0, 10)
-    const audit = readFileSync(join(HOME, '.mx-env', 'audit', `${day}.jsonl`), 'utf8')
+    const audit = readFileSync(join(HOME, '.mxenv', 'audit', `${day}.jsonl`), 'utf8')
     expect(audit).toContain('MXTEST_SERVE')
     expect(audit).not.toContain(expected)
     expect(audit).not.toContain(token)
   }, 20_000)
 })
 
-describe('mx-env fetch', () => {
+describe('mxenv fetch', () => {
   it('fails with a clear message outside a --serve environment', () => {
     const expected = value('fetch')
     write('.env.local', `MXTEST_FETCH=${expected}\n`)
@@ -183,7 +183,7 @@ describe('mx-env fetch', () => {
   it('requires a key name', () => {
     const result = run(['fetch'])
     expect(result.status).toBe(1)
-    expect(result.stderr).toContain('Usage: mx-env fetch')
+    expect(result.stderr).toContain('Usage: mxenv fetch')
   })
 
   it('parses the key after value-taking flags (not the flag value)', async () => {

@@ -5,7 +5,7 @@ import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { writeAudit } from '../src/audit'
 
-const HOME = join(tmpdir(), `mx-env-audit-${randomUUID()}`)
+const HOME = join(tmpdir(), `mxenv-audit-${randomUUID()}`)
 
 afterEach(() => {
   if (existsSync(HOME)) rmSync(HOME, { recursive: true, force: true })
@@ -23,7 +23,7 @@ describe('audit', () => {
       durationMs: 12,
     }, HOME)
 
-    const content = readFileSync(join(HOME, '.mx-env', 'audit', '2026-09-26.jsonl'), 'utf8')
+    const content = readFileSync(join(HOME, '.mxenv', 'audit', '2026-09-26.jsonl'), 'utf8')
     expect(content).toContain('MXTEST_KEY')
     expect(content).not.toMatch(/value|secret|token/i)
   })

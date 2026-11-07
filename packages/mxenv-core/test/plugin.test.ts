@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto'
 import { loadSource, SourceError, type SourceEntry } from '../src/sources'
 import { validateConfig, type PluginSource } from '../src/config'
 
-const ROOT = join(tmpdir(), `mx-env-plugin-${randomUUID()}`)
+const ROOT = join(tmpdir(), `mxenv-plugin-${randomUUID()}`)
 const PLUGIN_DIR = join(ROOT, 'bin')
 const HOME = join(ROOT, 'home')
 
@@ -40,7 +40,7 @@ beforeEach(() => {
   rmSync(ROOT, { recursive: true, force: true })
   mkdirSync(PLUGIN_DIR, { recursive: true })
   mkdirSync(HOME, { recursive: true })
-  write('bin/mx-env-provider-fake', PLUGIN_SCRIPT, 0o755)
+  write('bin/mxenv-provider-fake', PLUGIN_SCRIPT, 0o755)
 })
 
 afterEach(() => {
@@ -48,7 +48,7 @@ afterEach(() => {
 })
 
 describe('plugin source adapter', () => {
-  it('invokes mx-env-provider-<name> per key and strips one trailing line ending', async () => {
+  it('invokes mxenv-provider-<name> per key and strips one trailing line ending', async () => {
     // First execution of a freshly created executable costs ~2s in this
     // environment (OS scan); combined with full-suite load the default 5s
     // is not enough for three real spawns.
@@ -93,7 +93,8 @@ describe('plugin source adapter', () => {
       expect.unreachable()
     } catch (error: any) {
       expect(error).toBeInstanceOf(SourceError)
-      expect(error.message).toContain('mx-env-provider-absent on PATH')
+      expect(error.message).toContain('mxenv-provider-absent on PATH')
+      expect(error.message).toContain('mx-env-provider-absent')  // 0.12.x 垫片提示旧名亦可
     }
 
     const optional = await loadSource(
@@ -103,6 +104,26 @@ describe('plugin source adapter', () => {
     expect(optional.availability).toBe('missing-optional')
     expect(optional.values).toEqual({})
   })
+
+  it('插件名双认：仅旧名 mx-env-provider-* 存在时回退可用', async () => {
+    write('bin/mx-env-provider-fallback', '#!/bin/sh\necho legacy-ok\n', 0o755)
+    const loaded = await loadSource(
+      entry({ provider: 'plugin', plugin: 'fallback', keys: ['MXTEST_PLUGIN_A'] }),
+      { homeDir: ROOT, environment: pluginPathEnv() },
+    )
+    expect(loaded.availability).toBe('loaded')
+    expect(loaded.values).toEqual({ MXTEST_PLUGIN_A: 'legacy-ok' })
+  }, 20_000)
+
+  it('插件名双认：新旧并存时新名优先', async () => {
+    write('bin/mxenv-provider-both', '#!/bin/sh\necho new-name-wins\n', 0o755)
+    write('bin/mx-env-provider-both', '#!/bin/sh\necho legacy-loses\n', 0o755)
+    const loaded = await loadSource(
+      entry({ provider: 'plugin', plugin: 'both', keys: ['MXTEST_PLUGIN_A'] }),
+      { homeDir: ROOT, environment: pluginPathEnv() },
+    )
+    expect(loaded.values).toEqual({ MXTEST_PLUGIN_A: 'new-name-wins' })
+  }, 20_000)
 })
 
 describe('plugin config validation', () => {

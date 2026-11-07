@@ -46,17 +46,17 @@ function profileEntries(
   visiting = new Set<string>(),
 ): SourceEntry[] {
   if (visiting.has(profileName)) {
-    throw new CompositionError(`[morphix-env] Profile "${profileName}" has a circular extends chain.`)
+    throw new CompositionError(`[mxenv] Profile "${profileName}" has a circular extends chain.`)
   }
   const input = profiles.get(profileName)
-  if (!input) throw new CompositionError(`[morphix-env] Unknown profile "${profileName}".`)
+  if (!input) throw new CompositionError(`[mxenv] Unknown profile "${profileName}".`)
 
   visiting.add(profileName)
   const profile = normalizeProfile(input)
   const resolved = profile.extends ? profileEntries(profile.extends, profiles, sources, visiting) : []
   for (const sourceName of profile.sources) {
     const source = sources.get(sourceName)
-    if (!source) throw new CompositionError(`[morphix-env] Profile "${profileName}" references unknown source "${sourceName}".`)
+    if (!source) throw new CompositionError(`[mxenv] Profile "${profileName}" references unknown source "${sourceName}".`)
     resolved.push(source)
   }
   visiting.delete(profileName)
@@ -107,7 +107,7 @@ function configProblems(layers: ConfigLayers, includeGlobal: boolean): string[] 
 function resolveEntries(layers: ConfigLayers, options: ComposeOptions): { name: string; entries: SourceEntry[] } {
   const includeGlobal = !options.noGlobal
   const errors = configProblems(layers, includeGlobal)
-  if (errors.length) throw new CompositionError(`[morphix-env] Invalid configuration: ${errors.join('; ')}`)
+  if (errors.length) throw new CompositionError(`[mxenv] Invalid configuration: ${errors.join('; ')}`)
 
   const globalSources = includeGlobal ? declaredEntries(layers.global) : new Map<string, SourceEntry>()
   const projectSources = declaredEntries(layers.project)
@@ -117,7 +117,7 @@ function resolveEntries(layers: ConfigLayers, options: ComposeOptions): { name: 
     ...Object.entries(layers.project.config.profiles || {}),
   ])
 
-  // Sniff the global implicit file: after `mx-env migrate --to dotenvx` it is
+  // Sniff the global implicit file: after `mxenv migrate --to dotenvx` it is
   // encrypted in place and must load through the dotenvx provider — no config
   // change is involved (design decision 2).
   const globalEncrypted = isDotenvxEncrypted(layers.globalEnvFile)
@@ -187,7 +187,7 @@ export async function composeEnvironment(layers: ConfigLayers, options: ComposeO
       const previous = owner.get(key)
       if (previous && !entry.source.override) {
         throw new CompositionError(
-          `[morphix-env] Key "${key}" is provided by both "${previous.source}" and "${entry.name}". Declare override: true on the later source to allow this.`,
+          `[mxenv] Key "${key}" is provided by both "${previous.source}" and "${entry.name}". Declare override: true on the later source to allow this.`,
         )
       }
 

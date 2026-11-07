@@ -10,6 +10,10 @@ import { RESERVED_SHIM_NAMES, shimsDir, stripShimsFromPath, validateShimList, ty
 import {
   detectHandmadeReservedShims,
   findShadowedCommands,
+  isGeneratedShim,
+  LEGACY_RC_BLOCK_BEGIN,
+  LEGACY_RC_BLOCK_END,
+  LEGACY_SHIM_MARKER,
   removeAllShims,
   removeRcBlock,
   renderShimScript,
@@ -21,7 +25,7 @@ import {
 
 const CLI_L2 = join(__dirname, '..', '..', 'mxenv', 'dist', 'cli.js')
 const CLI_L3 = join(__dirname, '..', 'dist', 'cli.js')
-const TMP = join(tmpdir(), `mx-env-shims-${randomUUID()}`)
+const TMP = join(tmpdir(), `mxenv-shims-${randomUUID()}`)
 const HOME = join(TMP, 'home')
 
 function layers(globalShims: unknown, projectShims: unknown): ConfigLayers {
@@ -85,8 +89,8 @@ describe('writeShims / removeAllShims', () => {
     const shimPath = join(shimsDir(HOME), 'pnpm')
     const content = readFileSync(shimPath, 'utf8')
     expect(content).toContain(SHIM_MARKER)
-    expect(content).toContain('command -v mx-env')
-    expect(content).toContain('MXENV_SHIM=1 exec mx-env run -- pnpm "$@"')
+    expect(content).toContain('command -v mxenv')
+    expect(content).toContain('MXENV_SHIM=1 exec mxenv run -- pnpm "$@"')
     expect(() => chmodSync(shimPath, 0o755)).not.toThrow()
 
     // Idempotent: second run writes nothing.
@@ -136,6 +140,47 @@ describe('writeShims / removeAllShims', () => {
   })
 })
 
+describe('旧标记双认（0.12.x 前生成物兼容）', () => {
+  it('legacy-marker shim 被认作工具生成：writeShims 收敛改写、removeAllShims 可剥离', () => {
+    mkdirSync(shimsDir(HOME), { recursive: true })
+    // 0.12.x 前 shell-init 生成的 shim：旧 marker + 旧 body（exec mx-env run）。
+    const legacy = `#!/bin/sh\n${LEGACY_SHIM_MARKER}\ncommand -v mx-env >/dev/null 2>&1 || exit 127\nMXENV_SHIM=1 exec mx-env run -- pnpm "$@"\n`
+    writeBin(shimsDir(HOME), 'pnpm', legacy)
+    expect(isGeneratedShim(legacy)).toBe(true)
+
+    // 收敛：不被误判 handmade 而 skip，重写为新 marker/新 body。
+    const result = writeShims(['pnpm'], HOME)
+    expect(result.written).toEqual(['pnpm'])
+    expect(result.skipped).toEqual([])
+    const converged = readFileSync(join(shimsDir(HOME), 'pnpm'), 'utf8')
+    expect(converged).toContain(SHIM_MARKER)
+    expect(converged).toContain('exec mxenv run')
+
+    // 剥离：旧 marker 文件同样被 removeAllShims 清走。
+    writeBin(shimsDir(HOME), 'node', legacy)
+    expect(removeAllShims(HOME).sort()).toEqual(['node', 'pnpm'])
+    expect(readdirSync(shimsDir(HOME))).toEqual([])
+  })
+
+  it('legacy rc 标记块被 upsertRcBlock 替换、removeRcBlock 剥离', () => {
+    const rc = join(TMP, '.zshrc')
+    const legacyBlock = `${LEGACY_RC_BLOCK_BEGIN}\nexport PATH="${shimsDir(HOME)}:$PATH"\n${LEGACY_RC_BLOCK_END}`
+    writeFileSync(rc, `# user content\n${legacyBlock}\nexport EDITOR=vim\n`)
+
+    expect(upsertRcBlock(rc, HOME)).toBe('updated')
+    const replaced = readFileSync(rc, 'utf8')
+    expect(replaced).toContain('# >>> mxenv shims >>>')
+    expect(replaced).not.toContain('# >>> mx-env shims >>>')
+    expect(replaced).toContain('export EDITOR=vim')
+
+    expect(removeRcBlock(rc)).toBe('removed')
+    const after = readFileSync(rc, 'utf8')
+    expect(after).not.toContain('mxenv shims')
+    expect(after).not.toContain('mx-env shims')
+    expect(after).toContain('# user content')
+  })
+})
+
 describe('rc block', () => {
   it('upserts and removes idempotently without touching other content', () => {
     const rc = join(TMP, '.zshrc')
@@ -149,6 +194,7 @@ describe('rc block', () => {
 
     expect(removeRcBlock(rc)).toBe('removed')
     const after = readFileSync(rc, 'utf8')
+    expect(after).not.toContain('mxenv shims')
     expect(after).not.toContain('mx-env shims')
     expect(after).toContain('export EDITOR=vim')
     expect(removeRcBlock(rc)).toBe('absent')
@@ -234,9 +280,9 @@ describe('shell-init e2e', () => {
     mkdirSync(realbin, { recursive: true })
     mkdirSync(bindir, { recursive: true })
     PATH_BASE = process.env.PATH || '/usr/bin:/bin'
-    // A fake `mx-env` on PATH delegating to the freshly built L2 CLI (shims
-    // exec `mx-env run`; the L2 command face lives in the mxenv package).
-    writeBin(bindir, 'mx-env', `#!/bin/sh\nexec ${process.execPath} ${JSON.stringify(CLI_L2)} "$@"\n`)
+    // A fake `mxenv` on PATH delegating to the freshly built L2 CLI (shims
+    // exec `mxenv run`; the L2 command face lives in the mxenv package).
+    writeBin(bindir, 'mxenv', `#!/bin/sh\nexec ${process.execPath} ${JSON.stringify(CLI_L2)} "$@"\n`)
     // The real tool the shim will wrap. Prints value-free probes only.
     writeBin(realbin, 'faketool', `#!/bin/sh
 echo "secret_present:$( [ -n "$MXTEST_E2E" ] && echo yes || echo no )"
@@ -244,9 +290,9 @@ echo "resolves_to:$(command -v faketool)"
 echo "shim_marker:$(printenv MXENV_SHIM >/dev/null 2>&1 && echo set || echo unset)"
 exit "\${1:-0}"
 `)
-    mkdirSync(join(HOME, '.mx-env'), { recursive: true })
-    writeFileSync(join(HOME, '.mx-env', 'config.json'), JSON.stringify({ shims: ['faketool'] }))
-    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', 'config.json'), JSON.stringify({ shims: ['faketool'] }))
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({
       sources: { local: { provider: 'local', files: ['.env.local'] } },
       profiles: { dev: { sources: ['local'] } },
       defaultProfile: 'dev',
@@ -275,7 +321,7 @@ exit "\${1:-0}"
 
     // Audit: via=shim, key name present, value absent.
     const day = new Date().toISOString().slice(0, 10)
-    const audit = readFileSync(join(HOME, '.mx-env', 'audit', `${day}.jsonl`), 'utf8')
+    const audit = readFileSync(join(HOME, '.mxenv', 'audit', `${day}.jsonl`), 'utf8')
     expect(audit).toContain('"via":"shim"')
     expect(audit).toContain('MXTEST_E2E')
     const secret = readFileSync(join(TMP, '.env.local'), 'utf8').trim().split('=')[1]
@@ -285,11 +331,11 @@ exit "\${1:-0}"
   it('composition-time recursion guard: a plugin provider calling the shimmed command does not recurse', () => {
     // The plugin invokes `faketool` internally; if run failed to sanitize PATH
     // before composition, the plugin would re-enter the shim forever.
-    writeBin(bindir, 'mx-env-provider-faketest', `#!/bin/sh
+    writeBin(bindir, 'mxenv-provider-faketest', `#!/bin/sh
 faketool >/dev/null 2>&1 || exit 1
 printf '%s' "plugval_$1"
 `)
-    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({
       sources: { plug: { provider: 'plugin', plugin: 'faketest', keys: ['MXTEST_PLUG'] } },
       profiles: { dev: { sources: ['plug'] } },
       defaultProfile: 'dev',
@@ -312,11 +358,12 @@ printf '%s' "plugval_$1"
 
     expect(runL3(['shell-init', '--write']).status).toBe(0)
     const once = readFileSync(rc, 'utf8')
-    expect(once).toContain('# >>> mx-env shims >>>')
+    expect(once).toContain('# >>> mxenv shims >>>')
     expect(runL3(['shell-init', '--write']).status).toBe(0)
     expect(readFileSync(rc, 'utf8')).toBe(once)
 
     expect(runL3(['shell-init', '--remove']).status).toBe(0)
+    expect(readFileSync(rc, 'utf8')).not.toContain('mxenv shims')
     expect(readFileSync(rc, 'utf8')).not.toContain('mx-env shims')
     expect(readdirSync(shimsDir(HOME))).toEqual([])
     expect(runL3(['shell-init', '--remove']).status).toBe(0)
@@ -327,7 +374,7 @@ printf '%s' "plugval_$1"
   }, 30_000)
 
   it('invalid shims: shell-init hard-fails, run only warns and still injects', () => {
-    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({
       shims: ['run'],
       sources: { local: { provider: 'local', files: ['.env.local'] } },
       profiles: { dev: { sources: ['local'] } },
@@ -342,7 +389,7 @@ printf '%s' "plugval_$1"
     expect(run.stderr).toContain('Ignoring invalid "shims"')
   }, 30_000)
 
-  it('shim without mx-env on PATH fails with an actionable message and exit 127', () => {
+  it('shim without mxenv on PATH fails with an actionable message and exit 127', () => {
     expect(runL3(['shell-init']).status).toBe(0)
     const bareNoMx = spawnSync(join(shimsDir(HOME), 'faketool'), [], {
       encoding: 'utf8', env: cliEnv({ PATH: `${realbin}:/usr/bin:/bin` }), cwd: TMP,

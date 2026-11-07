@@ -5,8 +5,9 @@
   "license": "MIT",
   "private": true,
   "bin": {
-    "morphix-env": "./dist/cli.js",
-    "mx-env": "./dist/cli.js"
+    "mxenv": "./dist/cli.js",
+    "mx-env": "./dist/cli.js",
+    "morphix-env": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

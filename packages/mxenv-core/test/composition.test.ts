@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto'
 import { composeEnvironment, CompositionError } from '../src/composition'
 import { loadConfigLayers, validateConfig } from '../src/config'
 
-const ROOT = join(tmpdir(), `mx-env-composition-${randomUUID()}`)
+const ROOT = join(tmpdir(), `mxenv-composition-${randomUUID()}`)
 
 function value(label: string): string {
   return `mxenv_test_${label}_${randomUUID().replace(/-/g, '')}`
@@ -43,10 +43,10 @@ afterEach(() => {
 })
 
 describe('environment composition', () => {
-  it('loads ~/.mx-env/.env without project configuration', async () => {
+  it('loads ~/.mxenv/.env without project configuration', async () => {
     const global = value('global')
     const result = await compose('global-env', ({ home }) => {
-      write(join(home, '.mx-env', '.env'), `MXTEST_GLOBAL=${global}\n`, 0o600)
+      write(join(home, '.mxenv', '.env'), `MXTEST_GLOBAL=${global}\n`, 0o600)
     })
 
     expect(result.environment.MXTEST_GLOBAL).toBe(global)
@@ -57,7 +57,7 @@ describe('environment composition', () => {
   it('--no-global excludes the conventional global dotenv source', async () => {
     const global = value('excluded')
     const result = await compose('no-global', ({ home }) => {
-      write(join(home, '.mx-env', '.env'), `MXTEST_GLOBAL=${global}\n`, 0o600)
+      write(join(home, '.mxenv', '.env'), `MXTEST_GLOBAL=${global}\n`, 0o600)
     }, { noGlobal: true })
 
     expect(result.environment.MXTEST_GLOBAL).toBeUndefined()
@@ -66,7 +66,7 @@ describe('environment composition', () => {
 
   it('rejects an insecure conventional global dotenv file', async () => {
     await expect(compose('unsafe-global', ({ home }) => {
-      write(join(home, '.mx-env', '.env'), `MXTEST_GLOBAL=${value('unsafe')}\n`, 0o644)
+      write(join(home, '.mxenv', '.env'), `MXTEST_GLOBAL=${value('unsafe')}\n`, 0o644)
     })).rejects.toMatchObject({ name: 'SourceError' })
   })
 
@@ -74,14 +74,14 @@ describe('environment composition', () => {
     const global = value('global-profile')
     const local = value('project-profile')
     const result = await compose('profile-extends', ({ home, project }) => {
-      write(join(home, '.mx-env', 'global.env'), `MXTEST_SHARED=${global}\n`, 0o600)
-      write(join(home, '.mx-env', 'config.json'), JSON.stringify({
+      write(join(home, '.mxenv', 'global.env'), `MXTEST_SHARED=${global}\n`, 0o600)
+      write(join(home, '.mxenv', 'config.json'), JSON.stringify({
         sources: { shared: { provider: 'local', files: ['global.env'] } },
         profiles: { developer: { sources: ['shared'] } },
         defaultProfile: 'developer',
       }))
       write(join(project, 'project.env'), `MXTEST_SHARED=${local}\n`)
-      write(join(project, 'mx-env.config.json'), JSON.stringify({
+      write(join(project, 'mxenv.config.json'), JSON.stringify({
         sources: { project: { provider: 'local', files: ['project.env'], override: true } },
         profiles: { app: { extends: 'developer', sources: ['project'] } },
         defaultProfile: 'app',
@@ -97,7 +97,7 @@ describe('environment composition', () => {
     const global = value('global-legacy')
     const local = value('local-legacy')
     const result = await compose('legacy-overrides-global', ({ home, project }) => {
-      write(join(home, '.mx-env', '.env'), `MXTEST_LEGACY=${global}\n`, 0o600)
+      write(join(home, '.mxenv', '.env'), `MXTEST_LEGACY=${global}\n`, 0o600)
       write(join(project, '.env.local'), `MXTEST_LEGACY=${local}\n`)
     })
 
@@ -109,7 +109,7 @@ describe('environment composition', () => {
     await expect(compose('collision', ({ project }) => {
       write(join(project, 'first.env'), `MXTEST_DUPLICATE=${value('first')}\n`)
       write(join(project, 'second.env'), `MXTEST_DUPLICATE=${value('second')}\n`)
-      write(join(project, 'mx-env.config.json'), JSON.stringify({
+      write(join(project, 'mxenv.config.json'), JSON.stringify({
         sources: {
           first: { provider: 'local', files: ['first.env'] },
           second: { provider: 'local', files: ['second.env'] },

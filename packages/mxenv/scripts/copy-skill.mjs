@@ -9,4 +9,4 @@ const dest = join(root, 'dist', 'SKILL.md')
 
 mkdirSync(join(root, 'dist'), { recursive: true })
 copyFileSync(join(root, 'skill', 'SKILL.md'), dest)
-console.log('[morphix-env] Copied skill/SKILL.md -> dist/SKILL.md')
+console.log('[mxenv] Copied skill/SKILL.md -> dist/SKILL.md')

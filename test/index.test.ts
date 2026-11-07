@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto'
 import { createRequire } from 'module'
 
 const requireFromTests = createRequire(join(__dirname, 'index.test.ts'))
-const ROOT = join(tmpdir(), `mx-env-index-${randomUUID()}`)
+const ROOT = join(tmpdir(), `mxenv-index-${randomUUID()}`)
 const HOME = join(ROOT, 'home')
 const PROJECT = join(ROOT, 'project')
 const DIST_INDEX = join(__dirname, '..', 'dist', 'index.js')

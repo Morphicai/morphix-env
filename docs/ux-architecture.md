@@ -42,7 +42,7 @@
 | 层 | 内容 | 包 |
 |---|---|---|
 | **L3 管理面**（产品） | 全局密钥/环境变量管理命令（list/add/edit/reveal/delete）、**内置 GUI**、daemon（127.0.0.1 + token）、launchd、shell-init shim、审计聚合/项目注册视图 | 全局 CLI（暂名 `mxenv-cli`） |
-| **L2 运行面**（产品） | 程序的运行（`run`/`export`/`inspect`/`render`/`inject`/`generate`）、来源管理命令（**定制上游**）、`migrate`、`edit`（一次性编辑器，含 editor-ui/clientAssets 生成链）、`skill install` | `mxenv`（默认名安装包，devDep / npx） |
+| **L2 运行面**（产品） | 程序的运行（`run`/`export`/`inspect`/`render`/`inject`/`generate`）、来源管理命令（**定制上游**）、`migrate`、`edit`（本地会话式编辑器，含 editor-ui/clientAssets 生成链）、`skill install` | `mxenv`（默认名安装包，devDep / npx） |
 | **L1 能力层**（共享） | 组合引擎（**全局变量 ∪ 项目 `env.local`**）、provider 适配、配置加载、审计读写、**值能力 `compose`/`revealSingle`（唯一实现）** | `mxenv-core` 主入口 |
 | **L0 契约层**（纯，无 IO） | 配置 schema、`mxenv://` 引用语法、组合/审计/IPC 类型、redaction 规则 | `mxenv-core/contracts` |
 

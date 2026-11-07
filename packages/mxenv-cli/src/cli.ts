@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { homedir } from 'os'
-import { loadConfigLayers, sanitizeBootEnv, shimsDir, validateShimList, type ConfigLayers } from 'mxenv-core'
+import { loadConfigLayers, sanitizeBootEnv, shimsDir, validateShimList, warnDeprecatedBinInvocation, type ConfigLayers } from 'mxenv-core'
 import {
   defaultRcPath,
   detectHandmadeReservedShims,
@@ -36,6 +36,7 @@ interface Args {
   service: string | null
   force: boolean
   dryRun: boolean
+  /** migrate: 全局目录一次性迁移（~/.mx-env → ~/.mxenv）。 */
   serve: boolean
   write: boolean
   remove: boolean
@@ -146,15 +147,15 @@ const bootInfo: { viaShim: boolean; originalPath?: string } = { viaShim: false }
  */
 function cmdShellInit(args: Args): number {
   if (process.platform === 'win32') {
-    console.error('[morphix-env] shell-init is supported on macOS/Linux only; on Windows keep using explicit `mx-env run -- <command>`.')
+    console.error('[mxenv] shell-init is supported on macOS/Linux only; on Windows keep using explicit `mxenv run -- <command>`.')
     return 1
   }
   if (args.unknownFlags.length) {
-    console.error(`[morphix-env] shell-init: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
+    console.error(`[mxenv] shell-init: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
     return 1
   }
   if (args.write && args.remove) {
-    console.error('[morphix-env] shell-init: --write and --remove are mutually exclusive.')
+    console.error('[mxenv] shell-init: --write and --remove are mutually exclusive.')
     return 1
   }
   try {
@@ -163,7 +164,7 @@ function cmdShellInit(args: Args): number {
     // Filesystem failures (unwritable home, rc path is a directory, …) must
     // surface as actionable text, not a raw errno bubble.
     const code = (error as NodeJS.ErrnoException)?.code
-    console.error(`[morphix-env] shell-init failed${code ? ` (${code})` : ''}: check that your home directory and rc file are writable, then retry.`)
+    console.error(`[mxenv] shell-init failed${code ? ` (${code})` : ''}: check that your home directory and rc file are writable, then retry.`)
     return 1
   }
 }
@@ -176,7 +177,7 @@ function runShellInit(args: Args): number {
   if (args.remove) {
     const removed = removeAllShims(home)
     const rcOutcome = rcPath ? removeRcBlock(rcPath) : 'absent'
-    console.log(`[morphix-env] Removed ${removed.length} shim(s)${removed.length ? ` (${removed.join(', ')})` : ''}; rc block ${rcOutcome}${rcPath ? ` in ${rcPath}` : ''}.`)
+    console.log(`[mxenv] Removed ${removed.length} shim(s)${removed.length ? ` (${removed.join(', ')})` : ''}; rc block ${rcOutcome}${rcPath ? ` in ${rcPath}` : ''}.`)
     return 0
   }
 
@@ -185,19 +186,19 @@ function runShellInit(args: Args): number {
     ...validateShimList(layers.project.config.shims, layers.project.path),
   ]
   if (problems.length) {
-    for (const problem of problems) console.error(`[morphix-env] ${problem}`)
+    for (const problem of problems) console.error(`[mxenv] ${problem}`)
     return 1
   }
 
   const commands = resolveShimCommands(layers, !args.noGlobal)
   const { written, removed, skipped } = writeShims(commands, home)
-  console.log(`[morphix-env] Shims ready in ${shimsDir(home)} (${commands.length} command(s): ${commands.join(', ') || 'none'}; ${written.length} written, ${removed.length} removed).`)
+  console.log(`[mxenv] Shims ready in ${shimsDir(home)} (${commands.length} command(s): ${commands.join(', ') || 'none'}; ${written.length} written, ${removed.length} removed).`)
 
   for (const command of skipped) {
-    console.warn(`[morphix-env] Warning: "${command}" exists in the shims directory as a handmade file (no mx-env marker); refusing to overwrite. Remove or rename it by hand, then re-run shell-init.`)
+    console.warn(`[mxenv] Warning: "${command}" exists in the shims directory as a handmade file (no mxenv marker); refusing to overwrite. Remove or rename it by hand, then re-run shell-init.`)
   }
   for (const file of detectHandmadeReservedShims(home)) {
-    console.warn(`[morphix-env] Warning: "${file}" in the shims directory was not created by mx-env and shadows a reserved command; delete it by hand. Do not place files in ${shimsDir(home)} manually.`)
+    console.warn(`[mxenv] Warning: "${file}" in the shims directory was not created by mxenv and shadows a reserved command; delete it by hand. Do not place files in ${shimsDir(home)} manually.`)
   }
 
   // Parity check against the pre-sanitization PATH captured at boot: each
@@ -205,29 +206,29 @@ function runShellInit(args: Args): number {
   // (volta, another tool) silently wins and nothing is injected.
   const { absent, shadowed } = findShadowedCommands(commands, bootInfo.originalPath, home)
   if (absent.length) {
-    console.warn(`[morphix-env] Note: ${absent.join(', ')} cannot be resolved on the current PATH yet — add the shims directory (below) and open a new shell.`)
+    console.warn(`[mxenv] Note: ${absent.join(', ')} cannot be resolved on the current PATH yet — add the shims directory (below) and open a new shell.`)
   }
   if (shadowed.length) {
-    console.warn(`[morphix-env] Warning: these commands resolve to a different executable ahead of their shim: ${shadowed.join(', ')} — move ${shimsDir(home)} ahead of the entries that provide them.`)
+    console.warn(`[mxenv] Warning: these commands resolve to a different executable ahead of their shim: ${shadowed.join(', ')} — move ${shimsDir(home)} ahead of the entries that provide them.`)
   }
 
   if (args.write) {
     if (!rcPath) {
-      console.error('[morphix-env] shell-init: cannot infer an rc file from $SHELL (zsh/bash supported); add the PATH line manually.')
+      console.error('[mxenv] shell-init: cannot infer an rc file from $SHELL (zsh/bash supported); add the PATH line manually.')
       return 1
     }
     const outcome = upsertRcBlock(rcPath, home)
-    console.log(`[morphix-env] rc block ${outcome} in ${rcPath}. Open a new shell to activate.`)
+    console.log(`[mxenv] rc block ${outcome} in ${rcPath}. Open a new shell to activate.`)
     return 0
   }
 
-  console.log(`\nAdd the shims directory to PATH${rcPath ? ` (e.g. in ${rcPath})` : ''}:\n\n  export PATH="${shimsDir(home)}:$PATH"\n\nOr re-run with --write to let mx-env maintain a marked block in your rc file.`)
+  console.log(`\nAdd the shims directory to PATH${rcPath ? ` (e.g. in ${rcPath})` : ''}:\n\n  export PATH="${shimsDir(home)}:$PATH"\n\nOr re-run with --write to let mxenv maintain a marked block in your rc file.`)
   return 0
 }
 
 function showHelp(): void {
   console.log(`
-morphix-env CLI (mxenv-cli) v${VERSION} — machine-level management face
+mxenv CLI (mxenv-cli) v${VERSION} — machine-level management face
 
 Usage:
   mxenv-cli shell-init [--write|--remove]    Generate PATH shims for declared commands
@@ -246,11 +247,13 @@ project-local install (node_modules/.bin); this CLI manages the machine only.
 
 /** Wave B placeholders: reserved command names, deliberately not implemented. */
 function cmdReserved(command: string): number {
-  console.error(`[morphix-env] "${command}" is reserved for a future release and is not implemented yet.`)
+  console.error(`[mxenv] "${command}" is reserved for a future release and is not implemented yet.`)
   return 1
 }
 
 async function main(): Promise<number> {
+  // 旧名 bin 弃用提示（同 L2）：stderr 一行，stdout 纯净。
+  warnDeprecatedBinInvocation(process.argv[1])
   // Same boot discipline as the L2 CLI: strip shim PATH entries before any
   // work so nothing we spawn can recurse into a shim.
   Object.assign(bootInfo, sanitizeBootEnv())
@@ -266,7 +269,7 @@ async function main(): Promise<number> {
     case 'help': showHelp(); return 0
     case '--version': console.log(VERSION); return 0
     default:
-      if (args.command) console.error(`[morphix-env] Unknown command: ${args.command}`)
+      if (args.command) console.error(`[mxenv] Unknown command: ${args.command}`)
       showHelp()
       return args.command ? 1 : 0
   }
@@ -275,7 +278,7 @@ async function main(): Promise<number> {
 main()
   .then((code) => { process.exitCode = code })
   .catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : '[morphix-env] Command failed.'
+    const message = error instanceof Error ? error.message : '[mxenv] Command failed.'
     console.error(message)
     process.exitCode = 1
   })

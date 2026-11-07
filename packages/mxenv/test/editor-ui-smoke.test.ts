@@ -79,7 +79,7 @@ function renderedElement(selector: string): Promise<Element> {
 
 describe('editor client bundle mounts and renders real state (N-1)', () => {
   it('profile page renders profile identity and source navigation', async () => {
-    mountRenderedPage(renderEditorHtml('mx-env editor', PROFILE_STATE))
+    mountRenderedPage(renderEditorHtml('mxenv editor', PROFILE_STATE))
 
     const profileName = await renderedElement('.profile-name')
     expect(profileName.textContent).toBe('smoke-profile')
@@ -88,7 +88,7 @@ describe('editor client bundle mounts and renders real state (N-1)', () => {
   })
 
   it('dotenvx page pre-fills the key form and shows the revealed value verbatim', async () => {
-    mountRenderedPage(renderEditorHtml('mx-env editor', DOTENVX_REVEALED_STATE))
+    mountRenderedPage(renderEditorHtml('mxenv editor', DOTENVX_REVEALED_STATE))
 
     const keyInput = await renderedElement('input.input[name="key"]')
     expect((keyInput as HTMLInputElement).value).toBe('MXTEST_PREFILL')
@@ -98,7 +98,7 @@ describe('editor client bundle mounts and renders real state (N-1)', () => {
   })
 
   it('saved page returns to the saved file via fileIndex (N-4)', async () => {
-    mountRenderedPage(renderEditorHtml('mx-env editor', SAVED_STATE))
+    mountRenderedPage(renderEditorHtml('mxenv editor', SAVED_STATE))
 
     const backLink = await renderedElement('a.btn.btn-primary')
     expect(backLink.getAttribute('href')).toContain('?fileIndex=0')
