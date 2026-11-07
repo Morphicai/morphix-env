@@ -38,7 +38,7 @@
   "files": [
     "bin",
     "dist",
-    "docs/logo.png",
+    "docs/logo.svg",
     "SECURITY.md"
   ],
   "keywords": [

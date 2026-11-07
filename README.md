@@ -1,7 +1,7 @@
 <p align="center">
 
 [本仓文档入口](./docs/README.md) · [本地工程约定](./docs/engineering.md)
-  <img src="docs/logo.png" width="160" alt="mxenv" />
+  <img src="docs/logo.svg" width="96" alt="mxenv" />
 </p>
 
 # mxenv
