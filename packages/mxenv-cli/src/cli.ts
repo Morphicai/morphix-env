@@ -153,13 +153,14 @@ const bootInfo: { viaShim: boolean; originalPath?: string } = { viaShim: false }
  * command names, never secrets.
  */
 function cmdShellInit(args: Args): number {
-  if (process.platform === 'win32') {
-    console.error('[mxenv] shell-init is supported on macOS/Linux only; on Windows keep using explicit `mxenv run -- <command>`.')
-    return 1
-  }
+  // --help 先于平台判定（review F5）：帮助在任何平台都可用且退出 0。
   if (args.help) {
     showHelp()
     return 0
+  }
+  if (process.platform === 'win32') {
+    console.error('[mxenv] shell-init is supported on macOS/Linux only; on Windows keep using explicit `mxenv run -- <command>`.')
+    return 1
   }
   if (args.unknownFlags.length) {
     console.error(`[mxenv] shell-init: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
@@ -281,6 +282,11 @@ async function main(): Promise<number> {
   const args = parseArgs(process.argv)
   // --no-global 明确排除全局配置面：连兼容窗迁移提示也一并静音（P9a）。
   if (args.noGlobal) suppressLegacyHomeHint()
+  // 子命令级 --help 全局短路（review F6）：任何命令带 --help 都给帮助、退出 0。
+  if (args.help && args.command !== 'shell-init') {
+    showHelp()
+    return 0
+  }
   switch (args.command) {
     case 'shell-init': return cmdShellInit(args)
     // Wave B skeleton (package-split 4.3): reserved, not implemented.
@@ -294,7 +300,10 @@ async function main(): Promise<number> {
     default:
       if (args.command) {
         console.error(`[mxenv] Unknown command: ${args.command}`)
-        if (PROJECT_COMMANDS.has(args.command)) {
+        // migrate 双面（review F3）：--home 是机器级操作，明文迁移才是项目命令。
+        if (args.command === 'migrate') {
+          console.error('[mxenv] `migrate --home` (machine-level global-directory migration) runs as `npx @morphixai/mxenv migrate --home` from anywhere; plaintext migration is a project command — run it inside a project.')
+        } else if (PROJECT_COMMANDS.has(args.command)) {
           console.error(`[mxenv] "${args.command}" is a project command from @morphixai/mxenv — run it inside a project (\`npx mxenv ${args.command} …\` or an npm script). This CLI is the machine-level face only.`)
         }
       }

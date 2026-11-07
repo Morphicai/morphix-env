@@ -504,15 +504,20 @@ export interface HomeMigrationResult {
   rcHint?: string
 }
 
-/** Recursive copy that preserves permission bits（0600 检查不变靠此保持）。 */
+/** 尽力删除（失败不抛）：仅用于冗余副本/半成品的清理。 */
+function cleanupQuiet(path: string): void {
+  try {
+    rmSync(path, { recursive: true, force: true })
+  } catch { /* 保留原样，调用方无需中断 */ }
+}
+
 /**
- * 0.12.1：把目标里仅存的自写脚手架（audit/shims 等）并入半拷贝，让 rename
- * 入位可进行。合并规则：目标缺失的直接移入；同名 `.jsonl`（审计日志）追加
- * 合并；其余同名不删任何一份——半拷贝侧（legacy 数据）就位，竞争写入侧改名
- * 留存为 `<name>.fold-<stamp>`。清空后 rmdir 目标；目录非空（并发竞争）即抛错
- * 中止——绝不递归删除目标，防止误删并发产生的真实数据。
+ * 0.12.1：把迁移前态目标脚手架（aside，唯一副本）**非破坏性**并入半拷贝：
+ * 源文件一律不动，目标缺失的复制过去；同名 `.jsonl`（审计日志）在行边界上
+ * 追加合并；其余同名双留（并入侧另存 `<name>.fold-<stamp>`）。aside 只在
+ * 迁移验证成功后由调用方删除——任何失败路径都把它原样还原回目标（review F1）。
  */
-function foldScaffoldingInto(targetDir: string, partialDir: string, stamp: string): void {
+function mergeScaffoldingCopy(source: string, dest: string, stamp: string): void {
   const merge = (src: string, dst: string): void => {
     mkdirSync(dst, { recursive: true })
     for (const entry of readdirSync(src, { withFileTypes: true })) {
@@ -520,25 +525,26 @@ function foldScaffoldingInto(targetDir: string, partialDir: string, stamp: strin
       const to = join(dst, entry.name)
       if (entry.isDirectory()) {
         merge(from, to)
-        rmdirSync(from)
         continue
       }
       if (!existsSync(to)) {
-        renameSync(from, to)
+        copyFileSync(from, to)
         continue
       }
       if (from.endsWith('.jsonl') && to.endsWith('.jsonl')) {
-        appendFileSync(to, readFileSync(from, 'utf8'))
-        rmSync(from, { force: true })
+        // 行边界保护（review F4）：末行无换行时先补，防止两个 JSON 粘成一行。
+        const base = readFileSync(to, 'utf8')
+        const extra = readFileSync(from, 'utf8')
+        appendFileSync(to, (base && !base.endsWith('\n') ? '\n' : '') + extra)
         continue
       }
-      renameSync(from, join(dst, `${entry.name}.fold-${stamp}`))
+      copyFileSync(from, join(dst, `${entry.name}.fold-${stamp}`))
     }
   }
-  merge(targetDir, partialDir)
-  rmdirSync(targetDir)
+  merge(source, dest)
 }
 
+/** Recursive copy that preserves permission bits（0600 检查不变靠此保持）。 */
 function copyTree(src: string, dest: string): void {
   mkdirSync(dest, { recursive: true })
   chmodSync(dest, statSync(src).mode & 0o7777)
@@ -628,6 +634,8 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
   const targetDir = resolve(homeDir, GLOBAL_CONFIG_DIR)
   const markerName = '.mxenv-verify-pending'
   const markerPath = join(targetDir, markerName)
+  /** 迁移前态目标脚手架的暂存名：fold 的唯一副本，验证成功后才清除，失败原样还原。 */
+  const asideDir = `${targetDir}.scaffold-fold`
   const allowInsecureGlobal = options.allowInsecureGlobal ?? false
 
   const backupsOnDisk = () =>
@@ -635,6 +643,19 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
 
   /** 目标仅存自写脚手架（audit/shims）时折入半拷贝迁移，不按 conflict 拒绝。 */
   let mergeScaffolding = false
+
+  // 崩溃残留自愈（review F1）：aside 是"迁移前态目标脚手架"的唯一副本——目标不在场
+  // 就还原回去，让本轮从真实迁移前态开始；目标在场则保留为折入源（下方统一处理）。
+  if (existsSync(asideDir) && !existsSync(targetDir)) {
+    try {
+      renameSync(asideDir, targetDir)
+    } catch (error) {
+      return {
+        status: 'failed', exitCode: 1, keyNames: [],
+        detail: `cannot restore pre-migration scaffolding from ${asideDir}: ${error instanceof Error ? error.message : 'unknown failure'} — rename it to ${targetDir} by hand, then re-run.`,
+      }
+    }
+  }
 
   if (existsSync(targetDir)) {
     if (existsSync(markerPath)) {
@@ -682,6 +703,8 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
       // 折入半拷贝后放行迁移（foldScaffoldingInto），旧数据照常备份+验证。
       mergeScaffolding = true
     } else {
+      // 已迁移终态：aside（若有）是崩溃残留的冗余脚手架副本，随成功态一并清除。
+      if (existsSync(asideDir)) cleanupQuiet(asideDir)
       return { status: 'noop', exitCode: 0, keyNames: [], detail: `already migrated: ${targetDir} is in use.` }
     }
   }
@@ -729,15 +752,32 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
     copyTree(legacyDir, partialDir)
     // 验证标记随整树入位（review N-2）：验证通过才删除；崩溃后重跑走回滚重启。
     writeFileSync(join(partialDir, markerName), `${backupDir}\n`)
-    if (mergeScaffolding) foldScaffoldingInto(targetDir, partialDir, stamp)
+    if (mergeScaffolding) {
+      // 原子挪开留唯一副本（review F1）：之后一切失败路径都把 aside 原样还原回目标。
+      renameSync(targetDir, asideDir)
+      // 竞争复核：挪开瞬间若混入真实数据（并发写入），还原并按冲突中止。
+      if (hasGlobalDataAt(asideDir)) {
+        renameSync(asideDir, targetDir)
+        cleanup(partialDir)
+        return {
+          status: 'conflict', exitCode: 1, keyNames: [],
+          detail: `both ${targetDir} and ${legacyDir} appeared to hold real data mid-migration — nothing was changed; inspect both, keep what you need in ${targetDir}, then rename ${legacyDir} away and re-run.`,
+        }
+      }
+    }
+    if (existsSync(asideDir)) mergeScaffoldingCopy(asideDir, partialDir, stamp)
     renameSync(partialDir, targetDir)
   } catch (error) {
     // rename 是原子的：catch 里目标绝不是本进程产物（并发抢先建目标时误删即事故），
-    // 只清自己的临时名。
+    // 只清自己的临时名；aside（若已挪出）还原回目标，迁移前态不丢。
     const cleanupIssue = cleanup(partialDir)
+    let asideIssue = ''
+    if (existsSync(asideDir) && !existsSync(targetDir)) {
+      try { renameSync(asideDir, targetDir) } catch { asideIssue = `; restore ${asideDir} to ${targetDir} failed — rename it back by hand` }
+    }
     return {
       status: 'failed', exitCode: 1, keyNames: [],
-      detail: `copy failed: ${error instanceof Error ? error.message : 'unknown failure'}; ${cleanupIssue ?? `removed partial copy`}, original preserved at ${legacyDir}.`,
+      detail: `copy failed: ${error instanceof Error ? error.message : 'unknown failure'}; ${cleanupIssue ?? `removed partial copy`}, original preserved at ${legacyDir}.${asideIssue}`,
     }
   }
 
@@ -746,9 +786,13 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
     renameSync(legacyDir, backupDir)
   } catch (error) {
     const cleanupIssue = [cleanup(partialDir), cleanup(targetDir)].find(Boolean) ?? null
+    let asideIssue = ''
+    if (existsSync(asideDir)) {
+      try { renameSync(asideDir, targetDir) } catch { asideIssue = `; restore ${asideDir} to ${targetDir} failed — rename it back by hand` }
+    }
     return {
       status: 'failed', exitCode: 1, keyNames: [],
-      detail: `backup rename failed: ${error instanceof Error ? error.message : 'unknown failure'}; ${cleanupIssue ?? `removed partial copy`}, original preserved at ${legacyDir}.`,
+      detail: `backup rename failed: ${error instanceof Error ? error.message : 'unknown failure'}; ${cleanupIssue ?? `removed partial copy`}, original preserved at ${legacyDir}.${asideIssue}`,
     }
   }
 
@@ -758,9 +802,14 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
     let restored = false
     try { renameSync(backupDir, legacyDir); restored = true } catch { /* 判定在 detail 里如实落 */ }
     const cleanupIssue = cleanup(targetDir)
+    // aside（迁移前态目标脚手架唯一副本）还原回目标，0.12.1 的审计/shim 不丢（review F1）。
+    let asideIssue = ''
+    if (existsSync(asideDir)) {
+      try { renameSync(asideDir, targetDir) } catch { asideIssue = `; RESTORE FAILED for ${asideDir} — rename it to ${targetDir} by hand` }
+    }
     return {
       status: 'failed', exitCode: 1, keyNames: [],
-      detail: `verification failed: ${why}; ${restored ? `restored from backup ${backupDir} (directory backup)` : `RESTORE FAILED — restore manually by renaming the directory backup ${backupDir} to ${legacyDir}`}; ${cleanupIssue ?? `removed partial ${targetDir}`}.`,
+      detail: `verification failed: ${why}; ${restored ? `restored from backup ${backupDir} (directory backup)` : `RESTORE FAILED — restore manually by renaming the directory backup ${backupDir} to ${legacyDir}`}; ${cleanupIssue ?? `removed partial ${targetDir}`}${asideIssue}.`,
     }
   }
   let after: Record<string, string>
@@ -778,6 +827,8 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
   }
 
   try { rmSync(markerPath) } catch { /* 标记残留会被下次重跑当中断处理并自愈 */ }
+  // 验证通过：aside（迁移前态脚手架副本）已并入目标，冗余副本清除。
+  if (existsSync(asideDir)) cleanupQuiet(asideDir)
 
   // shim PATH 重接（review S-1）：rc 块烘死旧 shimsDir，不重写即断供。
   const rc = rewriteRcBlocksForMigration(homeDir)

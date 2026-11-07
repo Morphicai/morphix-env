@@ -19,6 +19,9 @@ export const LEGACY_GLOBAL_CONFIG_DIR = '.mx-env'
 /** 新目录里允许先于真实数据出现的脚手架（不构成"已迁移"证据）。 */
 const GLOBAL_SCAFFOLDING = new Set(['audit', 'shims', '.mxenv-verify-pending'])
 
+/** 系统/编辑器垃圾文件：不算数据。 */
+const JUNK_NAMES = new Set(['Thumbs.db', 'desktop.ini'])
+
 const HINT_MARKER_NAME = '.mxenv-legacy-hint-shown'
 
 let legacyHintSuppressed = false
@@ -42,7 +45,11 @@ export function hasGlobalData(homeDir = homedir()): boolean {
   return hasGlobalDataAt(resolve(homeDir, GLOBAL_CONFIG_DIR))
 }
 
-/** 指定目录内是否持有真实数据（脚手架除外）。 */
+/**
+ * 指定目录内是否持有真实数据。脚手架（audit/shims/迁移标记）、系统垃圾与
+ * 点文件（`.env` 除外——它是全局隐式值文件）都不算：`.DS_Store`/编辑器暂存
+ * 不得把读面翻转到空新目录（review F2）。
+ */
 export function hasGlobalDataAt(dir: string): boolean {
   let entries: string[]
   try {
@@ -50,7 +57,12 @@ export function hasGlobalDataAt(dir: string): boolean {
   } catch {
     return false
   }
-  return entries.some((name) => !GLOBAL_SCAFFOLDING.has(name))
+  return entries.some(
+    (name) =>
+      !GLOBAL_SCAFFOLDING.has(name) &&
+      !JUNK_NAMES.has(name) &&
+      (!name.startsWith('.') || name === '.env'),
+  )
 }
 
 /**
@@ -60,7 +72,7 @@ export function hasGlobalDataAt(dir: string): boolean {
 export function resolveGlobalDir(homeDir = homedir()): string {
   const next = resolve(homeDir, GLOBAL_CONFIG_DIR)
   const legacy = resolve(homeDir, LEGACY_GLOBAL_CONFIG_DIR)
-  if (existsSync(next) && hasGlobalDataAt(next)) return next
+  if (hasGlobalDataAt(next)) return next
   if (existsSync(legacy)) {
     hintLegacyHomeOnce(legacy, next)
     return legacy

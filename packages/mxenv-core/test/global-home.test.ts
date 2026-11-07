@@ -30,7 +30,14 @@ describe('hasGlobalDataAt', () => {
     mkdirSync(join(NEXT, 'audit'), { recursive: true })
     mkdirSync(join(NEXT, 'shims'), { recursive: true })
     writeFileSync(join(NEXT, '.mxenv-verify-pending'), '')
+    // 系统垃圾/点文件不算数据（review F2）：.DS_Store 不得翻转读面。
+    writeFileSync(join(NEXT, '.DS_Store'), '')
+    writeFileSync(join(NEXT, 'Thumbs.db'), '')
     expect(hasGlobalDataAt(NEXT)).toBe(false)
+    // `.env` 是全局隐式值文件——点文件例外，算数据。
+    writeFileSync(join(NEXT, '.env'), 'K=v\n')
+    expect(hasGlobalDataAt(NEXT)).toBe(true)
+    rmSync(join(NEXT, '.env'))
     writeFileSync(join(NEXT, 'config.json'), '{}')
     expect(hasGlobalDataAt(NEXT)).toBe(true)
   })

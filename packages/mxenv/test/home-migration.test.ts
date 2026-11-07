@@ -165,6 +165,32 @@ describe('migrate --home（home-migration 五场景 + 幂等/回落/并存）', 
     // 旧目录已改名备份。
     expect(existsSync(LEGACY_DIR)).toBe(false)
     expect(backupDirs().length).toBe(1)
+    // aside（迁移前态脚手架副本）验证成功后清除。
+    expect(existsSync(`${TARGET_DIR}.scaffold-fold`)).toBe(false)
+  })
+
+  it('F1：脚手架目标 + 验证失败 → aside 原样还原，0.12.1 审计/shim 唯一副本不丢', async () => {
+    const a = value('R1')
+    const c = value('R2')
+    seedLegacy(
+      { HOME_A: a },
+      { sources: { legacyref: { provider: 'local', files: ['~/.mx-env/extra.env'], optional: true } }, profiles: { dev: { sources: ['legacyref'] } }, defaultProfile: 'dev' },
+    )
+    writeFileSync(join(LEGACY_DIR, 'extra.env'), `HOME_C=${c}\n`)
+    // 迁移前态目标脚手架（0.12.1 写侧产物，唯一副本）：验证失败后必须原样回来。
+    mkdirSync(join(TARGET_DIR, 'audit'), { recursive: true })
+    writeFileSync(join(TARGET_DIR, 'audit', 'scaffold.jsonl'), '{"scaffold":1}\n')
+    mkdirSync(join(TARGET_DIR, 'shims'), { recursive: true })
+    writeFileSync(join(TARGET_DIR, 'shims', 'tool'), '#!/bin/sh\n')
+
+    const result = await migrateHome(HOME)
+    expect(result.status).toBe('failed')
+    expect(result.detail).toContain('verification failed')
+    // 迁移前态还原：legacy 回位 + 目标脚手架原样（唯一副本不丢）。
+    expect(existsSync(LEGACY_DIR)).toBe(true)
+    expect(readFileSync(join(TARGET_DIR, 'audit', 'scaffold.jsonl'), 'utf8')).toBe('{"scaffold":1}\n')
+    expect(existsSync(join(TARGET_DIR, 'shims', 'tool'))).toBe(true)
+    expect(existsSync(`${TARGET_DIR}.scaffold-fold`)).toBe(false)
   })
 
   it('验证失败回滚：从备份整目录还原、删半成品、stderr 指明备份路径（真实失配注入：显式旧路径引用）', async () => {
