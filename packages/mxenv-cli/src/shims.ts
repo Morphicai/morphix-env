@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, accessSync, constants } from 'fs'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
-import { shimsDir, RESERVED_SHIM_NAMES, rcBlock, rcBlockPattern, type ConfigLayers } from '@morphixai/mxenv-core'
+import { shimsDir, legacyShimsDir, RESERVED_SHIM_NAMES, rcBlock, rcBlockPattern, type ConfigLayers } from '@morphixai/mxenv-core'
 
 // rc 块常量/纯替换已下沉 mxenv-core（L2 的 migrate --home 迁移后重写同用）；此处
 // re-export 保持本包导出面不倒退。
@@ -123,17 +123,18 @@ export function writeShims(commands: string[], homeDir = homedir()): { written: 
   return { written, removed, skipped }
 }
 
-/** Removes every tool-generated shim; handmade files are left alone. */
+/** Removes every tool-generated shim (current **and** legacy shim dirs); handmade files are left alone. */
 export function removeAllShims(homeDir = homedir()): string[] {
-  const dir = shimsDir(homeDir)
-  if (!existsSync(dir)) return []
   const removed: string[] = []
-  for (const file of readdirSync(dir)) {
-    const path = join(dir, file)
-    const content = readIfExists(path)
-    if (content !== null && isGeneratedShim(content)) {
-      rmSync(path)
-      removed.push(file)
+  for (const dir of [shimsDir(homeDir), legacyShimsDir(homeDir)]) {
+    if (!existsSync(dir)) continue
+    for (const file of readdirSync(dir)) {
+      const path = join(dir, file)
+      const content = readIfExists(path)
+      if (content !== null && isGeneratedShim(content)) {
+        rmSync(path)
+        removed.push(file)
+      }
     }
   }
   return removed
@@ -142,15 +143,17 @@ export function removeAllShims(homeDir = homedir()): string[] {
 /**
  * Handmade files that shadow reserved mxenv names would wrap mxenv itself in
  * a shim (weird but terminating) — surface them so the user can delete them.
+ * Sweeps both the current and the legacy shim dir (0.12.x compat window).
  */
 export function detectHandmadeReservedShims(homeDir = homedir()): string[] {
-  const dir = shimsDir(homeDir)
-  if (!existsSync(dir)) return []
   const found: string[] = []
-  for (const file of readdirSync(dir)) {
-    if (!RESERVED_SHIM_NAMES.includes(file.toLowerCase())) continue
-    const content = readIfExists(join(dir, file))
-    if (content === null || !isGeneratedShim(content)) found.push(file)
+  for (const dir of [shimsDir(homeDir), legacyShimsDir(homeDir)]) {
+    if (!existsSync(dir)) continue
+    for (const file of readdirSync(dir)) {
+      if (!RESERVED_SHIM_NAMES.includes(file.toLowerCase())) continue
+      const content = readIfExists(join(dir, file))
+      if (content === null || !isGeneratedShim(content)) found.push(file)
+    }
   }
   return found
 }

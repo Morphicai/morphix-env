@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { homedir } from 'os'
-import { loadConfigLayers, sanitizeBootEnv, shimsDir, validateShimList, warnDeprecatedBinInvocation, type ConfigLayers } from '@morphixai/mxenv-core'
+import { loadConfigLayers, sanitizeBootEnv, shimsDir, suppressLegacyHomeHint, validateShimList, warnDeprecatedBinInvocation, type ConfigLayers } from '@morphixai/mxenv-core'
 import {
   defaultRcPath,
   detectHandmadeReservedShims,
@@ -42,6 +42,8 @@ interface Args {
   write: boolean
   remove: boolean
   warnPlaintext: boolean
+  /** 子命令级 --help/-h（顶层 --help 以 command 形态落在 main 分派里）。 */
+  help: boolean
   /** Flags the parser did not recognize; shell-init fails on these instead of silently ignoring them. */
   unknownFlags: string[]
 }
@@ -57,7 +59,7 @@ function parseArgs(argv: string[]): Args {
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
     target: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
-    write: false, remove: false, warnPlaintext: false, unknownFlags: [],
+    write: false, remove: false, warnPlaintext: false, help: false, unknownFlags: [],
   }
 
   let i = 2
@@ -114,6 +116,8 @@ function parseArgs(argv: string[]): Args {
       args.serve = true
     } else if (arg === '--warn-plaintext') {
       args.warnPlaintext = true
+    } else if (arg === '--help' || arg === '-h') {
+      args.help = true
     } else if (args.command === 'run') {
       args.subArgs = argv.slice(i)
       break
@@ -152,6 +156,10 @@ function cmdShellInit(args: Args): number {
   if (process.platform === 'win32') {
     console.error('[mxenv] shell-init is supported on macOS/Linux only; on Windows keep using explicit `mxenv run -- <command>`.')
     return 1
+  }
+  if (args.help) {
+    showHelp()
+    return 0
   }
   if (args.unknownFlags.length) {
     console.error(`[mxenv] shell-init: unrecognized flag(s): ${args.unknownFlags.join(', ')}`)
@@ -258,6 +266,12 @@ function cmdReserved(command: string): number {
   return 1
 }
 
+/** L2 项目命令名：本 CLI 收到时给"去项目里跑"的直达指引（P10），而不是裸 Unknown command。 */
+const PROJECT_COMMANDS = new Set([
+  'run', 'fetch', 'export', 'render', 'inject', 'generate', 'gen',
+  'inspect', 'migrate', 'audit', 'edit', 'doc', 'skill',
+])
+
 async function main(): Promise<number> {
   // 旧名 bin 弃用提示（同 L2）：stderr 一行，stdout 纯净。
   warnDeprecatedBinInvocation(process.argv[1])
@@ -265,6 +279,8 @@ async function main(): Promise<number> {
   // work so nothing we spawn can recurse into a shim.
   Object.assign(bootInfo, sanitizeBootEnv())
   const args = parseArgs(process.argv)
+  // --no-global 明确排除全局配置面：连兼容窗迁移提示也一并静音（P9a）。
+  if (args.noGlobal) suppressLegacyHomeHint()
   switch (args.command) {
     case 'shell-init': return cmdShellInit(args)
     // Wave B skeleton (package-split 4.3): reserved, not implemented.
@@ -276,7 +292,12 @@ async function main(): Promise<number> {
     case 'help': showHelp(); return 0
     case '--version': console.log(VERSION); return 0
     default:
-      if (args.command) console.error(`[mxenv] Unknown command: ${args.command}`)
+      if (args.command) {
+        console.error(`[mxenv] Unknown command: ${args.command}`)
+        if (PROJECT_COMMANDS.has(args.command)) {
+          console.error(`[mxenv] "${args.command}" is a project command from @morphixai/mxenv — run it inside a project (\`npx mxenv ${args.command} …\` or an npm script). This CLI is the machine-level face only.`)
+        }
+      }
       showHelp()
       return args.command ? 1 : 0
   }

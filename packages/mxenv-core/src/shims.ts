@@ -1,7 +1,8 @@
 import { realpathSync } from 'fs'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
-import { resolveGlobalDir } from './global-home'
+import { GLOBAL_CONFIG_DIR } from './contracts'
+import { LEGACY_GLOBAL_CONFIG_DIR } from './global-home'
 
 /**
  * Shared shim PATH/list logic (L1). The L2 CLI (`mxenv`) boot-sanitizes PATH so
@@ -29,9 +30,14 @@ export const RESERVED_SHIM_NAMES = [
 
 const SHIM_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
-/** Shims live under the renamed global dir `~/.mxenv/shims`; before `migrate --home` the legacy dir is the active library (home-migration compat read). */
+/** Shims live under the renamed global dir `~/.mxenv/shims`（0.12.1 起写只落新名，不随数据读面回落）。 */
 export function shimsDir(homeDir = homedir()): string {
-  return join(resolveGlobalDir(homeDir), 'shims')
+  return join(homeDir, GLOBAL_CONFIG_DIR, 'shims')
+}
+
+/** 旧目录 shim 库（0.12.x 兼容窗）：PATH 剥离与 `--remove` 清扫仍须覆盖，防旧 shim 递归。 */
+export function legacyShimsDir(homeDir = homedir()): string {
+  return join(homeDir, LEGACY_GLOBAL_CONFIG_DIR, 'shims')
 }
 
 /**
@@ -69,20 +75,24 @@ export function validateShimList(list: unknown, label: string): string[] {
 }
 
 /**
- * Removes every PATH entry that resolves to the shims directory (filter-all,
- * so rc files that add it twice are both cleaned). Entries are compared after
+ * Removes every PATH entry that resolves to a shims directory — the current
+ * `~/.mxenv/shims` **and** the legacy `~/.mx-env/shims` (filter-all, so rc
+ * files that add it twice are both cleaned). Entries are compared after
  * realpath normalization on both sides, case-insensitively on macOS (whose
  * default filesystem would resolve `Run` to the `run` shim file).
  */
 export function stripShimsFromPath(pathValue: string | undefined, homeDir = homedir()): string | undefined {
   if (!pathValue) return pathValue
-  const target = shimsDir(homeDir)
-  let targetReal = target
-  try {
-    targetReal = realpathSync(target)
-  } catch { /* directory may not exist yet; literal comparison still applies */ }
   const equal = (a: string, b: string) =>
     process.platform === 'darwin' ? a.toLowerCase() === b.toLowerCase() : a === b
+  const targets = [shimsDir(homeDir), legacyShimsDir(homeDir)]
+  const targetPairs = targets.map((target) => {
+    let real = target
+    try {
+      real = realpathSync(target)
+    } catch { /* directory may not exist yet; literal comparison still applies */ }
+    return [target, real] as const
+  })
   const entries = pathValue.split(delimiter).filter((entry) => {
     if (!entry) return true
     const literal = entry.replace(/\/+$/, '')
@@ -90,7 +100,7 @@ export function stripShimsFromPath(pathValue: string | undefined, homeDir = home
     try {
       resolved = realpathSync(literal)
     } catch { /* keep literal */ }
-    return !equal(literal, target) && !equal(resolved, targetReal)
+    return !targetPairs.some(([target, real]) => equal(literal, target) || equal(resolved, real))
   })
   return entries.join(delimiter)
 }

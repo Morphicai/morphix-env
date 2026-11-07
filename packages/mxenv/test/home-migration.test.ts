@@ -142,6 +142,31 @@ describe('migrate --home（home-migration 五场景 + 幂等/回落/并存）', 
     expect(backupDirs().length).toBe(0)
   })
 
+  it('脚手架-only 目标不冲突：audit/shims 折入半拷贝合并迁移（0.12.1 写只落新名）', async () => {
+    const oldV = value('old')
+    seedLegacy({ HOME_A: oldV })
+    // 目标只有自写脚手架（audit/shims），无真实数据 → 不按 conflict 拒绝。
+    mkdirSync(join(TARGET_DIR, 'audit'), { recursive: true })
+    writeFileSync(join(TARGET_DIR, 'audit', 'seed.jsonl'), '{"scaffold":1}\n')
+    mkdirSync(join(TARGET_DIR, 'shims'), { recursive: true })
+    writeFileSync(join(TARGET_DIR, 'shims', 'tool'), '#!/bin/sh\n')
+
+    const result = runCli(['migrate', '--home'])
+    const output = `${result.stdout}${result.stderr}`
+    expect(result.status).toBe(0)
+    expect(output).not.toContain(oldV)
+    // 数据就位；同名 .jsonl 追加合并（两侧内容都在），其余脚手架并存。
+    expect(existsSync(join(TARGET_DIR, '.env'))).toBe(true)
+    const merged = readFileSync(join(TARGET_DIR, 'audit', 'seed.jsonl'), 'utf8')
+    expect(merged).toContain('{"scaffold":1}')
+    expect(merged).toContain('{}')
+    expect(existsSync(join(TARGET_DIR, 'shims', 'tool'))).toBe(true)
+    expect(existsSync(join(TARGET_DIR, 'shims', 'marker.txt'))).toBe(true)
+    // 旧目录已改名备份。
+    expect(existsSync(LEGACY_DIR)).toBe(false)
+    expect(backupDirs().length).toBe(1)
+  })
+
   it('验证失败回滚：从备份整目录还原、删半成品、stderr 指明备份路径（真实失配注入：显式旧路径引用）', async () => {
     // 全局配置显式引用 `~/.mx-env/...`：迁移后旧路径消逝 → 目标独立验证键集失配
     // （正是"备份先于验证、目标独立生效"要抓的断裂面，无需 mock 即可真实触发）。

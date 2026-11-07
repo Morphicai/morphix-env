@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs'
+import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, rmdirSync, statSync, symlinkSync, writeFileSync } from 'fs'
 import { homedir, tmpdir } from 'os'
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'path'
 import { parse as dotenvParse } from 'dotenv'
@@ -11,6 +11,7 @@ import {
   GLOBAL_CONFIG_DIR,
   GLOBAL_DOTENV_SOURCE,
   hasRcBlock,
+  hasGlobalDataAt,
   isDotenvxEncrypted,
   LEGACY_GLOBAL_CONFIG_DIR,
   loadConfigLayers,
@@ -504,6 +505,40 @@ export interface HomeMigrationResult {
 }
 
 /** Recursive copy that preserves permission bits（0600 检查不变靠此保持）。 */
+/**
+ * 0.12.1：把目标里仅存的自写脚手架（audit/shims 等）并入半拷贝，让 rename
+ * 入位可进行。合并规则：目标缺失的直接移入；同名 `.jsonl`（审计日志）追加
+ * 合并；其余同名不删任何一份——半拷贝侧（legacy 数据）就位，竞争写入侧改名
+ * 留存为 `<name>.fold-<stamp>`。清空后 rmdir 目标；目录非空（并发竞争）即抛错
+ * 中止——绝不递归删除目标，防止误删并发产生的真实数据。
+ */
+function foldScaffoldingInto(targetDir: string, partialDir: string, stamp: string): void {
+  const merge = (src: string, dst: string): void => {
+    mkdirSync(dst, { recursive: true })
+    for (const entry of readdirSync(src, { withFileTypes: true })) {
+      const from = join(src, entry.name)
+      const to = join(dst, entry.name)
+      if (entry.isDirectory()) {
+        merge(from, to)
+        rmdirSync(from)
+        continue
+      }
+      if (!existsSync(to)) {
+        renameSync(from, to)
+        continue
+      }
+      if (from.endsWith('.jsonl') && to.endsWith('.jsonl')) {
+        appendFileSync(to, readFileSync(from, 'utf8'))
+        rmSync(from, { force: true })
+        continue
+      }
+      renameSync(from, join(dst, `${entry.name}.fold-${stamp}`))
+    }
+  }
+  merge(targetDir, partialDir)
+  rmdirSync(targetDir)
+}
+
 function copyTree(src: string, dest: string): void {
   mkdirSync(dest, { recursive: true })
   chmodSync(dest, statSync(src).mode & 0o7777)
@@ -598,6 +633,9 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
   const backupsOnDisk = () =>
     readdirSync(homeDir).filter((name) => name.startsWith(`${LEGACY_GLOBAL_CONFIG_DIR}.backup-`)).sort()
 
+  /** 目标仅存自写脚手架（audit/shims）时折入半拷贝迁移，不按 conflict 拒绝。 */
+  let mergeScaffolding = false
+
   if (existsSync(targetDir)) {
     if (existsSync(markerPath)) {
       // 上次迁移在验证完成前中断（review N-2）：回滚到迁移前状态后重走全流程，
@@ -634,10 +672,15 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
       }
       // 已回到迁移前状态：落入下方正常流程（重新快照、copy、备份、验证）。
     } else if (existsSync(legacyDir)) {
-      return {
-        status: 'conflict', exitCode: 1, keyNames: [],
-        detail: `both ${targetDir} and ${legacyDir} exist — refusing to overwrite (no writes made). Resolve by hand: inspect both, keep what you need in ${targetDir}, then rename ${legacyDir} away and re-run.`,
+      if (hasGlobalDataAt(targetDir)) {
+        return {
+          status: 'conflict', exitCode: 1, keyNames: [],
+          detail: `both ${targetDir} and ${legacyDir} exist — refusing to overwrite (no writes made). Resolve by hand: inspect both, keep what you need in ${targetDir}, then rename ${legacyDir} away and re-run.`,
+        }
       }
+      // 目标只剩自写脚手架（audit/shims 等，0.12.1 写只落新名的产物）不算冲突：
+      // 折入半拷贝后放行迁移（foldScaffoldingInto），旧数据照常备份+验证。
+      mergeScaffolding = true
     } else {
       return { status: 'noop', exitCode: 0, keyNames: [], detail: `already migrated: ${targetDir} is in use.` }
     }
@@ -686,6 +729,7 @@ export async function migrateHome(homeDir = homedir(), options: { allowInsecureG
     copyTree(legacyDir, partialDir)
     // 验证标记随整树入位（review N-2）：验证通过才删除；崩溃后重跑走回滚重启。
     writeFileSync(join(partialDir, markerName), `${backupDir}\n`)
+    if (mergeScaffolding) foldScaffoldingInto(targetDir, partialDir, stamp)
     renameSync(partialDir, targetDir)
   } catch (error) {
     // rename 是原子的：catch 里目标绝不是本进程产物（并发抢先建目标时误删即事故），

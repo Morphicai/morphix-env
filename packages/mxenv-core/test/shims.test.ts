@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
-import { RESERVED_SHIM_NAMES, shimsDir, stripShimsFromPath, sanitizeBootEnv, validateShimList } from '../src/shims'
+import { RESERVED_SHIM_NAMES, shimsDir, legacyShimsDir, stripShimsFromPath, sanitizeBootEnv, validateShimList } from '../src/shims'
 
 // package-split 4.1 下沉的共享 shim 逻辑（L1）独立测试：mxenv-cli 侧
 // shims.test.ts 面向 L3 行为（生成/剥离/rc），本文件保证只跑 core 套件时
@@ -89,6 +89,12 @@ describe('stripShimsFromPath', () => {
     const sibling = join(HOME, '.mx-env', 'shims-extra')
     mkdirSync(sibling, { recursive: true })
     expect(stripShimsFromPath(`/bin:${sibling}`, HOME)).toBe(`/bin:${sibling}`)
+  })
+
+  it('旧目录 shims 条目一并剥离（0.12.1 双目录防递归）', () => {
+    const legacy = legacyShimsDir(HOME)
+    mkdirSync(legacy, { recursive: true })
+    expect(stripShimsFromPath(`/usr/bin:${legacy}:/bin`, HOME)).toBe('/usr/bin:/bin')
   })
 })
 

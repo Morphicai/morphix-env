@@ -17,6 +17,7 @@ import {
   sanitizeBootEnv,
   StreamingRedactor,
   stripShimsFromPath,
+  suppressLegacyHomeHint,
   validateShimList,
   warnDeprecatedBinInvocation,
   writeAudit,
@@ -78,6 +79,8 @@ interface Args {
   write: boolean
   remove: boolean
   warnPlaintext: boolean
+  /** 子命令级 --help/-h（顶层 --help 以 command 形态落在 main 分派里）。 */
+  help: boolean
   /** Flags the parser did not recognize; migrate fails on these instead of silently ignoring them. */
   unknownFlags: string[]
 }
@@ -88,7 +91,7 @@ function parseArgs(argv: string[]): Args {
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
     target: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
-    write: false, remove: false, warnPlaintext: false, unknownFlags: [],
+    write: false, remove: false, warnPlaintext: false, help: false, unknownFlags: [],
   }
 
   let i = 2
@@ -145,6 +148,8 @@ function parseArgs(argv: string[]): Args {
       args.serve = true
     } else if (arg === '--warn-plaintext') {
       args.warnPlaintext = true
+    } else if (arg === '--help' || arg === '-h') {
+      args.help = true
     } else if (args.command === 'run') {
       args.subArgs = argv.slice(i)
       break
@@ -883,6 +888,13 @@ async function main(): Promise<number> {
   // shim → run → provider → shim. See design decision 3.
   Object.assign(bootInfo, sanitizeBootEnv())
   const args = parseArgs(process.argv)
+  // 子命令级 --help/-h：一律给顶层帮助（含全部命令/选项），替代裸 unrecognized 报错。
+  if (args.help) {
+    showHelp()
+    return 0
+  }
+  // --no-global 明确排除全局配置面：连兼容窗迁移提示也一并静音。
+  if (args.noGlobal) suppressLegacyHomeHint()
   switch (args.command) {
     case 'run': return cmdRun(args)
     case 'fetch': return cmdFetch(args)

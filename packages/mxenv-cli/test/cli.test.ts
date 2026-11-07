@@ -40,6 +40,20 @@ describe('mxenv-cli face', () => {
     }
   })
 
+  it('shell-init --help shows help and exits 0 (subcommand help, 0.12.1)', () => {
+    const result = runCapture(['shell-init', '--help'])
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('mxenv-cli shell-init')
+    expect(result.stderr).not.toContain('unrecognized flag')
+  })
+
+  it('project commands get a "run it inside a project" hint (0.12.1)', () => {
+    const result = runCapture(['run'])
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('project command from @morphixai/mxenv')
+    expect(result.stderr).toContain('npx mxenv run')
+  })
+
   it('unknown commands fail with help on stderr/stdout', () => {
     const result = runCapture(['explode'])
     expect(result.status).toBe(1)
