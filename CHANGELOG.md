@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.1
+
+### Fixed
+
+- **Writes always land on `~/.mxenv/`** (audit events, generated shims): during the compat window these previously followed the legacy read fallback into `~/.mx-env/`, which surprised users (even `--no-global` runs touched the legacy tree). The active global directory is now judged by **content** — real data vs auto-created `audit/`/`shims/` scaffolding — so the read fallback no longer flips early, and `migrate --home` folds scaffolding-only targets into the migration instead of reporting a conflict (same-day audit `.jsonl` files merge by append).
+- `mxenv-cli shell-init --help`, and `--help`/`-h` after any subcommand on both CLIs, show help instead of failing with "unrecognized flag(s)".
+- `mxenv-cli` answers project commands (`run`, `export`, …) with a "run it inside a project" hint instead of a bare `Unknown command`.
+- The legacy-directory migration hint now prints once per machine (previously once per process) and is silenced entirely under `--no-global`.
+- PATH sanitization and `shell-init --remove` cover the legacy `~/.mx-env/shims` directory too, so pre-migration shims cannot recurse into `mxenv run`.
+
+### Docs
+
+- From a developer-experience review (docs-only self-serve test, score 7.5/10): SKILL.md no longer suggests installing both packages globally (bin-takeover trap); the npm package READMEs carry the global-install conflict warning; the repository README gained a step-by-step upgrade guide and a known-issues note for the transitive `@infisical/sdk` advisories.
+
 ## 0.12.0
 
 ### Added
