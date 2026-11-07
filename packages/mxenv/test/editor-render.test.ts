@@ -17,6 +17,7 @@ function dotenvxStateWithRevealed(value: string): EditorUiState {
   return {
     token: 'tok-render',
     profileName: 'test',
+    version: '0.0.0-test',
     sources: [{ name: 'enc', provider: 'dotenvx' }],
     page: 'dotenvx',
     sourceName: 'enc',

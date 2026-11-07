@@ -47,21 +47,25 @@
     "prepublishOnly": "node ../../scripts/prepublish-guard.mjs"
   },
   "dependencies": {
+    "@morphixai/mxenv-core": "^0.12.0",
     "cross-spawn": "^7.0.6",
-    "dotenv": "^17.3.1",
-    "@morphixai/mxenv-core": "^0.12.0"
+    "dotenv": "^17.3.1"
   },
   "devDependencies": {
-    "@radix-ui/react-alert-dialog": "^1.1.0",
-    "@radix-ui/react-select": "^2.1.0",
+    "@tailwindcss/cli": "^4.3.5",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^25.5.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.5.2",
     "esbuild": "^0.27.0",
     "happy-dom": "^21.0.4",
+    "lucide-react": "^1.70.0",
+    "radix-ui": "^1.8.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "tailwindcss": "^4.3.5",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.1"

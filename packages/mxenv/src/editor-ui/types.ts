@@ -34,6 +34,8 @@ export interface RevealedValue {
 interface BaseState {
   token: string
   profileName: string
+  /** mxenv package version, for the header brand line. */
+  version: string
   /** Sources of the composed profile, for the header switcher (names only). */
   sources: SourceNavRow[]
 }

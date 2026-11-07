@@ -1,6 +1,43 @@
-import * as AlertDialog from '@radix-ui/react-alert-dialog'
-import * as Select from '@radix-ui/react-select'
 import { useState, type ReactNode } from 'react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import type { EditorUiState } from './types'
 
 function basePath(state: { token: string }): string {
@@ -11,17 +48,35 @@ function sourcePath(state: { token: string }, sourceName: string): string {
   return `${basePath(state)}/source/${encodeURIComponent(sourceName)}`
 }
 
-function statusTone(availability: string): string {
-  if (availability === 'ok') return 'ok'
-  if (availability === 'missing') return 'warn'
-  if (availability === 'error') return 'error'
-  return 'muted'
+// Platform-reserved source IDs (mxenv-core composition constants) get friendly
+// display names; the raw ID stays visible in detailed views.
+const SOURCE_DISPLAY_NAMES: Record<string, string> = {
+  __mx_global_dotenv: 'Global store',
+  __mx_legacy_local: 'Local override',
+  __mx_legacy_infisical: 'Infisical (legacy)',
+  __mx_cli_local_override: 'CLI local override',
 }
 
-function ChevronIcon(): ReactNode {
+function sourceDisplayName(name: string): string {
+  return SOURCE_DISPLAY_NAMES[name] ?? name
+}
+
+function statusTone(availability: string): string {
+  if (availability === 'ok') return 'text-success'
+  if (availability === 'missing') return 'text-warning'
+  if (availability === 'error') return 'text-error'
+  return 'text-muted-foreground'
+}
+
+function BrandMark(): ReactNode {
+  // mx geometric monogram (designed mark) — same geometry as the favicon.
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="28" height="28" viewBox="0 0 32 32" role="img" aria-label="mxenv" className="shrink-0">
+      <rect width="32" height="32" rx="8" fill="#005EFF" />
+      <g fill="none" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 21V11l4.5 5L14 11v10" />
+        <path d="M20 11l7 10M27 11l-7 10" />
+      </g>
     </svg>
   )
 }
@@ -35,6 +90,14 @@ function ExternalIcon(): ReactNode {
   )
 }
 
+function CheckIcon(): ReactNode {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 function Page({ state, title, subtitle, children }: {
   state: EditorUiState
   title: string
@@ -43,87 +106,111 @@ function Page({ state, title, subtitle, children }: {
 }): ReactNode {
   const currentSource = 'sourceName' in state ? state.sourceName : null
   return (
-    <div className="page">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">mx</span>
-          <span className="brand-name">mxenv</span>
-          <span className="brand-divider" aria-hidden="true" />
-          <span className="brand-crumb">Secret editor</span>
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-10 border-b bg-card">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <BrandMark />
+            <span className="font-semibold tracking-tight">mxenv</span>
+            <Badge variant="secondary" className="font-mono text-[11px] font-normal text-muted-foreground">
+              v{state.version}
+            </Badge>
+            <Separator orientation="vertical" className="mx-1 h-4" />
+            <span className="truncate text-sm text-muted-foreground">Secret editor</span>
+          </div>
+          <Badge variant="outline" className="gap-1.5 font-normal" title="Active profile" data-testid="profile-name">
+            <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
+            {state.profileName}
+          </Badge>
         </div>
-        <div className="profile-chip" title="Active profile">
-          <span className="profile-dot" aria-hidden="true" />
-          <span className="profile-name">{state.profileName}</span>
-        </div>
-      </header>
-      <nav className="source-nav" aria-label="Sources">
-        <a className={`source-chip${currentSource === null ? ' is-current' : ''}`} href={basePath(state)}>All sources</a>
-        {state.sources.map((source) => (
+        <nav className="mx-auto flex max-w-5xl gap-1.5 overflow-x-auto px-6 pb-2" aria-label="Sources">
           <a
-            key={source.name}
-            className={`source-chip${currentSource === source.name ? ' is-current' : ''}`}
-            href={sourcePath(state, source.name)}
+            data-testid="source-chip"
+            className={cn(
+              'inline-flex shrink-0 items-center rounded-full px-3 py-1 text-sm transition-colors',
+              currentSource === null
+                ? 'bg-primary/10 font-medium text-primary'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            )}
+            href={basePath(state)}
           >
-            <span className="source-chip-provider">{source.provider}</span>
-            {source.name}
+            All sources
           </a>
-        ))}
-      </nav>
-      <main className="container">
-        <div className="page-head">
-          <h1>{title}</h1>
-          {subtitle && <p className="subtitle">{subtitle}</p>}
+          {state.sources.map((source) => (
+            <a
+              key={source.name}
+              data-testid="source-chip"
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors',
+                currentSource === source.name
+                  ? 'bg-primary/10 font-medium text-primary'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+              )}
+              href={sourcePath(state, source.name)}
+            >
+              <span className="text-[10px] uppercase tracking-wide opacity-70">{source.provider}</span>
+              {sourceDisplayName(source.name)}
+            </a>
+          ))}
+        </nav>
+      </header>
+      <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
         {children}
       </main>
-      <footer className="footer">
+      <footer className="mx-auto max-w-5xl px-6 pb-8 text-xs text-muted-foreground">
         One-time local session · values never return to the terminal · 15-minute lifetime · end the session explicitly when done
       </footer>
     </div>
   )
 }
 
-function Card({ title, count, children }: { title: string; count?: number; children: ReactNode }): ReactNode {
+function SectionCard({ title, count, description, children }: {
+  title: string
+  count?: number
+  description?: ReactNode
+  children: ReactNode
+}): ReactNode {
   return (
-    <section className="card">
-      <div className="card-head">
-        <h2>{title}</h2>
-        {typeof count === 'number' && <span className="count-pill">{count}</span>}
-      </div>
-      {children}
-    </section>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+        <div className="space-y-1">
+          <CardTitle className="text-base">{title}</CardTitle>
+          {description && <CardDescription>{description}</CardDescription>}
+        </div>
+        {typeof count === 'number' && (
+          <Badge variant="secondary" className="font-mono font-normal">{count}</Badge>
+        )}
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   )
 }
 
 function FileSelect({ base, files, fileIndex }: { base: string; files: string[]; fileIndex: number }): ReactNode {
   return (
-    <div className="field">
-      <span className="field-label">File</span>
-      <Select.Root
+    <div className="space-y-2">
+      <Label>File</Label>
+      <Select
         value={String(fileIndex)}
         onValueChange={(value) => {
           window.location.href = `${base}?fileIndex=${encodeURIComponent(value)}`
         }}
       >
-        <Select.Trigger className="select-trigger" aria-label="File">
-          <span className="select-value">{files[fileIndex] ?? files[0] ?? ''}</span>
-          <Select.Icon className="select-icon">
-            <ChevronIcon />
-          </Select.Icon>
-        </Select.Trigger>
-        <Select.Portal>
-          <Select.Content className="select-content" position="popper" sideOffset={6}>
-            <Select.Viewport className="select-viewport">
-              {files.map((file, index) => (
-                <Select.Item className="select-item" value={String(index)} key={`${file}:${index}`}>
-                  <Select.ItemText>{file}</Select.ItemText>
-                  <Select.ItemIndicator className="select-indicator">✓</Select.ItemIndicator>
-                </Select.Item>
-              ))}
-            </Select.Viewport>
-          </Select.Content>
-        </Select.Portal>
-      </Select.Root>
+        <SelectTrigger className="max-w-md font-mono text-xs" aria-label="File">
+          <SelectValue placeholder={files[0] ?? ''} />
+        </SelectTrigger>
+        <SelectContent>
+          {files.map((file, index) => (
+            <SelectItem value={String(index)} key={`${file}:${index}`}>
+              <span className="font-mono text-xs">{file}</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }
@@ -133,65 +220,77 @@ function ProfilePage({ state }: { state: Extract<EditorUiState, { page: 'profile
     <Page
       state={state}
       title="Profile overview"
-      subtitle={<>Profile <code className="inline-code">{state.profileName}</code> — this summary deliberately never displays values.</>}
+      subtitle={<>Profile <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{state.profileName}</code> — this summary deliberately never displays values.</>}
     >
-      <Card title="Sources" count={state.sourceStatuses.length}>
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Provider</th>
-                <th>Status</th>
-                <th className="col-num">Keys</th>
-                <th className="col-num" aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {state.sourceStatuses.map((row) => (
-                <tr key={row.name}>
-                  <td><code className="src-name">{row.name}</code></td>
-                  <td><span className="provider-badge">{row.provider}</span></td>
-                  <td><span className={`badge ${statusTone(row.availability)}`}>{row.availability}</span></td>
-                  <td className="col-num">{row.keyCount}</td>
-                  <td className="col-num">
-                    {row.editable
-                      ? <a className="table-action" href={sourcePath(state, row.name)}>Open →</a>
-                      : <span className="table-action is-muted">—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-      <Card title="Resolved keys" count={state.provenance.length}>
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Key</th>
-                <th>Winning source</th>
-                <th>Provider</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.provenance.map((row) => (
-                <tr key={row.key}>
-                  <td><code className="key-name">{row.key}</code></td>
-                  <td>{row.source}</td>
-                  <td>
-                    {row.provider}
-                    {row.overriddenSources.length > 0 && (
-                      <span className="override-note"> · overrides {row.overriddenSources.join(', ')}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <SectionCard title="Sources" count={state.sourceStatuses.length}>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Provider</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Keys</TableHead>
+              <TableHead className="text-right" aria-label="Actions" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {state.sourceStatuses.map((row) => (
+              <TableRow key={row.name}>
+                <TableCell>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium">{sourceDisplayName(row.name)}</span>
+                    <code className="text-xs text-muted-foreground" data-testid="src-name">{row.name}</code>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="font-normal">{row.provider}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary" className={cn('font-mono font-normal', statusTone(row.availability))}>
+                    {row.availability}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right font-mono text-sm">{row.keyCount}</TableCell>
+                <TableCell className="text-right">
+                  {row.editable
+                    ? <Button asChild variant="link" size="sm" className="px-0"><a href={sourcePath(state, row.name)}>Open →</a></Button>
+                    : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </SectionCard>
+      <SectionCard title="Resolved keys" count={state.provenance.length}>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Key</TableHead>
+              <TableHead>Winning source</TableHead>
+              <TableHead>Provider</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {state.provenance.map((row) => (
+              <TableRow key={row.key}>
+                <TableCell><code className="font-mono text-xs">{row.key}</code></TableCell>
+                <TableCell>
+                  <div className="flex flex-col gap-0.5">
+                    <span>{sourceDisplayName(row.source)}</span>
+                    <code className="text-xs text-muted-foreground">{row.source}</code>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="font-normal">{row.provider}</Badge>
+                  {row.overriddenSources.length > 0 && (
+                    <span className="ml-2 text-xs text-muted-foreground">overrides {row.overriddenSources.join(', ')}</span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </SectionCard>
     </Page>
   )
 }
@@ -240,59 +339,62 @@ function LocalPage({ state }: { state: Extract<EditorUiState, { page: 'local' }>
   return (
     <Page
       state={state}
-      title={`Edit ${state.sourceName}`}
+      title={`Edit ${sourceDisplayName(state.sourceName)}`}
       subtitle="Changes are written only to the selected local file. Values stay in this browser session and never return to CLI output."
     >
-      <section className="card">
+      <SectionCard title="File">
         <FileSelect base={sourcePath(state, state.sourceName)} files={state.files} fileIndex={state.fileIndex} />
-        <form method="post" action={`${sourcePath(state, state.sourceName)}/local`} className="form">
+      </SectionCard>
+      <SectionCard title="Variables">
+        <form method="post" action={`${sourcePath(state, state.sourceName)}/local`} className="space-y-4">
           <input type="hidden" name="fileIndex" value={state.fileIndex} />
           <input type="hidden" name="content" value={serialized} readOnly />
-          <div className="field">
-            <span className="field-label">Variables</span>
-            <div className="kv-list">
-              {rows.map((row, index) => {
-                if (row.kind === 'raw') {
-                  if (row.text.trim() === '') return null
-                  return <div className="kv-raw" key={index}>{row.text}</div>
-                }
-                return (
-                  <div className="kv-row" key={index}>
-                    <input
-                      className="kv-key"
-                      value={row.key}
-                      onChange={(event) => updateVarRow(index, { key: event.target.value })}
-                      aria-label={`Key of row ${index + 1}`}
-                      pattern="[A-Za-z_][A-Za-z0-9_.]*"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <span className="kv-eq" aria-hidden="true">=</span>
-                    <input
-                      className="kv-value"
-                      value={row.value}
-                      onChange={(event) => updateVarRow(index, { value: event.target.value })}
-                      aria-label={`Value of row ${index + 1}`}
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <button type="button" className="kv-remove" onClick={() => removeRow(index)} aria-label={`Remove row ${index + 1}`}>✕</button>
-                  </div>
-                )
-              })}
-              {rows.every((row) => row.kind !== 'var') && <p className="empty">No variables in this file yet — add the first one below.</p>}
-            </div>
-            <button type="button" className="btn btn-ghost kv-add" onClick={addRow}>+ Add variable</button>
+          <div className="space-y-2">
+            {rows.map((row, index) => {
+              if (row.kind === 'raw') {
+                if (row.text.trim() === '') return null
+                return <div className="whitespace-pre-wrap rounded-md bg-muted/60 px-3 py-1.5 font-mono text-xs text-muted-foreground" key={index}>{row.text}</div>
+              }
+              return (
+                <div className="flex items-center gap-2" key={index}>
+                  <Input
+                    className="w-2/5 font-mono text-xs"
+                    value={row.key}
+                    onChange={(event) => updateVarRow(index, { key: event.target.value })}
+                    aria-label={`Key of row ${index + 1}`}
+                    pattern="[A-Za-z_][A-Za-z0-9_.]*"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <span className="text-muted-foreground" aria-hidden="true">=</span>
+                  <Input
+                    className="flex-1 font-mono text-xs"
+                    value={row.value}
+                    onChange={(event) => updateVarRow(index, { value: event.target.value })}
+                    aria-label={`Value of row ${index + 1}`}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <Button type="button" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => removeRow(index)} aria-label={`Remove row ${index + 1}`}>
+                    ✕
+                  </Button>
+                </div>
+              )
+            })}
+            {rows.every((row) => row.kind !== 'var') && (
+              <p className="text-sm text-muted-foreground">No variables in this file yet — add the first one below.</p>
+            )}
           </div>
-          <div className="form-actions">
-            <button className="btn btn-primary" type="submit">Save local file</button>
+          <Button type="button" variant="outline" size="sm" onClick={addRow}>+ Add variable</Button>
+          <div className="flex justify-end">
+            <Button type="submit">Save local file</Button>
           </div>
         </form>
-        <p className="notice notice-info">
+        <p className="mt-4 rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
           Rows are written back as KEY=value. Comments, blank lines and anything that is not KEY=VALUE are preserved exactly as they appear;
           rows with an empty key are skipped on save.
         </p>
-      </section>
+      </SectionCard>
     </Page>
   )
 }
@@ -302,87 +404,87 @@ function DotenvxPage({ state }: { state: Extract<EditorUiState, { page: 'dotenvx
   return (
     <Page
       state={state}
-      title={`Edit ${state.sourceName}`}
+      title={`Edit ${sourceDisplayName(state.sourceName)}`}
       subtitle="This file is managed by dotenvx. Values appear only when you reveal them — one at a time — and stay in this browser session."
     >
-      <Card title="Existing keys" count={state.keyNames.length}>
+      <SectionCard title="Existing keys" count={state.keyNames.length}>
         {state.keyNames.length === 0
-          ? <p className="empty">No keys in this file yet — add the first one below.</p>
+          ? <p className="text-sm text-muted-foreground">No keys in this file yet — add the first one below.</p>
           : (
-            <ul className="account-list">
+            <div className="divide-y">
               {state.keyNames.map((key, index) => (
-                <li className="account-row" key={key}>
-                  <code className="src-name">{key}</code>
-                  {state.revealed?.key === key && <code className="revealed-value">{state.revealed.value}</code>}
-                  <span className="account-actions">
+                <div className="flex flex-wrap items-center gap-2 py-2.5 first:pt-0 last:pb-0" key={key}>
+                  <code className="font-mono text-xs">{key}</code>
+                  {state.revealed?.key === key && (
+                    <code className="rounded bg-muted px-2 py-1 font-mono text-xs" data-testid="revealed-value">{state.revealed.value}</code>
+                  )}
+                  <span className="ml-auto flex items-center gap-1">
                     {state.revealed?.key === key
-                      ? <a className="btn btn-ghost" href={`${sourcePath(state, state.sourceName)}?fileIndex=${state.fileIndex}`}>Hide</a>
+                      ? <Button asChild variant="ghost" size="sm"><a href={`${sourcePath(state, state.sourceName)}?fileIndex=${state.fileIndex}`}>Hide</a></Button>
                       : (
-                        <form method="post" action={action} className="inline-form">
+                        <form method="post" action={action}>
                           <input type="hidden" name="action" value="reveal" />
                           <input type="hidden" name="key" value={key} />
                           <input type="hidden" name="fileIndex" value={state.fileIndex} />
-                          <button type="submit" className="btn btn-ghost">Show value</button>
+                          <Button type="submit" variant="ghost" size="sm">Show value</Button>
                         </form>
                       )}
-                    <a className="btn btn-ghost" href={`${sourcePath(state, state.sourceName)}?fileIndex=${state.fileIndex}&key=${encodeURIComponent(key)}`}>Edit</a>
-                    <form id={`dotenvx-delete-${index}`} method="post" action={action} className="hidden-form">
+                    <Button asChild variant="ghost" size="sm">
+                      <a href={`${sourcePath(state, state.sourceName)}?fileIndex=${state.fileIndex}&key=${encodeURIComponent(key)}`}>Edit</a>
+                    </Button>
+                    <form id={`dotenvx-delete-${index}`} method="post" action={action} className="hidden">
                       <input type="hidden" name="action" value="delete" />
                       <input type="hidden" name="key" value={key} />
                       <input type="hidden" name="fileIndex" value={state.fileIndex} />
                     </form>
-                    <AlertDialog.Root>
-                      <AlertDialog.Trigger asChild>
-                        <button type="button" className="btn btn-danger-ghost">Delete</button>
-                      </AlertDialog.Trigger>
-                      <AlertDialog.Portal>
-                        <AlertDialog.Overlay className="dialog-overlay" />
-                        <AlertDialog.Content className="dialog-content">
-                          <AlertDialog.Title className="dialog-title">Delete “{key}”?</AlertDialog.Title>
-                          <AlertDialog.Description className="dialog-description">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">Delete</Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete “{key}”?</AlertDialogTitle>
+                          <AlertDialogDescription>
                             This removes the key from the encrypted file. The stored value is destroyed and cannot be recovered from mxenv.
-                          </AlertDialog.Description>
-                          <div className="dialog-actions">
-                            <AlertDialog.Cancel className="btn btn-ghost">Cancel</AlertDialog.Cancel>
-                            <AlertDialog.Action asChild>
-                              <button type="submit" form={`dotenvx-delete-${index}`} className="btn btn-danger">Delete key</button>
-                            </AlertDialog.Action>
-                          </div>
-                        </AlertDialog.Content>
-                      </AlertDialog.Portal>
-                    </AlertDialog.Root>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" type="submit" form={`dotenvx-delete-${index}`}>
+                            Delete key
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </span>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
-      </Card>
-      <section className="card">
+      </SectionCard>
+      <SectionCard title="Add or replace a key">
         <FileSelect base={sourcePath(state, state.sourceName)} files={state.files} fileIndex={state.fileIndex} />
-        <div className="card-head">
-          <h2>Add or replace a key</h2>
-        </div>
-        <form method="post" action={action} className="form">
+        <form method="post" action={action} className="mt-4 space-y-4">
           <input type="hidden" name="action" value="set" />
           <input type="hidden" name="fileIndex" value={state.fileIndex} />
-          <div className="field">
-            <span className="field-label">Key</span>
-            <input className="input" name="key" required pattern="[A-Za-z_][A-Za-z0-9_.]*" autoComplete="off" spellCheck={false} defaultValue={state.formKey ?? ''} />
+          <div className="max-w-md space-y-2">
+            <Label htmlFor="dotenvx-key">Key</Label>
+            <Input id="dotenvx-key" name="key" required pattern="[A-Za-z_][A-Za-z0-9_.]*" autoComplete="off" spellCheck={false} className="font-mono text-xs" defaultValue={state.formKey ?? ''} data-testid="key-input" />
           </div>
-          <div className="field">
-            <span className="field-label">Value</span>
-            <input className="input" name="value" type="password" required autoComplete="new-password" />
+          <div className="max-w-md space-y-2">
+            <Label htmlFor="dotenvx-value">Value</Label>
+            <Input id="dotenvx-value" name="value" type="password" required autoComplete="new-password" />
           </div>
-          <div className="form-actions">
-            <button className="btn btn-primary" type="submit">Save encrypted value</button>
+          <div className="flex justify-end">
+            <Button type="submit">Save encrypted value</Button>
           </div>
         </form>
-        <p className="notice notice-info">
+        <p className="mt-4 rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
           Saving rewrites only the submitted key — every other key keeps its encrypted value untouched.
           Revealed values are shown one at a time and never leave this browser session.
-          Values containing <code className="inline-code">$</code> sequences are refused: dotenvx expands them on every load path.
+          Values containing <code className="font-mono">$</code> sequences are refused: dotenvx expands them on every load path.
         </p>
-      </section>
+      </SectionCard>
     </Page>
   )
 }
@@ -392,75 +494,76 @@ function KeychainPage({ state }: { state: Extract<EditorUiState, { page: 'keycha
   return (
     <Page
       state={state}
-      title={`Edit ${state.sourceName}`}
-      subtitle={<>Existing account names are shown; values appear only when you reveal them — one at a time. OS keychain service <code className="inline-code">{state.service}</code>.</>}
+      title={`Edit ${sourceDisplayName(state.sourceName)}`}
+      subtitle={<>Existing account names are shown; values appear only when you reveal them — one at a time. OS keychain service <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{state.service}</code>.</>}
     >
-      <Card title="Existing entries" count={state.accounts.length}>
+      <SectionCard title="Existing entries" count={state.accounts.length}>
         {state.accounts.length === 0
-          ? <p className="empty">No entries yet — add the first one below.</p>
+          ? <p className="text-sm text-muted-foreground">No entries yet — add the first one below.</p>
           : (
-            <ul className="account-list">
+            <div className="divide-y">
               {state.accounts.map((account, index) => (
-                <li className="account-row" key={account}>
-                  <code className="src-name">{account}</code>
-                  {state.revealed?.key === account && <code className="revealed-value">{state.revealed.value}</code>}
-                  <span className="account-actions">
+                <div className="flex flex-wrap items-center gap-2 py-2.5 first:pt-0 last:pb-0" key={account}>
+                  <code className="font-mono text-xs">{account}</code>
+                  {state.revealed?.key === account && (
+                    <code className="rounded bg-muted px-2 py-1 font-mono text-xs" data-testid="revealed-value">{state.revealed.value}</code>
+                  )}
+                  <span className="ml-auto flex items-center gap-1">
                     {state.revealed?.key === account
-                      ? <a className="btn btn-ghost" href={sourcePath(state, state.sourceName)}>Hide</a>
+                      ? <Button asChild variant="ghost" size="sm"><a href={sourcePath(state, state.sourceName)}>Hide</a></Button>
                       : (
-                        <form method="post" action={action} className="inline-form">
+                        <form method="post" action={action}>
                           <input type="hidden" name="action" value="reveal" />
                           <input type="hidden" name="account" value={account} />
-                          <button type="submit" className="btn btn-ghost">Show value</button>
+                          <Button type="submit" variant="ghost" size="sm">Show value</Button>
                         </form>
                       )}
-                    <form id={`keychain-delete-${index}`} method="post" action={action} className="hidden-form">
+                    <form id={`keychain-delete-${index}`} method="post" action={action} className="hidden">
                       <input type="hidden" name="action" value="delete" />
                       <input type="hidden" name="account" value={account} />
                     </form>
-                  <AlertDialog.Root>
-                    <AlertDialog.Trigger asChild>
-                      <button type="button" className="btn btn-danger-ghost">Delete</button>
-                    </AlertDialog.Trigger>
-                    <AlertDialog.Portal>
-                      <AlertDialog.Overlay className="dialog-overlay" />
-                      <AlertDialog.Content className="dialog-content">
-                        <AlertDialog.Title className="dialog-title">Delete “{account}”?</AlertDialog.Title>
-                        <AlertDialog.Description className="dialog-description">
-                          This removes the entry from the OS keychain service <code className="inline-code">{state.service}</code>.
-                          The stored value is destroyed and cannot be recovered from mxenv.
-                        </AlertDialog.Description>
-                        <div className="dialog-actions">
-                          <AlertDialog.Cancel className="btn btn-ghost">Cancel</AlertDialog.Cancel>
-                          <AlertDialog.Action asChild>
-                            <button type="submit" form={`keychain-delete-${index}`} className="btn btn-danger">Delete entry</button>
-                          </AlertDialog.Action>
-                        </div>
-                      </AlertDialog.Content>
-                    </AlertDialog.Portal>
-                  </AlertDialog.Root>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">Delete</Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete “{account}”?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This removes the entry from the OS keychain service <code className="font-mono">{state.service}</code>.
+                            The stored value is destroyed and cannot be recovered from mxenv.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" type="submit" form={`keychain-delete-${index}`}>
+                            Delete entry
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </span>
-                </li>
+                </div>
               ))}
-            </ul>
-            )}
-      </Card>
-      <Card title="Add or replace an entry">
-        <form method="post" action={action} className="form">
+            </div>
+          )}
+      </SectionCard>
+      <SectionCard title="Add or replace an entry">
+        <form method="post" action={action} className="space-y-4">
           <input type="hidden" name="action" value="set" />
-          <div className="field">
-            <span className="field-label">Environment key</span>
-            <input className="input" name="account" required autoComplete="off" spellCheck={false} />
+          <div className="max-w-md space-y-2">
+            <Label htmlFor="keychain-account">Environment key</Label>
+            <Input id="keychain-account" name="account" required autoComplete="off" spellCheck={false} className="font-mono text-xs" />
           </div>
-          <div className="field">
-            <span className="field-label">Value</span>
-            <input className="input" name="value" type="password" required autoComplete="new-password" />
+          <div className="max-w-md space-y-2">
+            <Label htmlFor="keychain-value">Value</Label>
+            <Input id="keychain-value" name="value" type="password" required autoComplete="new-password" />
           </div>
-          <div className="form-actions">
-            <button className="btn btn-primary" type="submit">Save to keychain</button>
+          <div className="flex justify-end">
+            <Button type="submit">Save to keychain</Button>
           </div>
         </form>
-      </Card>
+      </SectionCard>
     </Page>
   )
 }
@@ -469,18 +572,20 @@ function ProviderPage({ state }: { state: Extract<EditorUiState, { page: 'provid
   return (
     <Page
       state={state}
-      title={state.sourceName}
-      subtitle={<>This source is owned by <span className="provider-badge">{state.provider}</span>. Values stay in that provider and are never displayed here.</>}
+      title={sourceDisplayName(state.sourceName)}
+      subtitle={<>This source is owned by <Badge variant="outline" className="font-normal">{state.provider}</Badge>. Values stay in that provider and are never displayed here.</>}
     >
-      <section className="card provider-card">
-        <p className="provider-hint">
+      <SectionCard title="Remote provider">
+        <p className="text-sm text-muted-foreground">
           mxenv composes keys from this provider but cannot edit them locally. Open the provider console to review or rotate values,
-          then validate with <code className="inline-code">mxenv inspect</code>.
+          then validate with <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">mxenv inspect</code>.
         </p>
-        {state.url
-          ? <a className="btn btn-primary" href={state.url} target="_blank" rel="noreferrer">Open provider editor <ExternalIcon /></a>
-          : <span className="empty">No console URL configured for this provider.</span>}
-      </section>
+        <div className="mt-4">
+          {state.url
+            ? <Button asChild><a href={state.url} target="_blank" rel="noreferrer">Open provider editor <ExternalIcon /></a></Button>
+            : <span className="text-sm text-muted-foreground">No console URL configured for this provider.</span>}
+        </div>
+      </SectionCard>
     </Page>
   )
 }
@@ -488,29 +593,30 @@ function ProviderPage({ state }: { state: Extract<EditorUiState, { page: 'provid
 function SavedPage({ state }: { state: Extract<EditorUiState, { page: 'saved' }> }): ReactNode {
   const detail = state.key
     ? state.action === 'delete'
-      ? <>Key <code className="inline-code">{state.key}</code> was deleted.</>
-      : <>Key <code className="inline-code">{state.key}</code> was written.</>
+      ? <>Key <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{state.key}</code> was deleted.</>
+      : <>Key <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{state.key}</code> was written.</>
     : 'The local file was saved.'
   return (
     <Page state={state} title="Saved" subtitle={undefined}>
-      <section className="card saved-card">
-        <div className="saved-icon" aria-hidden="true">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+      <SectionCard title="Saved">
+        <div className="flex flex-col items-center gap-3 py-6 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full bg-success/10 text-success" aria-hidden="true">
+            <CheckIcon />
+          </div>
+          <p className="text-sm">{detail} No value was written to terminal output or audit records.</p>
+          <p className="max-w-md text-xs text-muted-foreground">
+            The session is still open — continue editing or end it explicitly. It also ends on its own after 15 minutes.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+            <Button asChild><a data-testid="continue-editing" href={`${sourcePath(state, state.sourceName)}?fileIndex=${state.fileIndex}`}>Continue editing</a></Button>
+            <Button asChild variant="outline"><a href={basePath(state)}>All sources</a></Button>
+            <form method="post" action={basePath(state)}>
+              <input type="hidden" name="action" value="close" />
+              <Button type="submit" variant="ghost" className="text-muted-foreground hover:text-destructive">End session</Button>
+            </form>
+          </div>
         </div>
-        <h2 className="saved-title">Saved</h2>
-        <p className="saved-text">{detail} No value was written to terminal output or audit records.</p>
-        <p className="saved-hint">The session is still open — continue editing or end it explicitly. It also ends on its own after 15 minutes.</p>
-        <div className="form-actions">
-          <a className="btn btn-primary" href={`${sourcePath(state, state.sourceName)}?fileIndex=${state.fileIndex}`}>Continue editing</a>
-          <a className="btn btn-ghost" href={basePath(state)}>All sources</a>
-          <form method="post" action={basePath(state)} className="inline-form">
-            <input type="hidden" name="action" value="close" />
-            <button type="submit" className="btn btn-danger-ghost">End session</button>
-          </form>
-        </div>
-      </section>
+      </SectionCard>
     </Page>
   )
 }
@@ -518,15 +624,14 @@ function SavedPage({ state }: { state: Extract<EditorUiState, { page: 'saved' }>
 function ClosedPage({ state }: { state: Extract<EditorUiState, { page: 'closed' }> }): ReactNode {
   return (
     <Page state={state} title="Session ended" subtitle={undefined}>
-      <section className="card saved-card">
-        <div className="saved-icon" aria-hidden="true">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+      <SectionCard title="Session ended">
+        <div className="flex flex-col items-center gap-3 py-6 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground" aria-hidden="true">
+            <CheckIcon />
+          </div>
+          <p className="text-sm">The local editor session is over and its server is shutting down. You can close this tab.</p>
         </div>
-        <h2 className="saved-title">Session ended</h2>
-        <p className="saved-text">The local editor session is over and its server is shutting down. You can close this tab.</p>
-      </section>
+      </SectionCard>
     </Page>
   )
 }
@@ -534,12 +639,15 @@ function ClosedPage({ state }: { state: Extract<EditorUiState, { page: 'closed' 
 function ErrorPage({ state }: { state: Extract<EditorUiState, { page: 'error' }> }): ReactNode {
   return (
     <Page state={state} title={state.title} subtitle={undefined}>
-      <section className="card saved-card">
-        <div className="saved-icon is-error" aria-hidden="true">!</div>
-        <h2 className="saved-title">{state.title}</h2>
-        <p className="saved-text">{state.message}</p>
-        <a className="btn btn-ghost" href={basePath(state)}>Back to overview</a>
-      </section>
+      <SectionCard title={state.title}>
+        <div className="flex flex-col items-center gap-3 py-6 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full bg-destructive/10 text-destructive" aria-hidden="true">
+            <span className="text-lg font-semibold">!</span>
+          </div>
+          <p className="max-w-md text-sm text-muted-foreground">{state.message}</p>
+          <Button asChild variant="outline"><a href={basePath(state)}>Back to overview</a></Button>
+        </div>
+      </SectionCard>
     </Page>
   )
 }
