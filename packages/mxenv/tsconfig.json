@@ -10,7 +10,10 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./src/editor-ui/*"]
+    }
   },
   "include": ["src", "test", "tsup.config.ts", "vitest.config.ts"],
   "exclude": ["src/editor-ui", "test/editor-ui-smoke.test.ts"]

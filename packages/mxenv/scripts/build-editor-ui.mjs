@@ -1,4 +1,4 @@
-// Bundles the React editor UI (src/editor-ui/client.tsx + styles.css) into a
+// Bundles the React editor UI (src/editor-ui/client.tsx + Tailwind app.css) into a
 // generated TS module so the CLI's server build can inline everything with
 // zero external requests and zero runtime react dependency.
 //
@@ -6,7 +6,9 @@
 // by every `pnpm build` / `pnpm dev` / `pnpm test` via the package scripts).
 
 import { build } from 'esbuild'
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -19,6 +21,7 @@ const result = await build({
   minify: true,
   target: ['es2019'],
   jsx: 'automatic',
+  alias: { '@': resolve(root, 'src/editor-ui') },
   define: { 'process.env.NODE_ENV': '"production"' },
   legalComments: 'eof',
   write: false,
@@ -26,7 +29,21 @@ const result = await build({
 })
 
 const js = result.outputFiles[0].text
-const css = readFileSync(resolve(root, 'src/editor-ui/styles.css'), 'utf8')
+
+// Tailwind v4 compiles app.css (shadcn token theme) by scanning editor-ui
+// sources; the CSS is then inlined like the JS — still zero external requests.
+const require = createRequire(import.meta.url)
+const tailwindCli = resolve(
+  dirname(require.resolve('@tailwindcss/cli/package.json')),
+  require('@tailwindcss/cli/package.json').bin.tailwindcss
+)
+const cssOut = resolve(root, 'src/editor-ui/generated/tailwind.out.css')
+execFileSync(
+  process.execPath,
+  [tailwindCli, '-i', resolve(root, 'src/editor-ui/app.css'), '-o', cssOut, '--minify'],
+  { stdio: 'pipe' }
+)
+const css = readFileSync(cssOut, 'utf8')
 
 const outDir = resolve(root, 'src/editor-ui/generated')
 mkdirSync(outDir, { recursive: true })

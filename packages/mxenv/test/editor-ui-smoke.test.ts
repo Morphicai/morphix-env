@@ -14,6 +14,7 @@ import { extractInlineScripts } from './support/editorPage'
 const BASE = {
   token: 'tok-smoke',
   profileName: 'smoke-profile',
+  version: '0.0.0-test',
   sources: [{ name: 'enc', provider: 'dotenvx' }],
 }
 
@@ -81,26 +82,26 @@ describe('editor client bundle mounts and renders real state (N-1)', () => {
   it('profile page renders profile identity and source navigation', async () => {
     mountRenderedPage(renderEditorHtml('mxenv editor', PROFILE_STATE))
 
-    const profileName = await renderedElement('.profile-name')
+    const profileName = await renderedElement('[data-testid="profile-name"]')
     expect(profileName.textContent).toBe('smoke-profile')
-    expect(document.querySelector('.src-name')?.textContent).toBe('enc')
-    expect(document.querySelectorAll('.source-chip').length).toBeGreaterThan(0)
+    expect(document.querySelector('[data-testid="src-name"]')?.textContent).toBe('enc')
+    expect(document.querySelectorAll('[data-testid="source-chip"]').length).toBeGreaterThan(0)
   })
 
   it('dotenvx page pre-fills the key form and shows the revealed value verbatim', async () => {
     mountRenderedPage(renderEditorHtml('mxenv editor', DOTENVX_REVEALED_STATE))
 
-    const keyInput = await renderedElement('input.input[name="key"]')
+    const keyInput = await renderedElement('[data-testid="key-input"]')
     expect((keyInput as HTMLInputElement).value).toBe('MXTEST_PREFILL')
 
-    const revealed = await renderedElement('code.revealed-value')
+    const revealed = await renderedElement('[data-testid="revealed-value"]')
     expect(revealed.textContent).toBe('sentinel-smoke-reveal')
   })
 
   it('saved page returns to the saved file via fileIndex (N-4)', async () => {
     mountRenderedPage(renderEditorHtml('mxenv editor', SAVED_STATE))
 
-    const backLink = await renderedElement('a.btn.btn-primary')
+    const backLink = await renderedElement('[data-testid="continue-editing"]')
     expect(backLink.getAttribute('href')).toContain('?fileIndex=0')
     expect(backLink.textContent).toContain('Continue editing')
   })

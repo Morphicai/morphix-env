@@ -17,6 +17,7 @@ import {
 import { verificationEnv } from './migrate'
 import { renderEditorHtml } from './editor-ui/render'
 import type { EditorUiState } from './editor-ui/types'
+import pkg from '../package.json'
 
 const EDITOR_LIFETIME_MS = 15 * 60 * 1000
 
@@ -167,6 +168,7 @@ function uiBase(state: EditorState) {
   return {
     token: state.token,
     profileName: state.profileName,
+    version: pkg.version,
     sources: state.sourceEntries.map((entry) => ({ name: entry.name, provider: entry.source.provider })),
   }
 }
