@@ -7,20 +7,80 @@ on:
         description: npm dist-tag (auto-detected from version if empty)
         required: false
         default: ''
+      verify-only:
+        description: 只验证 npm token secret 命中情况（whoami 仅参考），不发布
+        type: boolean
+        required: false
+        default: false
   push:
     tags:
       - 'v*'
 
 # 发布顺序护栏（naming-cutover 4.1）：@morphixai/mxenv-core 必须最先发布，其余三包的
 # prepublishOnly（scripts/prepublish-guard.mjs）会在 registry 解析不到依赖时
-# 拒绝发布。CI 缺 NPM_AUTOMATION_TOKEN 时显式失败——勿假绿。
+# 拒绝发布。CI 缺 npm token（NPM_TOKEN / NPM_AUTOMATION_TOKEN）时显式失败——勿假绿。
 jobs:
+  # 快速凭证校验（verify-only 时只跑这一个 job）：报 secret 命中名/占位符/长度，不打印任何值。
+  # 注意：actions/setup-node 在 NODE_AUTH_TOKEN 为空时会注入字面占位符 'XXXXX-XXXXX-XXXXX-XXXXX'
+  # （authutil.ts exportVariable），占位符一律视为无 token 显式红——勿假绿。
+  # secret 取用顺序：NPM_TOKEN → NPM_AUTOMATION_TOKEN。
+  verify-token:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: npm
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.NPM_AUTOMATION_TOKEN }}
+      RAW_NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      RAW_NPM_AUTOMATION_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - name: Verify npm token present
+        run: |
+          # 只报 secret 名命中/占位符/长度，不打印任何值
+          report() {
+            local name="$1" val="$2"
+            if [ -z "$val" ]; then
+              echo "$name: unset"
+            elif [ "$val" = "XXXXX-XXXXX-XXXXX-XXXXX" ]; then
+              echo "$name: set but LITERAL PLACEHOLDER value (len ${#val}) —— 配置的是占位符，需换成真实 npm token"
+            else
+              echo "$name: set (len ${#val})"
+            fi
+          }
+          report NPM_TOKEN "$RAW_NPM_TOKEN"
+          report NPM_AUTOMATION_TOKEN "$RAW_NPM_AUTOMATION_TOKEN"
+          # 真相源是 secrets 上下文（RAW_*）。NODE_AUTH_TOKEN 可能被 actions/setup-node
+          # 注入字面占位符（authutil.ts: NODE_AUTH_TOKEN || 'XXXXX-XXXXX-XXXXX-XXXXX'），
+          # 不能据此判定 token 存在。
+          if [ -z "$RAW_NPM_TOKEN" ] && [ -z "$RAW_NPM_AUTOMATION_TOKEN" ]; then
+            echo "::error::secrets.NPM_TOKEN 与 secrets.NPM_AUTOMATION_TOKEN 均缺失——无法发布，显式失败（在仓库/组织 secret 配置其一；本仓 CI 未配置时请走本地发布：pnpm -r build && 按序 npm publish）" >&2
+            exit 1
+          fi
+          if [ "$NODE_AUTH_TOKEN" = "XXXXX-XXXXX-XXXXX-XXXXX" ]; then
+            echo "::error::NODE_AUTH_TOKEN 是 setup-node 注入的字面占位符——secret 名字有误或仓库不可见，请核对 NPM_TOKEN / NPM_AUTOMATION_TOKEN 配置" >&2
+            exit 1
+          fi
+          # whoami 仅作参考：granular access token 对 /-/whoami 可能 401（npm CLI 已知情况），
+          # 不作为发布门槛——最终以 npm publish 结果为准。
+          if npm whoami >/dev/null 2>&1; then
+            echo "npm whoami OK ($(npm whoami))"
+          else
+            echo "::warning::npm whoami 未能认证（granular token 不支持 whoami 属已知情况，或 token 无效）；发布可用性以 publish 步骤为准"
+          fi
+
   publish:
+    needs: verify-token
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify-only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: npm
     permissions:
       contents: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.NPM_AUTOMATION_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -31,14 +91,6 @@ jobs:
           node-version: 20
           cache: pnpm
           registry-url: https://registry.npmjs.org
-      - name: Verify npm token present
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::secrets.NPM_AUTOMATION_TOKEN 缺失——无法发布，显式失败（本仓 CI 未配置该 secret 时请走本地发布：pnpm -r build && 按序 npm publish）" >&2
-            exit 1
-          fi
       - run: pnpm install --frozen-lockfile
       - name: Resolve version + dist-tag
         id: tag
