@@ -11,10 +11,13 @@ on:
     tags:
       - 'v*'
 
+# 发布顺序护栏（naming-cutover 4.1）：mxenv-core 必须最先发布，其余三包的
+# prepublishOnly（scripts/prepublish-guard.mjs）会在 registry 解析不到依赖时
+# 拒绝发布。CI 缺 NPM_AUTOMATION_TOKEN 时显式失败——勿假绿。
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: npm
     permissions:
       contents: write
@@ -28,11 +31,32 @@ jobs:
           node-version: 20
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      - name: Verify npm token present
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::secrets.NPM_AUTOMATION_TOKEN 缺失——无法发布，显式失败（本仓 CI 未配置该 secret 时请走本地发布：pnpm -r build && 按序 npm publish）" >&2
+            exit 1
+          fi
       - run: pnpm install --frozen-lockfile
-      - name: Resolve npm dist-tag
+      - name: Resolve version + dist-tag
         id: tag
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION=$(node -p "require('./packages/mxenv-core/package.json').version")
+          # 版本源=workspace 包版本，四份 manifest 必须一致（lockstep）。
+          node -e '
+            const fs = require("fs")
+            const files = ["./package.json", "./packages/mxenv-core/package.json", "./packages/mxenv/package.json", "./packages/mxenv-cli/package.json"]
+            const version = process.argv[1]
+            for (const f of files) {
+              const v = JSON.parse(fs.readFileSync(f, "utf8")).version
+              if (v !== version) {
+                console.error(`::error::${f} version ${v} != ${version}（lockstep 破裂）`)
+                process.exit(1)
+              }
+            }
+          ' "$VERSION"
           if [ -n "${{ github.event.inputs.npm-tag }}" ]; then
             TAG="${{ github.event.inputs.npm-tag }}"
           elif [[ "$VERSION" == *-* ]]; then
@@ -42,26 +66,42 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - name: Verify tag matches package version
+      - name: Verify tag matches workspace version
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           if [ "v${{ steps.tag.outputs.version }}" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version v${{ steps.tag.outputs.version }}" >&2
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match workspace version v${{ steps.tag.outputs.version }}" >&2
             exit 1
           fi
-      # prepublishOnly (pnpm build && pnpm test) runs automatically inside
-      # npm publish, so a failing build/test can never reach the registry.
-      - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
+      - name: Full test gate
+        run: pnpm -r test && pnpm test
+      # 发布顺序：core → mxenv → mxenv-cli → morphix-env（收尾转发）。
+      # 各包 prepublishOnly（guard + 根包测试）在 npm publish 内自动执行。
+      - name: Publish mxenv-core (core-first)
+        working-directory: packages/mxenv-core
         run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
-      # Only created after a successful publish, so a GitHub Release always
-      # implies the matching npm version is live.
-      - name: Create GitHub Release
+      - name: Publish mxenv
+        working-directory: packages/mxenv
+        run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
+      - name: Publish mxenv-cli
+        working-directory: packages/mxenv-cli
+        run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
+      - name: Publish morphix-env (deprecated forwarding shim)
+        run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
+      # 只在发布成功后建 GitHub Release（Release 存在 ⇒ 对应 npm 版本已上线）。
+      - name: Create GitHub Release (含迁移表)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          node -e '
+            const fs = require("fs")
+            const changelog = fs.readFileSync("CHANGELOG.md", "utf8")
+            const version = process.argv[1]
+            const section = changelog.split(/^## /m).find((s) => s.startsWith(version))
+            if (!section) { console.error(`::error::CHANGELOG 缺 ${version} 段`); process.exit(1) }
+            fs.writeFileSync("/tmp/release-notes.md", section.trim() + "\n")
+          ' "${{ steps.tag.outputs.version }}"
           gh release create "v${{ steps.tag.outputs.version }}" \
             --title "mxenv v${{ steps.tag.outputs.version }}" \
-            --generate-notes \
+            --notes-file /tmp/release-notes.md \
             --prerelease="$([ "${{ steps.tag.outputs.tag }}" != "latest" ] && echo true || echo false)"

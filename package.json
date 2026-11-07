@@ -1,7 +1,7 @@
 {
   "name": "morphix-env",
-  "version": "0.11.0",
-  "description": "Secret composition CLI — Infisical, Doppler, macOS Keychain, dotenvx, and local files stay value owners; composes them into one value-safe child environment and ships a built-in Agent Skill (mxenv skill install).",
+  "version": "0.12.0",
+  "description": "Deprecated forwarding shim for mxenv — install `mxenv` (project) or `mxenv-cli` (global management) instead; this package forwards the legacy `mx-env`/`morphix-env` bins and re-exports the mxenv-core SDK facade.",
   "author": "MorphixAI <dev@morphixai.com>",
   "homepage": "https://github.com/Morphicai/morphix-env#readme",
   "repository": {
@@ -12,8 +12,8 @@
     "url": "https://github.com/Morphicai/morphix-env/issues"
   },
   "bin": {
-    "morphix-env": "./dist/cli.js",
-    "mx-env": "./dist/cli.js"
+    "morphix-env": "./bin/forward-cli.js",
+    "mx-env": "./bin/forward-cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,8 +23,8 @@
       "default": "./dist/index.js"
     },
     "./cli": {
-      "types": "./dist/cli.d.ts",
-      "default": "./dist/cli.js"
+      "types": "./bin/forward-cli.d.ts",
+      "default": "./bin/forward-cli.js"
     },
     "./package.json": "./package.json"
   },
@@ -33,11 +33,13 @@
     "dev": "tsup src/index.ts --format cjs --watch",
     "test": "pnpm build && vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "pnpm test"
+    "prepublishOnly": "node scripts/prepublish-guard.mjs && pnpm test"
   },
   "files": [
+    "bin",
     "dist",
-    "docs/logo.png"
+    "docs/logo.png",
+    "SECURITY.md"
   ],
   "keywords": [
     "env",
@@ -63,11 +65,13 @@
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "2.30.0",
+    "cjs-module-lexer": "^2.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.1"
   },
   "dependencies": {
-    "mxenv-core": "workspace:*"
+    "mxenv": "^0.12.0",
+    "mxenv-core": "^0.12.0"
   }
 }

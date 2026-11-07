@@ -3,7 +3,16 @@
   "version": "0.12.0",
   "description": "L3 management face for mxenv \u2014 machine-level extras like shell-init.",
   "license": "MIT",
-  "private": true,
+  "author": "MorphixAI <dev@morphixai.com>",
+  "homepage": "https://github.com/Morphicai/morphix-env#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Morphicai/morphix-env.git",
+    "directory": "packages/mxenv-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/Morphicai/morphix-env/issues"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -14,7 +23,10 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
   ],
   "engines": {
     "node": ">=18"
@@ -22,7 +34,8 @@
   "scripts": {
     "build": "tsup",
     "test": "pnpm --filter mxenv-core build && pnpm --filter mxenv build && pnpm build && vitest run",
-    "typecheck": "pnpm --filter mxenv-core build && tsc --noEmit"
+    "typecheck": "pnpm --filter mxenv-core build && tsc --noEmit",
+    "prepublishOnly": "node ../../scripts/prepublish-guard.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
@@ -37,6 +50,6 @@
     "mxenv-cli": "./dist/cli.js"
   },
   "dependencies": {
-    "mxenv-core": "workspace:*"
+    "mxenv-core": "^0.12.0"
   }
 }

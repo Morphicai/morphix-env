@@ -3,7 +3,16 @@
   "version": "0.12.0",
   "description": "L2 run face for mxenv — run/export/inspect, source management, edit, migrate, skills.",
   "license": "MIT",
-  "private": true,
+  "author": "MorphixAI <dev@morphixai.com>",
+  "homepage": "https://github.com/Morphicai/morphix-env#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Morphicai/morphix-env.git",
+    "directory": "packages/mxenv"
+  },
+  "bugs": {
+    "url": "https://github.com/Morphicai/morphix-env/issues"
+  },
   "bin": {
     "mxenv": "./dist/cli.js",
     "mx-env": "./dist/cli.js",
@@ -19,7 +28,10 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
   ],
   "engines": {
     "node": ">=18"
@@ -28,12 +40,13 @@
     "build": "node scripts/build-editor-ui.mjs && tsup && node scripts/copy-skill.mjs",
     "dev": "node scripts/build-editor-ui.mjs && tsup --watch",
     "test": "pnpm --filter mxenv-core build && pnpm build && vitest run",
-    "typecheck": "pnpm --filter mxenv-core build && node scripts/build-editor-ui.mjs && tsc --noEmit && tsc --noEmit -p tsconfig.editor-ui.json"
+    "typecheck": "pnpm --filter mxenv-core build && node scripts/build-editor-ui.mjs && tsc --noEmit && tsc --noEmit -p tsconfig.editor-ui.json",
+    "prepublishOnly": "node ../../scripts/prepublish-guard.mjs"
   },
   "dependencies": {
     "cross-spawn": "^7.0.6",
     "dotenv": "^17.3.1",
-    "mxenv-core": "workspace:*"
+    "mxenv-core": "^0.12.0"
   },
   "devDependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.0",
