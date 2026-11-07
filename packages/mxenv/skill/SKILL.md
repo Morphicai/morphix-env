@@ -22,10 +22,14 @@ mxenv 是密钥**组装层**，不是新的保险库：值永远留在 provider�
 
 ```bash
 mxenv --version                          # 检测是否已安装
-npm install -g @morphixai/mxenv          # 安装运行面（项目内可用 devDep / npx 替代）
+npm install -D @morphixai/mxenv          # 项目内安装运行面（推荐：run/inspect/edit/migrate 全在）
 npx @morphixai/mxenv@latest inspect      # 免安装试用
-npm install -g @morphixai/mxenv-cli      # 可选：全局管理面（shell-init 等）
+npm install -g @morphixai/mxenv-cli      # 可选：机器级管理面（shell-init 等）
 ```
+
+> ⚠️ **不要把 `@morphixai/mxenv` 与 `@morphixai/mxenv-cli` 同时全局安装**：两者都注册
+> `mxenv`/`mx-env`/`morphix-env` bin，后装者会静默接管符号链接。项目用 devDep，
+> 全局只装 cli；若确要全局装运行面，就不要再装 cli。
 
 ## 配置（mxenv.config.json）
 
@@ -107,7 +111,7 @@ mxenv-cli shell-init [--write|--remove] # 为声明的命令生成 PATH shim（�
 | `missing-optional, 0 keys` | `"optional": true` 的文件不存在，属预期；要强制存在就删掉 optional |
 | Keychain 权限弹框 / 拒绝 | 首次访问会请求 service 授权；拒绝后重试或换 service 命名空间 |
 | dotenvx 解密失败 | 解密密钥由 dotenvx 引导路径提供，不在本配置内 |
-| `mxenv: command not found` | `npm install -g @morphixai/mxenv`，或用 `npx @morphixai/mxenv@latest` 免安装 |
+| `mxenv: command not found` | 项目内 `npm install -D @morphixai/mxenv`（或全局装它，但勿再装 cli）；或用 `npx @morphixai/mxenv@latest` 免安装 |
 | `mxenv-cli: command not found` | shim 能力属全局管理面：`npm install -g @morphixai/mxenv-cli` |
 
 ---

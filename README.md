@@ -228,11 +228,24 @@ Existing `infisical` + `envFiles` config keeps working unchanged. Migrate to `so
 | keychain service `mx-env:<source>` | `mxenv:<source>` (existing services keep working — the name is carried in config) |
 | `mx-env shell-init` | `mxenv-cli shell-init` |
 
-Compatibility shims last one minor cycle (0.12.x) and warn on stderr: old bin names still run, `mx-env.config.json` / `~/.mx-env/` / `mx-env-provider-*` are still read when the new name is absent, and writes always use the new names. `mx-env://` references are rejected with a rename hint (no silent compatibility). Move the global store with `mxenv migrate --home`: copies the store, verifies value-level equivalence, then renames the old directory to `~/.mx-env.backup-<timestamp>` as the rollback backup — never prints values, idempotent, and refuses to overwrite an existing `~/.mxenv/`.
+Compatibility shims last one minor cycle (0.12.x) and warn on stderr: old bin names still run, `mx-env.config.json` / `~/.mx-env/` / `mx-env-provider-*` are still read when the new name is absent, and writes always use the new names. `mx-env://` references are rejected with a rename hint (no silent compatibility). Move the global store with `mxenv migrate --home`: copies the store, verifies value-level equivalence, then renames the old directory to `~/.mx-env.backup-<timestamp>` as the rollback backup — never prints values, idempotent, and refuses to overwrite an existing `~/.mxenv/` that already holds real data (auto-created `audit/`/`shims/` scaffolding is folded into the migration instead).
 
 The npm package `morphix-env` ships one final release and is deprecated in favor of the three packages above; the repository rename follows separately.
 
+### Upgrading an existing project, step by step
+
+1. In `package.json`, swap the dependency: drop `"morphix-env"`, add `"@morphixai/mxenv": "^0.12.0"` as a devDependency (the run face carries `run`/`export`/`inspect`/`migrate`/`edit`). SDK consumers add `@morphixai/mxenv-core`; for machine-level `shell-init` install `@morphixai/mxenv-cli` globally — never both packages globally.
+2. `npm i`. npm scripts keep working as-is: project-local bins always win over global ones.
+3. Rename invocations to `mxenv` (old bin names stay as warning shims through 0.12.x and are removed in 0.13). `mx-env shell-init` becomes `mxenv-cli shell-init`.
+4. Config and data need no immediate rewrite — 0.12.x still reads `mx-env.config.json`, `~/.mx-env/`, `mx-env-provider-*`, and keychain services named `mx-env:<source>`; every write lands on the new names. Do rename reference strings `mx-env://profile/KEY` → `mxenv://profile/KEY` — the old scheme is rejected with a hint.
+5. Once per machine, move the global store: `mxenv migrate --home` (copy → value-level equivalence check → timestamped backup of the old directory).
+6. If you used to run project commands from a global install (`mx-env run …`), switch to the project-local binary (`npx mxenv run …` or an npm script) — the global management CLI (`mxenv-cli`) does not ship project commands.
+
 Two migration caveats: **do not install `mxenv` and `mxenv-cli` globally side by side** — both register the `mxenv`/`mx-env`/`morphix-env` bin names and the later install silently takes over the symlinks (pick `mxenv-cli` for machine-level management, or `mxenv` as a project devDependency); and **the global CLI no longer ships project commands** — `run`/`export`/`inspect`/`migrate`/`edit` come from the project-facing `mxenv` package, so the 0.11 `mx-env run …`-from-global pattern becomes a project-local invocation.
+
+## Known issues
+
+- `npm install` currently reports high-severity advisories in transitive dependencies of `@infisical/sdk` (e.g. `zod`, `axios`); no fixed upstream release exists yet. They affect the provider client, not the composition engine's value handling.
 
 ## License
 

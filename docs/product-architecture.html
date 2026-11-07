@@ -233,6 +233,7 @@
   .wave .st { margin-top: 12px; font-size: 12px; font-weight: 700; }
   .st.doing { color: var(--accent); }
   .st.next { color: var(--ink-3); }
+  .st.done { color: var(--accent-2); }
 
   footer {
     margin-top: 72px; padding: 36px 0 56px; border-top: 1px solid var(--line);
@@ -262,7 +263,7 @@
       并保证 inspect / audit / 编辑器 / 子进程输出全程无密钥值。
     </p>
     <div class="badges">
-      <span class="badge hot">Wave A 实施中 · package-split / naming-cutover / home-migration</span>
+      <span class="badge hot">Wave A 已闭环 · 0.12.0 已发布（2026-11-07）</span>
       <span class="badge teal">三包分层 L0–L3</span>
       <span class="badge">项目装即完整可用</span>
       <span class="badge">MIT</span>
@@ -538,20 +539,20 @@ mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状
 <section id="roadmap">
   <div class="wrap">
     <div class="sec-head"><span class="sec-num">05</span><h2>落地路线：三波</h2></div>
-    <p class="sec-sub">时间窗口约束：<strong><code>mxenv://</code> scheme 必须抢在 Trellis W2（SDK 消费）实施前定案</strong> —— 已在 Wave A 立项时锁定。</p>
+    <p class="sec-sub">时间窗口约束：<strong><code>mxenv://</code> scheme 必须抢在 Trellis W2（SDK 消费）实施前定案</strong> —— 已在 Wave A 立项时锁定，<strong>已兑现</strong>（0.12.0 先于 Trellis W2 实施发布，Trellis change 文案已同步）。</p>
 
     <div class="waves">
       <div class="wave a">
         <div class="wh">WAVE A</div>
         <h3>命名与品牌基础</h3>
         <ul>
-          <li>命名全切（含 <code>mxenv://</code>）</li>
-          <li>三包拆分（@morphixai/mxenv / @morphixai/mxenv-cli / @morphixai/mxenv-core）</li>
-          <li><code>migrate --home</code> 迁移工具</li>
-          <li>LICENSE + SECURITY.md</li>
-          <li>同步 Trellis W2 change 文案</li>
+          <li>✅ 命名全切（含 <code>mxenv://</code>）</li>
+          <li>✅ 三包拆分（@morphixai/mxenv / @morphixai/mxenv-cli / @morphixai/mxenv-core）</li>
+          <li>✅ <code>migrate --home</code> 迁移工具</li>
+          <li>✅ LICENSE + SECURITY.md</li>
+          <li>✅ 同步 Trellis W2 change 文案</li>
         </ul>
-        <div class="st doing">● 进行中 —— 实施 change：mxenv-package-split / mxenv-naming-cutover / mxenv-home-migration（原 mxenv-rebrand-layering 拆分替代）；文档先行完成</div>
+        <div class="st done">✅ 已闭环（2026-11-07）——三 change 实施完毕；npm 四包按序发布 0.12.0（scope 定夺 <code>@morphixai</code>）+ 旧名 deprecate 指路 + GitHub Release 迁移表；本机迁移完成（11 keys 值级等价）；Trellis W2 文案同步 + validate 通过</div>
       </div>
       <div class="wave b">
         <div class="wh">WAVE B</div>
@@ -563,7 +564,7 @@ mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状
           <li>项目注册视图（审计派生 + link）</li>
           <li>统一命令入口定案</li>
         </ul>
-        <div class="st next">○ 单独立 OpenSpec change</div>
+        <div class="st next">○ 未开始 —— 前置 <code>reveal-single-capability</code> change（已获批，待立项）；主体单独立 change</div>
       </div>
       <div class="wave c">
         <div class="wh">WAVE C</div>
@@ -574,8 +575,16 @@ mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状
           <li>gitleaks 历史扫描</li>
           <li>blog 收编 · 1.0</li>
         </ul>
-        <div class="st next">○ 依赖 A/B</div>
+        <div class="st next">○ 未开始 · 依赖 A/B</div>
       </div>
+    </div>
+
+    <div class="callout">
+      <strong>进展速览（2026-11-07）与三条验收口径达成度：</strong><br>
+      ① 项目装即完整可用 + 可定制上游 + 全局变量 ∪ 项目 <code>env.local</code> —— <strong>已达成</strong>（L2 运行面全齐、五 provider + 插件协议、组合链固定优先级，随 0.12.0 发布可被项目直接消费）；<br>
+      ② 全局 CLI = 增强体验（装全局只做加法）—— <strong>部分达成</strong>：L3 壳已发布（shell-init/占位），但"增强体验"的面板级能力（常驻后台、上帝视角总览）在 Wave B；<br>
+      ③ CLI 带 GUI —— <strong>部分达成</strong>：现有 <code>mxenv edit</code> 为短命会话编辑器（一次性 token、仅 loopback），"随时可看 + 默认锁定"的常驻面板属 Wave B 安全模型升级。<br>
+      结论：<strong>地基（Wave A）已闭环，产品体验主线（Wave B）尚未开工</strong>——原计划能力未全部闭环，剩余 = reveal-single-capability 立项 → Wave B（daemon/面板/gui/global/host）→ Wave C 开源收尾。
     </div>
 
     <div class="callout accent">
@@ -594,8 +603,8 @@ mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状
       权威正文：<code>docs/ux-architecture.md</code> · 实施契约：<code>openspec/changes/mxenv-package-split/</code> 等三 change
     </div>
     <div>
-      状态：Wave A 立项（2026-11-06，strict 通过）· 文档先行完成<br>
-      三包 npm 名已核实可用 · MIT License · Security: GitHub Private Vulnerability Reporting
+      状态：Wave A 已闭环（2026-11-07 · npm 0.12.0 已发布）· Wave B 待立项（前置 reveal-single-capability）<br>
+      MIT License · Security: GitHub Private Vulnerability Reporting
     </div>
   </div>
 </footer>

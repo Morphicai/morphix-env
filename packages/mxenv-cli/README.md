@@ -8,6 +8,8 @@ L3 management face for [mxenv](https://github.com/Morphicai/morphix-env) — mac
 npm i -g @morphixai/mxenv-cli
 ```
 
+> ⚠️ **Do not install `@morphixai/mxenv-cli` and `@morphixai/mxenv` globally side by side** — both register the `mxenv`/`mx-env`/`morphix-env` bin names and the later install silently takes over the symlinks. Keep `mxenv` as a project devDependency and install this package globally (or vice versa, never both).
+
 ## Commands
 
 - `mxenv-cli shell-init` — generate/remove PATH shims and the marked rc block (global + project shim manifests)

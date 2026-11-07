@@ -2,11 +2,15 @@
 
 L2 run face for [mxenv](https://github.com/Morphicai/morphix-env) — the project-side CLI and SDK runtime. Secrets stay with their owners (Infisical / Doppler / dotenvx / macOS Keychain / local files) and are composed into one value-safe child environment.
 
+> Upgrading from the old `morphix-env` package? See "Upgrading an existing project, step by step" in the [repository README](https://github.com/Morphicai/morphix-env#migrating-from-morphix-env--mx-env).
+
 ## Install
 
 ```bash
 npm i -D @morphixai/mxenv
 ```
+
+> ⚠️ **Do not install `@morphixai/mxenv` and `@morphixai/mxenv-cli` globally side by side** — both register the `mxenv`/`mx-env`/`morphix-env` bin names and the later install silently takes over the symlinks. Keep this package as a project devDependency and install `mxenv-cli` globally (or vice versa, never both).
 
 ## Commands
 
