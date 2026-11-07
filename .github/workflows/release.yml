@@ -7,20 +7,58 @@ on:
         description: npm dist-tag (auto-detected from version if empty)
         required: false
         default: ''
+      verify-only:
+        description: 只验证 npm token 是否可用（whoami），不发布
+        type: boolean
+        required: false
+        default: false
   push:
     tags:
       - 'v*'
 
 # 发布顺序护栏（naming-cutover 4.1）：@morphixai/mxenv-core 必须最先发布，其余三包的
 # prepublishOnly（scripts/prepublish-guard.mjs）会在 registry 解析不到依赖时
-# 拒绝发布。CI 缺 NPM_AUTOMATION_TOKEN 时显式失败——勿假绿。
+# 拒绝发布。CI 缺 npm token（NPM_TOKEN / NPM_AUTOMATION_TOKEN）时显式失败——勿假绿。
 jobs:
+  # 快速凭证校验（verify-only 时只跑这一个 job）：token 存在且能通过 registry 认证
+  # （npm whoami），失败即显式红——勿假绿。secret 取用顺序：NPM_TOKEN → NPM_AUTOMATION_TOKEN。
+  verify-token:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: npm
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.NPM_AUTOMATION_TOKEN }}
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+      HAS_NPM_AUTOMATION_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN != '' }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - name: Verify npm token present + authenticated
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::secrets.NPM_TOKEN 与 secrets.NPM_AUTOMATION_TOKEN 均缺失——无法发布，显式失败（在仓库/组织 secret 配置其一；本仓 CI 未配置时请走本地发布：pnpm -r build && 按序 npm publish）" >&2
+            exit 1
+          fi
+          if ! npm whoami >/dev/null 2>&1; then
+            echo "::error::npm token 存在但 registry 认证失败（npm whoami 401）——token 过期或无效" >&2
+            exit 1
+          fi
+          # 只报 secret 名字是否命中，不打印任何值
+          echo "token source: NPM_TOKEN=$HAS_NPM_TOKEN, NPM_AUTOMATION_TOKEN=$HAS_NPM_AUTOMATION_TOKEN"
+          echo "npm token OK (whoami: $(npm whoami))"
+
   publish:
+    needs: verify-token
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify-only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: npm
     permissions:
       contents: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.NPM_AUTOMATION_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -31,14 +69,6 @@ jobs:
           node-version: 20
           cache: pnpm
           registry-url: https://registry.npmjs.org
-      - name: Verify npm token present
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::secrets.NPM_AUTOMATION_TOKEN 缺失——无法发布，显式失败（本仓 CI 未配置该 secret 时请走本地发布：pnpm -r build && 按序 npm publish）" >&2
-            exit 1
-          fi
       - run: pnpm install --frozen-lockfile
       - name: Resolve version + dist-tag
         id: tag
