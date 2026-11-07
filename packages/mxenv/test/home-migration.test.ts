@@ -10,7 +10,7 @@ import {
   LEGACY_GLOBAL_CONFIG_DIR,
   loadConfigLayers,
   suppressLegacyHomeHint,
-} from 'mxenv-core'
+} from '@morphixai/mxenv-core'
 import { migrateHome } from '../src/migrate'
 
 // migrate --home（home-migration）：copy → 迁移前留时间戳备份（旧目录改名）→

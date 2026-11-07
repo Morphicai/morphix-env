@@ -8,7 +8,7 @@
 
 ### Requirement: 新命名唯一生效面
 
-系统 SHALL 以 `mxenv` 族为唯一命名面：命令 `mxenv`、npm 包 `mxenv`/`mxenv-core`/全局 CLI、URI scheme `mxenv://`、项目配置 `mxenv.config.json`、全局目录 `~/.mxenv/`、插件 `mxenv-provider-<plugin>`、keychain 默认 service `mxenv:<source名>`。一切**写出**（配置落盘、新引用生成、迁移产物、帮助与文档输出）SHALL 只使用新名。`mx-env://` 引用 SHALL 被拒绝并提示改用 `mxenv://`（无存量消费者，不设 scheme 垫片）。
+系统 SHALL 以 `mxenv` 族为唯一命名面：命令 `mxenv`、npm 包 `@morphixai/mxenv`/`@morphixai/mxenv-core`/`@morphixai/mxenv-cli`（2026-11-07 scope 定夺，unscoped 名被 npm 相似度政策拒绝）、URI scheme `mxenv://`、项目配置 `mxenv.config.json`、全局目录 `~/.mxenv/`、插件 `mxenv-provider-<plugin>`、keychain 默认 service `mxenv:<source名>`。一切**写出**（配置落盘、新引用生成、迁移产物、帮助与文档输出）SHALL 只使用新名。`mx-env://` 引用 SHALL 被拒绝并提示改用 `mxenv://`（无存量消费者，不设 scheme 垫片）。
 
 #### Scenario: 引用语法直切
 

@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, st
 import { dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
-import { composeEnvironment, loadConfigLayers, loadKeytar } from 'mxenv-core'
+import { composeEnvironment, loadConfigLayers, loadKeytar } from '@morphixai/mxenv-core'
 import { discoverPlaintextUnits, executeUnit, legacyPlaintextHints } from '../src/migrate'
 
 const CLI = join(__dirname, '..', 'dist', 'cli.js')

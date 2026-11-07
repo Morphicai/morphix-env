@@ -34,9 +34,9 @@
 
 | 目标包 | 迁入内容 |
 |---|---|
-| `mxenv-core` | `composition.ts`、`providers/*`、`config.ts`、`audit.ts`、`refs.ts`、`secrets.ts`、redaction、类型与 schema。exports map 双入口：`.`（L1 能力）+ `./contracts`（L0 纯契约，re-export schema/refs 语法/类型/redaction，无 IO） |
-| `mxenv` | `cli.ts` 命令面（run/export/inspect/render/generate/edit/migrate/skill）、editor-ui + clientAssets 生成链 |
-| `mxenv-cli` | `shell-init`（shim 生成）+ Wave B 预留（gui/global/host 骨架不实现） |
+| `@morphixai/mxenv-core` | `composition.ts`、`providers/*`、`config.ts`、`audit.ts`、`refs.ts`、`secrets.ts`、redaction、类型与 schema。exports map 双入口：`.`（L1 能力）+ `./contracts`（L0 纯契约，re-export schema/refs 语法/类型/redaction，无 IO） |
+| `@morphixai/mxenv` | `cli.ts` 命令面（run/export/inspect/render/generate/edit/migrate/skill）、editor-ui + clientAssets 生成链 |
+| `@morphixai/mxenv-cli` | `shell-init`（shim 生成）+ Wave B 预留（gui/global/host 骨架不实现） |
 
 - 值能力（`compose`/`revealSingle`）只在 `mxenv-core` 主入口导出；`/contracts` 入口禁止 re-export 值能力（测试断言 exports 面）。
 - editor-ui 的 `generated/clientAssets.ts` 生成物坑照旧：改 UI 必须重生成再 build。
@@ -62,4 +62,4 @@
 
 ## Open Questions
 
-- 全局 CLI 包名 `mxenv-cli` 是否定案（现暂名；`mxenv-naming-cutover` 发布任务前最终确认）。
+- 全局 CLI 包名 `@morphixai/mxenv-cli` 已定案（2026-11-07 scope 定夺；unscoped `mxenv` 被 npm 名相似度政策拒绝）。

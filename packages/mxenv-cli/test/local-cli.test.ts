@@ -115,7 +115,7 @@ describe('spawnLocalCliWrite', () => {
       spawnLocalCliWrite(['edit'], { cwd: PROJECT, env: { PATH: '/usr/bin:/bin' } })
     } catch (error) {
       const message = (error as Error).message
-      expect(message).toContain('npm i -D mxenv')
+      expect(message).toContain('npm i -D @morphixai/mxenv')
       expect(message).toContain('Refusing to write project data')
     }
     expect(readMarker(marker)).toBe('')

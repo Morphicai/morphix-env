@@ -2,27 +2,27 @@
 
 ## Purpose
 
-钉死三包分层边界（L0–L3）的对外契约：依赖只向下、`mxenv-core` 双入口、值能力唯一实现与窄暴露、产品包零依赖且版本经 spawn 对齐、项目装即完整可用。
+钉死三包分层边界（L0–L3）的对外契约：依赖只向下、`@morphixai/mxenv-core` 双入口、值能力唯一实现与窄暴露、产品包零依赖且版本经 spawn 对齐、项目装即完整可用。
 
 ## ADDED Requirements
 
 ### Requirement: 分层包与依赖方向
 
-系统 SHALL 由三个发布包构成：`mxenv-core`（L0 契约 + L1 能力，包内双入口——`mxenv-core/contracts` 纯契约、主入口能力）、`mxenv`（L2 运行面）、全局 CLI（L3 管理面）。依赖 SHALL 只向下：L2 → L1/L0、L3 → L1/L0，L2 与 L3 之间 SHALL NOT 互相依赖。外部资源（上游 provider、全局库目录、项目配置、审计 journal）SHALL 仅经 L1 能力访问，L2/L3/GUI SHALL NOT 直触。
+系统 SHALL 由三个发布包构成：`@morphixai/mxenv-core`（L0 契约 + L1 能力，包内双入口——`@morphixai/mxenv-core/contracts` 纯契约、主入口能力）、`@morphixai/mxenv`（L2 运行面）、全局 CLI `@morphixai/mxenv-cli`（L3 管理面）。（npm 名相似度政策拒 unscoped `mxenv`，2026-11-07 定夺走 `@morphixai/*` scope；目录段 `packages/mxenv*` 与 bin/命令名不受影响。）依赖 SHALL 只向下：L2 → L1/L0、L3 → L1/L0，L2 与 L3 之间 SHALL NOT 互相依赖。外部资源（上游 provider、全局库目录、项目配置、审计 journal）SHALL 仅经 L1 能力访问，L2/L3/GUI SHALL NOT 直触。
 
 #### Scenario: 产品包零互相依赖
 
-- **WHEN** 检查 `mxenv` 与全局 CLI 的包依赖清单
-- **THEN** 两者均不依赖对方，各自只依赖 `mxenv-core` 或零依赖
+- **WHEN** 检查 `@morphixai/mxenv` 与全局 CLI 的包依赖清单
+- **THEN** 两者均不依赖对方，各自只依赖 `@morphixai/mxenv-core` 或零依赖
 
 #### Scenario: 契约入口纯无 IO
 
-- **WHEN** 消费方仅 import `mxenv-core/contracts`
+- **WHEN** 消费方仅 import `@morphixai/mxenv-core/contracts`
 - **THEN** 不发生任何文件、网络或进程访问（schema/引用语法/类型/redaction 规则皆为纯定义）
 
 ### Requirement: 值能力唯一实现与窄暴露
 
-组合注入（`compose`）与单键揭示（`revealSingle`）的唯一实现 SHALL 位于 `mxenv-core` 主入口；L2、L3 与外部 SDK SHALL 仅作为调用方，GUI SHALL NOT 直连。值能力 SHALL 保持逐键揭示、单值驻留、默认锁定、值不落日志/审计/输出的既有纪律；每次值访问经该通道 SHALL 落值无关审计（键名级）。
+组合注入（`compose`）与单键揭示（`revealSingle`）的唯一实现 SHALL 位于 `@morphixai/mxenv-core` 主入口；L2、L3 与外部 SDK SHALL 仅作为调用方，GUI SHALL NOT 直连。值能力 SHALL 保持逐键揭示、单值驻留、默认锁定、值不落日志/审计/输出的既有纪律；每次值访问经该通道 SHALL 落值无关审计（键名级）。
 
 #### Scenario: 单键揭示单调用
 
@@ -40,21 +40,21 @@
 
 #### Scenario: 项目写走本地版本
 
-- **WHEN** 项目 `node_modules` 内装有 `mxenv@0.12.x`、全局 CLI 为另一版本，全局侧对该项目执行来源写操作
+- **WHEN** 项目 `node_modules` 内装有 `@morphixai/mxenv@0.12.x`、全局 CLI 为另一版本，全局侧对该项目执行来源写操作
 - **THEN** 实际写入由项目本地 0.12.x CLI 执行，结果与项目版本行为一致
 
 #### Scenario: 无本地 CLI 时明确失败
 
-- **WHEN** 目标项目未安装 `mxenv` 且 PATH 中无解析结果
+- **WHEN** 目标项目未安装 `@morphixai/mxenv` 且 PATH 中无解析结果
 - **THEN** 命令失败并提示先在项目内安装，不静默以全局版本改写
 
 ### Requirement: 项目装即完整可用
 
-仅项目级安装（devDep / `npx mxenv`，无全局 CLI、无 daemon）SHALL 提供完整运行面：`run`/`export`/`inspect`、来源管理命令（sources 按项目任选编排 provider 与 profile，**定制上游**）、`migrate`、编辑。组合语义 SHALL 为：`process.env` → 全局库 → 项目 sources（含 local `env.local`）→ `-f` override（后者优先）；无配置项目 SHALL 默认组合全局库。全局变量与项目 `env.local` SHALL 可并用，任何能力 SHALL NOT 因未安装全局 CLI 而缺失。
+仅项目级安装（devDep / `npx @morphixai/mxenv`，无全局 CLI、无 daemon）SHALL 提供完整运行面：`run`/`export`/`inspect`、来源管理命令（sources 按项目任选编排 provider 与 profile，**定制上游**）、`migrate`、编辑。组合语义 SHALL 为：`process.env` → 全局库 → 项目 sources（含 local `env.local`）→ `-f` override（后者优先）；无配置项目 SHALL 默认组合全局库。全局变量与项目 `env.local` SHALL 可并用，任何能力 SHALL NOT 因未安装全局 CLI 而缺失。
 
 #### Scenario: 零全局依赖运行
 
-- **WHEN** 项目仅以 devDep 安装 `mxenv`（或 `npx` 调用），机器无全局 CLI
+- **WHEN** 项目仅以 devDep 安装 `@morphixai/mxenv`（或 `npx` 调用），机器无全局 CLI
 - **THEN** run/export/inspect/来源管理/migrate/编辑全部可用
 
 #### Scenario: 组合链优先级

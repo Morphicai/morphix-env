@@ -6,7 +6,7 @@ import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 // 共享纯 PATH/清单逻辑已下沉 mxenv-core（package-split 4.1）：L2 run 与
 // L3 shell-init 共用同一实现，测试直引 core 验证下沉生效。
-import { RESERVED_SHIM_NAMES, shimsDir, stripShimsFromPath, validateShimList, type ConfigLayers } from 'mxenv-core'
+import { RESERVED_SHIM_NAMES, shimsDir, stripShimsFromPath, validateShimList, type ConfigLayers } from '@morphixai/mxenv-core'
 import {
   detectHandmadeReservedShims,
   findShadowedCommands,

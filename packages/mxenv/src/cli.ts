@@ -24,7 +24,7 @@ import {
   type ConfigLayers,
   type EnvironmentComposition,
   type UnresolvedReference,
-} from 'mxenv-core'
+} from '@morphixai/mxenv-core'
 import { launchEditor, startEditorServer } from './editor'
 import {
   discoverPlaintextUnits,

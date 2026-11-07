@@ -21,7 +21,7 @@ export class LocalCliMissingError extends Error {
   constructor(cwd: string) {
     super(
       `[mxenv] No project-local mxenv CLI found for ${cwd} (checked node_modules/.bin and PATH).\n` +
-        `Install it in the project so writes run the project-pinned version: npm i -D mxenv (or: pnpm add -D mxenv).\n` +
+        `Install it in the project so writes run the project-pinned version: npm i -D @morphixai/mxenv (or: pnpm add -D @morphixai/mxenv).\n` +
         `Refusing to write project data with the global CLI.`,
     )
     this.name = 'LocalCliMissingError'

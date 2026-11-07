@@ -13,7 +13,7 @@ import {
   writeAudit,
   type EnvironmentComposition,
   type SourceEntry,
-} from 'mxenv-core'
+} from '@morphixai/mxenv-core'
 import { verificationEnv } from './migrate'
 import { renderEditorHtml } from './editor-ui/render'
 import type { EditorUiState } from './editor-ui/types'

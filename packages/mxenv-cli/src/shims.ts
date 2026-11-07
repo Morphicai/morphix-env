@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, accessSync, constants } from 'fs'
 import { homedir } from 'os'
 import { delimiter, join } from 'path'
-import { shimsDir, RESERVED_SHIM_NAMES, rcBlock, rcBlockPattern, type ConfigLayers } from 'mxenv-core'
+import { shimsDir, RESERVED_SHIM_NAMES, rcBlock, rcBlockPattern, type ConfigLayers } from '@morphixai/mxenv-core'
 
 // rc 块常量/纯替换已下沉 mxenv-core（L2 的 migrate --home 迁移后重写同用）；此处
 // re-export 保持本包导出面不倒退。
@@ -14,7 +14,7 @@ export {
   rcBlockPattern,
   hasRcBlock,
   replaceRcBlocks,
-} from 'mxenv-core'
+} from '@morphixai/mxenv-core'
 
 /**
  * Shim generation / stripping / two-level manifests for `shell-init` (L3).

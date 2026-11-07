@@ -4,14 +4,14 @@
  * the CLI. The CLI entry (cli.ts) and the process-mutating legacy helpers
  * (loadEnvFiles, fetchInfisicalSecrets) are deliberately not re-exported.
  */
-export { composeEnvironment, CompositionError } from 'mxenv-core'
+export { composeEnvironment, CompositionError } from '@morphixai/mxenv-core'
 export type {
   ComposeOptions,
   EnvironmentComposition,
   KeyProvenance,
   SourceStatus,
-} from 'mxenv-core'
-export { loadConfigLayers, validateConfig } from 'mxenv-core'
+} from '@morphixai/mxenv-core'
+export { loadConfigLayers, validateConfig } from '@morphixai/mxenv-core'
 export type {
   ConfigLayers,
   LoadedConfig,
@@ -20,6 +20,6 @@ export type {
   ProfileDefinition,
   ProfileInput,
   SecretSource,
-} from 'mxenv-core'
-export { StreamingRedactor } from 'mxenv-core'
-export type { SourceEntry } from 'mxenv-core'
+} from '@morphixai/mxenv-core'
+export { StreamingRedactor } from '@morphixai/mxenv-core'
+export type { SourceEntry } from '@morphixai/mxenv-core'

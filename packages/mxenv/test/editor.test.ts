@@ -11,8 +11,8 @@ import { revealedValue, stateOnPage } from './support/editorPage'
 // no native-module dependency; dotenvx paths run against the real CLI.
 const keychainStore = vi.hoisted(() => ({ entries: new Map<string, string>() }))
 
-vi.mock('mxenv-core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('mxenv-core')>()
+vi.mock('@morphixai/mxenv-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@morphixai/mxenv-core')>()
   return {
     ...actual,
     loadKeytar: async () => ({

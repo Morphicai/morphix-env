@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Three-package layout**: `mxenv-core` (composition engine + contracts), `mxenv` (project-facing run face), `mxenv-cli` (machine-level management face, Wave A: `shell-init`). Project install (`mxenv` as devDependency) is fully self-sufficient; the global CLI is an enhancement layer.
+- **Three-package layout**: `@morphixai/mxenv-core` (composition engine + contracts), `@morphixai/mxenv` (project-facing run face), `@morphixai/mxenv-cli` (machine-level management face, Wave A: `shell-init`). Project install (`@morphixai/mxenv` as devDependency) is fully self-sufficient; the global CLI is an enhancement layer. npm's name-similarity policy rejected the unscoped name `mxenv` (too close to `exenv`/`osenv`), so the packages publish under the `@morphixai/*` scope; bin names, config/plugin names and `mxenv://` references are unchanged.
 - **`mxenv-cli shell-init`**: declarative PATH shims with two-level (global ∪ project) manifests, recursive stripping, and rc block management. Generated shims now delegate to `mxenv run` (see Changed for legacy shims).
 - Project-local CLI resolution for write operations (`cwd` → `node_modules/.bin` → PATH) with an actionable hard failure when no local CLI is installed.
 - **`mxenv migrate --home`**: one-shot global-directory migration (copy → timestamped backup `~/.mx-env.backup-<ts>` → value-level equivalence verification; automatic full restore on failure; rc PATH re-wiring to the new shim directory). Idempotent, never prints values.
@@ -24,8 +24,8 @@
 
 ### Migration notes
 
-- **Do not install `mxenv` and `mxenv-cli` globally side by side**: both register the `mxenv`/`mx-env`/`morphix-env` bin names and the later install silently takes over the symlinks. Install `mxenv-cli` for machine-level management (`shell-init`) or `mxenv` as a project devDependency — not both globally.
-- **The global CLI no longer ships project commands**: `run`/`export`/`inspect`/`migrate`/`edit` live in the project-facing `mxenv` package. The 0.11 pattern `mx-env run …` from a global install becomes a project-local call (`npx mxenv run …` or `node_modules/.bin/mxenv run …`).
+- **Do not install `@morphixai/mxenv` and `@morphixai/mxenv-cli` globally side by side**: both register the `mxenv`/`mx-env`/`morphix-env` bin names and the later install silently takes over the symlinks. Install `@morphixai/mxenv-cli` for machine-level management (`shell-init`) or `@morphixai/mxenv` as a project devDependency — not both globally.
+- **The global CLI no longer ships project commands**: `run`/`export`/`inspect`/`migrate`/`edit` live in the project-facing `@morphixai/mxenv` package. The 0.11 pattern `mx-env run …` from a global install becomes a project-local call (`npx @morphixai/mxenv run …` or `node_modules/.bin/mxenv run …`).
 
 ## 0.11.0
 

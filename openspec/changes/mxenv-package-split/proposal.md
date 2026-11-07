@@ -6,7 +6,7 @@
 
 ## What Changes
 
-- **BREAKING 仓形态**：转 pnpm workspace，`packages/` 下三包 `mxenv-core`（L0 契约 `/contracts` 纯无 IO 入口 + L1 能力主入口）、`mxenv`（L2 运行面）、`mxenv-cli`（L3 管理面，暂名，Wave A 仅 shell-init）；0.12.0 起三包 lockstep。
+- **BREAKING 仓形态**：转 pnpm workspace，`packages/` 下三包 `@morphixai/mxenv-core`（L0 契约 `/contracts` 纯无 IO 入口 + L1 能力主入口）、`@morphixai/mxenv`（L2 运行面）、`@morphixai/mxenv-cli`（L3 管理面，Wave A 仅 shell-init）；0.12.0 起三包 lockstep。（2026-11-07 定夺：npm 名相似度政策拒 unscoped `mxenv`，包名走 `@morphixai/*` scope，目录段/命令名不变。）
 - **值能力收口**：`compose`/`revealSingle` 唯一实现移入 `mxenv-core` 主入口；`/contracts` 入口纯无 IO；L2/L3 不得出现第二套解密实现。
 - **项目态写操作版本对齐**：全局 CLI 项目态写操作 spawn 项目本地 CLI（解析顺序 cwd → `node_modules/.bin` → PATH），无法解析硬失败给安装指引。
 - **命令面归属**：`run`/`export`/`inspect`/`render`/`generate`/`edit`/`migrate`/`skill install` → L2 `mxenv`；`shell-init` → L3 `mxenv-cli`；统一命令入口的可选模块发现推迟 Wave B（design D6）。

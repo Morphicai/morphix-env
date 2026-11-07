@@ -1,7 +1,7 @@
 {
   "name": "morphix-env",
   "version": "0.12.0",
-  "description": "Deprecated forwarding shim for mxenv — install `mxenv` (project) or `mxenv-cli` (global management) instead; this package forwards the legacy `mx-env`/`morphix-env` bins and re-exports the mxenv-core SDK facade.",
+  "description": "Deprecated forwarding shim for mxenv — install `@morphixai/mxenv` (project) or `@morphixai/mxenv-cli` (global management) instead; this package forwards the legacy `mx-env`/`morphix-env` bins and re-exports the @morphixai/mxenv-core SDK facade.",
   "author": "MorphixAI <dev@morphixai.com>",
   "homepage": "https://github.com/Morphicai/morphix-env#readme",
   "repository": {
@@ -29,7 +29,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "pnpm --filter mxenv-core build && tsup src/index.ts --format cjs --dts --clean --external keytar",
+    "build": "pnpm --filter @morphixai/mxenv-core build && tsup src/index.ts --format cjs --dts --clean --external keytar",
     "dev": "tsup src/index.ts --format cjs --watch",
     "test": "pnpm build && vitest run",
     "test:watch": "vitest",
@@ -71,7 +71,7 @@
     "vitest": "^4.1.1"
   },
   "dependencies": {
-    "mxenv": "^0.12.0",
-    "mxenv-core": "^0.12.0"
+    "@morphixai/mxenv": "^0.12.0",
+    "@morphixai/mxenv-core": "^0.12.0"
   }
 }

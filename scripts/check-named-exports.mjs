@@ -17,7 +17,7 @@ const checks = [
   },
   {
     file: 'packages/mxenv-core/dist/contracts.js',
-    label: 'mxenv-core/contracts',
+    label: '@morphixai/mxenv-core/contracts',
     names: [
       'CONFIG_FILE', 'CompositionError', 'GLOBAL_CONFIG_DIR', 'GLOBAL_CONFIG_FILE', 'GLOBAL_ENV_FILE',
       'StreamingRedactor', 'collectRedactionValues', 'findMxEnvReferences', 'hasMxEnvReference',
@@ -26,7 +26,7 @@ const checks = [
   },
   {
     file: 'packages/mxenv-core/dist/index.js',
-    label: 'mxenv-core 主入口（抽样）',
+    label: '@morphixai/mxenv-core 主入口（抽样）',
     names: ['composeEnvironment', 'loadConfigLayers', 'validateConfig', 'auditDir', 'resolveGlobalDir', 'warnDeprecatedBinInvocation'],
   },
 ]

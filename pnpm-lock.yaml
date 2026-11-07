@@ -8,10 +8,10 @@ importers:
 
   .:
     dependencies:
-      mxenv:
+      '@morphixai/mxenv':
         specifier: ^0.12.0
         version: link:packages/mxenv
-      mxenv-core:
+      '@morphixai/mxenv-core':
         specifier: ^0.12.0
         version: link:packages/mxenv-core
     devDependencies:
@@ -33,15 +33,15 @@ importers:
 
   packages/mxenv:
     dependencies:
+      '@morphixai/mxenv-core':
+        specifier: ^0.12.0
+        version: link:../mxenv-core
       cross-spawn:
         specifier: ^7.0.6
         version: 7.0.6
       dotenv:
         specifier: ^17.3.1
         version: 17.3.1
-      mxenv-core:
-        specifier: ^0.12.0
-        version: link:../mxenv-core
     devDependencies:
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.0
@@ -85,7 +85,7 @@ importers:
 
   packages/mxenv-cli:
     dependencies:
-      mxenv-core:
+      '@morphixai/mxenv-core':
         specifier: ^0.12.0
         version: link:../mxenv-core
     devDependencies:

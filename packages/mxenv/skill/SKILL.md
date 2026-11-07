@@ -9,7 +9,7 @@ argument-hint: "[install|show]"
 
 mxenv 是密钥**组装层**，不是新的保险库：值永远留在 provider（本地文件、macOS 钥匙串、Infisical、Doppler、dotenvx）里。CLI 只把 profile 选定的 sources 组合成一次性子进程环境，并保证 inspect / audit / run 子进程输出全部脱敏。
 
-包分层：`mxenv` = 运行面（项目装即完整可用：run/inspect/edit/migrate…）；`mxenv-cli` = 全局管理面（`shell-init` 等机器级能力）；`mxenv-core` = SDK 共享引擎（一般无需直接安装）。
+包分层：`@morphixai/mxenv` = 运行面（项目装即完整可用：run/inspect/edit/migrate…）；`@morphixai/mxenv-cli` = 全局管理面（`shell-init` 等机器级能力）；`@morphixai/mxenv-core` = SDK 共享引擎（一般无需直接安装）。命令/bin 名仍是 `mxenv`（`mxenv run`、`mxenv inspect` 等不变）。
 
 ## 安全红线（任何情况下都不违反）
 
@@ -21,10 +21,10 @@ mxenv 是密钥**组装层**，不是新的保险库：值永远留在 provider�
 ## 安装与检测
 
 ```bash
-mxenv --version                    # 检测是否已安装
-npm install -g mxenv               # 安装运行面（项目内可用 devDep / npx 替代）
-npx mxenv@latest inspect           # 免安装试用
-npm install -g mxenv-cli           # 可选：全局管理面（shell-init 等）
+mxenv --version                          # 检测是否已安装
+npm install -g @morphixai/mxenv          # 安装运行面（项目内可用 devDep / npx 替代）
+npx @morphixai/mxenv@latest inspect      # 免安装试用
+npm install -g @morphixai/mxenv-cli      # 可选：全局管理面（shell-init 等）
 ```
 
 ## 配置（mxenv.config.json）
@@ -107,8 +107,8 @@ mxenv-cli shell-init [--write|--remove] # 为声明的命令生成 PATH shim（�
 | `missing-optional, 0 keys` | `"optional": true` 的文件不存在，属预期；要强制存在就删掉 optional |
 | Keychain 权限弹框 / 拒绝 | 首次访问会请求 service 授权；拒绝后重试或换 service 命名空间 |
 | dotenvx 解密失败 | 解密密钥由 dotenvx 引导路径提供，不在本配置内 |
-| `mxenv: command not found` | `npm install -g mxenv`，或用 `npx mxenv@latest` 免安装 |
-| `mxenv-cli: command not found` | shim 能力属全局管理面：`npm install -g mxenv-cli` |
+| `mxenv: command not found` | `npm install -g @morphixai/mxenv`，或用 `npx @morphixai/mxenv@latest` 免安装 |
+| `mxenv-cli: command not found` | shim 能力属全局管理面：`npm install -g @morphixai/mxenv-cli` |
 
 ---
 

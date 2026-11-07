@@ -14,9 +14,11 @@ The tool ships as three packages with strict layering (dependencies only point d
 
 | Package | Layer | Role | Install |
 |---|---|---|---|
-| `mxenv` | L2 run face | `run`/`export`/`inspect`/`render`/`inject`/`generate`, source management (custom upstreams), `edit`, `migrate`, skills | `npm i -D mxenv` in a project (or `npm i -g mxenv`) |
-| `mxenv-cli` | L3 management face | machine-level extras: terminal shims (`shell-init`) today; global-key management and a local GUI next | `npm i -g mxenv-cli` |
-| `mxenv-core` | L0/L1 shared layer | composition engine + pure contracts (`mxenv-core/contracts`) for SDK consumers (e.g. Trellis MCP) | `npm i mxenv-core` |
+| `@morphixai/mxenv` | L2 run face | `run`/`export`/`inspect`/`render`/`inject`/`generate`, source management (custom upstreams), `edit`, `migrate`, skills | `npm i -D @morphixai/mxenv` in a project (or `npm i -g @morphixai/mxenv`) |
+| `@morphixai/mxenv-cli` | L3 management face | machine-level extras: terminal shims (`shell-init`) today; global-key management and a local GUI next | `npm i -g @morphixai/mxenv-cli` |
+| `@morphixai/mxenv-core` | L0/L1 shared layer | composition engine + pure contracts (`@morphixai/mxenv-core/contracts`) for SDK consumers (e.g. Trellis MCP) | `npm i @morphixai/mxenv-core` |
+
+> 2026-11-07 注：npm 的名称相似度政策拒绝 unscoped `mxenv`（与 exenv/osenv 过近），包名走 `@morphixai/*` scope；目录名（`packages/mxenv*`）、bin 命令（`mxenv`/`mx-env`/`morphix-env`/`mxenv-cli`）、配置与 scheme 命名均不变。
 
 A project-only install is fully functional; installing the global CLI only adds capabilities — it never changes project commands.
 
@@ -25,7 +27,7 @@ A project-only install is fully functional; installing the global CLI only adds 
 **With an Agent (recommended):** install the packaged skill, commit it, and let the agent do the rest. The skill carries the safety rules, the full configuration schema, onboarding steps, and troubleshooting — so this README does not have to:
 
 ```bash
-npx mxenv@latest skill install --target project   # writes .claude/skills/mxenv/ — commit it with the repo
+npx @morphixai/mxenv@latest skill install --target project   # writes .claude/skills/mxenv/ — commit it with the repo
 ```
 
 Then tell your agent something like "set up this project's environment with mxenv". The agent reads the skill and drives configuration, validation, and editing; nobody pastes a secret value into chat.
@@ -33,7 +35,7 @@ Then tell your agent something like "set up this project's environment with mxen
 **Without an Agent:**
 
 ```bash
-npm install -g mxenv
+npm install -g @morphixai/mxenv
 mxenv run -- pnpm dev      # compose the project profile and run
 mxenv inspect              # key names, sources, status — never values
 ```

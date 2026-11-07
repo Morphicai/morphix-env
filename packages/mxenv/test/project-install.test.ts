@@ -30,6 +30,10 @@ const coreManifest = JSON.parse(readFileSync(join(PKG_CORE, 'package.json'), 'ut
   version: string
 }
 
+// npm/pnpm pack 的 tarball 文件名把 scoped 名扁平化：@morphixai/mxenv → morphixai-mxenv-<v>.tgz。
+const tarballFile = (m: { name: string; version: string }) =>
+  `${m.name.replace(/^@/, '').replace(/\//g, '-')}-${m.version}.tgz`
+
 const secret = (label: string) => `mxenv_pi_${label}_${randomUUID().replace(/-/g, '')}`
 
 // hermetic env：剥离 shim/serve/provider 标记（与 cli/migrate 测试同纪律）。
@@ -88,13 +92,14 @@ beforeAll(() => {
 
   writeFileSync(join(CONSUMER, 'package.json'), JSON.stringify({ name: 'mxenv-consumer', version: '1.0.0', private: true }, null, 2))
 
-  // devDep 形态安装：双 tarball（模拟发布后 mxenv 传递依赖 mxenv-core 能被解析）
-  // + @dotenvx/dotenvx（migrate 目标工具，migrate 报错文案即指引安装）。
+  // devDep 形态安装：双 tarball（模拟发布后 @morphixai/mxenv 传递依赖
+  // @morphixai/mxenv-core 能被解析）+ @dotenvx/dotenvx（migrate 目标工具，
+  // migrate 报错文案即指引安装）。
   // --omit=optional：keytar 为可选原生依赖，本场景不测 keychain。
   const install = spawnSync('npm', [
     'install', '--no-audit', '--no-fund', '--omit=optional', '--loglevel=error',
-    join(TARBALLS, `${coreManifest.name}-${coreManifest.version}.tgz`),
-    join(TARBALLS, `${manifest.name}-${manifest.version}.tgz`),
+    join(TARBALLS, tarballFile(coreManifest)),
+    join(TARBALLS, tarballFile(manifest)),
     '@dotenvx/dotenvx',
   ], { cwd: CONSUMER, encoding: 'utf8', timeout: 240_000 })
   expect(install.status, `npm install 失败\n${install.stdout ?? ''}${install.stderr ?? ''}`).toBe(0)
@@ -113,7 +118,7 @@ describe('项目装即完整可用（验收口径①）', () => {
     expect(existsSync(CLI), 'node_modules/.bin/mx-env 缺失').toBe(true)
     expect(existsSync(join(BIN_DIR, 'morphix-env')), 'node_modules/.bin/morphix-env 缺失').toBe(true)
 
-    const installed = JSON.parse(readFileSync(join(CONSUMER, 'node_modules', 'mxenv', 'package.json'), 'utf8')) as { version: string }
+    const installed = JSON.parse(readFileSync(join(CONSUMER, 'node_modules', '@morphixai', 'mxenv', 'package.json'), 'utf8')) as { version: string }
     const out = runCli(['--version']).stdout
     expect(out.trim()).toBe(installed.version)
     expect(out.trim()).toBe(manifest.version)
@@ -122,8 +127,8 @@ describe('项目装即完整可用（验收口径①）', () => {
     // 且只读命令不得顺手创建全局目录。
     expect(existsSync(join(HOME, '.mxenv')), '只读命令创建了 ~/.mxenv').toBe(false)
     expect(existsSync(join(HOME, '.mxenv')), '只读命令创建了 ~/.mxenv').toBe(false)
-    // 依赖图自洽：mxenv 的传递依赖由 tarball 解析，不借任何全局安装。
-    expect(existsSync(join(CONSUMER, 'node_modules', 'mxenv-core'))).toBe(true)
+    // 依赖图自洽：@morphixai/mxenv 的传递依赖由 tarball 解析，不借任何全局安装。
+    expect(existsSync(join(CONSUMER, 'node_modules', '@morphixai', 'mxenv-core'))).toBe(true)
   })
 
   it('run：项目 .env.local 注入子进程且输出脱敏', { timeout: 30_000 }, () => {

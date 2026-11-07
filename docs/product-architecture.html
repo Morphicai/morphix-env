@@ -339,7 +339,7 @@
       <div class="card">
         <span class="k">姿势 2 · 全局装（增强）</span>
         <h3>机器级管理面</h3>
-        <p>装 <code>mxenv-cli</code> 叠加管理能力：<code>shell-init</code> 终端 shim（裸敲 <code>pnpm dev</code> 即完成注入）、全局环境变量/密钥管理。项目命令的名称与行为<strong>不因全局安装与否而变化</strong>。</p>
+        <p>装 <code>@morphixai/mxenv-cli</code> 叠加管理能力：<code>shell-init</code> 终端 shim（裸敲 <code>pnpm dev</code> 即完成注入）、全局环境变量/密钥管理。项目命令的名称与行为<strong>不因全局安装与否而变化</strong>。</p>
       </div>
       <div class="card">
         <span class="k">姿势 3 · CLI 带 GUI</span>
@@ -350,10 +350,10 @@
 
     <h3 style="margin:38px 0 4px; font-size:20px;">60 秒上手</h3>
     <pre><span class="c"># 与 Agent 一起用（推荐）：装上打包好的 skill，让 agent 读着安全红线干活</span>
-npx mxenv@latest skill install --target project   <span class="c"># 写入 .claude/skills/mxenv/，随仓库提交</span>
+npx @morphixai/mxenv@latest skill install --target project   <span class="c"># 写入 .claude/skills/mxenv/，随仓库提交</span>
 
 <span class="c"># 不用 Agent 也能跑</span>
-npm install -g mxenv
+npm install -g @morphixai/mxenv
 mxenv run -- pnpm dev      <span class="c"># 组合 profile 并执行（子进程输出自动脱敏）</span>
 mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状态 —— 永远没有值</span></pre>
 
@@ -462,7 +462,7 @@ mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状
     <div class="extbar">
       <b>外部资源（只经 L1 访问）：</b>上游 provider（值 owner，按项目定制编排：Infisical · Doppler · Keychain · dotenvx · local(dev-only)）·
       <code>~/.mxenv/</code> 全局库（加密）· 项目 config / env.local · 审计 journal（无值）。
-      GUI 不碰文件、不碰值，只说 daemon 的本地 API；外部 SDK（Trellis 等）直接依赖 mxenv-core。
+      GUI 不碰文件、不碰值，只说 daemon 的本地 API；外部 SDK（Trellis 等）直接依赖 <code>@morphixai/mxenv-core</code>。（图中短名 <code>mxenv</code>/<code>mxenv-core</code>/<code>mxenv-cli</code> = npm 包 <code>@morphixai/*</code>，目录段 <code>packages/mxenv*</code>；bin/命令名不受 scope 影响。）
     </div>
 
     <h3 style="margin:38px 0 4px; font-size:20px;">三条关键机制</h3>
@@ -517,7 +517,7 @@ mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状
     <table>
       <tr><th>面</th><th>旧名</th><th>新名</th><th>过渡（0.12.x）</th></tr>
       <tr><td>CLI bin</td><td><code>mx-env</code> / <code>morphix-env</code></td><td><strong><code>mxenv</code></strong></td><td>alias bin 转发 + stderr 弃用提示（stdout 保持纯净）</td></tr>
-      <tr><td>npm 包</td><td><code>morphix-env</code></td><td><strong><code>mxenv</code> / <code>mxenv-core</code> / <code>mxenv-cli</code></strong></td><td>旧包发收尾版 + deprecate 指路</td></tr>
+      <tr><td>npm 包</td><td><code>morphix-env</code></td><td><strong><code>@morphixai/mxenv</code> / <code>@morphixai/mxenv-core</code> / <code>@morphixai/mxenv-cli</code></strong></td><td>旧包发收尾版 + deprecate 指路（unscoped 名被 npm 相似度政策拒绝，2026-11-07 定夺走 scope）</td></tr>
       <tr><td>URI scheme</td><td><code>mx-env://</code></td><td><strong><code>mxenv://</code></strong></td><td>无垫片直切（已实证零存量消费者），旧 scheme 报错提示</td></tr>
       <tr><td>配置文件</td><td><code>mx-env.config.json</code></td><td><strong><code>mxenv.config.json</code></strong></td><td>读双认（新优先）；写只落新名，旧文件来源写前备份改名</td></tr>
       <tr><td>全局目录</td><td><code>~/.mx-env/</code></td><td><strong><code>~/.mxenv/</code></strong></td><td>读回落旧目录 + 提示；<code>mxenv migrate --home</code> 搬迁</td></tr>
@@ -546,7 +546,7 @@ mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状
         <h3>命名与品牌基础</h3>
         <ul>
           <li>命名全切（含 <code>mxenv://</code>）</li>
-          <li>三包拆分（mxenv / mxenv-cli / mxenv-core）</li>
+          <li>三包拆分（@morphixai/mxenv / @morphixai/mxenv-cli / @morphixai/mxenv-core）</li>
           <li><code>migrate --home</code> 迁移工具</li>
           <li>LICENSE + SECURITY.md</li>
           <li>同步 Trellis W2 change 文案</li>

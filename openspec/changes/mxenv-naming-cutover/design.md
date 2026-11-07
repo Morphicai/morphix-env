@@ -26,7 +26,7 @@
 | 面 | 新名 | 垫片（0.12.x 内） |
 |---|---|---|
 | bin | `mxenv` | `mx-env`、`morphix-env` 两个 alias bin → 同入口，stderr 弃用提示一次 |
-| npm | `mxenv`/`mxenv-core`/`mxenv-cli` | 旧包 `morphix-env` deprecate 指路 |
+| npm | `@morphixai/mxenv`/`@morphixai/mxenv-core`/`@morphixai/mxenv-cli`（2026-11-07 scope 定夺：unscoped `mxenv` 被 npm 名相似度政策拒绝） | 旧包 `morphix-env` deprecate 指路 |
 | scheme | `mxenv://` | 无垫片，解析到 `mx-env://` 即报错提示（零存量消费者，已核 `~/.trellis` 与全仓无真实引用） |
 | 配置 | `mxenv.config.json` | 读双认（新优先）；写只落新名，来自旧文件时备份+改名 |
 | 全局目录 | `~/.mxenv/` | 读回落（新缺旧补，stderr 提示）；`migrate --home` 搬迁（见 home-migration） |
@@ -53,11 +53,11 @@ Trellis `openspec/changes/mx-env-secret-source/` 文案：`mx-env://` → `mxenv
 
 1. **开发**：`mxenv-package-split` 挪完文件后统一改名（sed + 人工复核）：refs scheme 切换、bin alias、配置/插件双读、keychain 默认 service、shim 清单位置；docs/skill 同步。
 2. **验证**：单测/类型/构建绿 + `openspec validate --strict mxenv-naming-cutover` + `rg` 旧名清零（垫片代码与 CHANGELOG 除外）+ 双视角 review + token 出域审计。
-3. **发布**：npm 发 `mxenv-core`/`mxenv`/`mxenv-cli` 0.12.0（须用户逐项放行）→ 发 `morphix-env@0.12.0`（内部转发+弃用提示）→ `npm deprecate morphix-env` → GitHub Release notes 列迁移表。
+3. **发布**：npm 发 `@morphixai/mxenv-core`/`@morphixai/mxenv`/`@morphixai/mxenv-cli` 0.12.0（须用户逐项放行）→ 发 `morphix-env@0.12.0`（内部转发+弃用提示）→ `npm deprecate morphix-env` → GitHub Release notes 列迁移表。
 4. **本机迁移**：全局装新包、`migrate --home`、zshrc eval 行改 `mxenv export`、skill 重装、Trellis W2 文案同步。
 5. **回滚**：npm `dist-tag` 指回 0.11.0；本机 `~/.mx-env.backup-<ts>` 改名还原（home-migration）；垫片窗口内旧 bin 仍可用。
 
 ## Open Questions
 
 - Wave A 后 `morphix-env` 旧包保留多长 deprecate 指路期（建议至 1.0，Wave C 定）。
-- 全局 CLI 包名 `mxenv-cli` 发布前最终确认（`mxenv-package-split` Open Questions 同步跟踪）。
+- 全局 CLI 包名 `@morphixai/mxenv-cli` 已定案（2026-11-07 scope 定夺）。

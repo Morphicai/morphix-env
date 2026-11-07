@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { homedir } from 'os'
-import { loadConfigLayers, sanitizeBootEnv, shimsDir, validateShimList, warnDeprecatedBinInvocation, type ConfigLayers } from 'mxenv-core'
+import { loadConfigLayers, sanitizeBootEnv, shimsDir, validateShimList, warnDeprecatedBinInvocation, type ConfigLayers } from '@morphixai/mxenv-core'
 import {
   defaultRcPath,
   detectHandmadeReservedShims,

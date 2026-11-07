@@ -5,15 +5,15 @@ L0 contracts + L1 shared capabilities for the [mxenv](https://github.com/Morphic
 ## Install
 
 ```bash
-npm i mxenv-core
+npm i @morphixai/mxenv-core
 ```
 
 ## Entrypoints
 
-- `mxenv-core` — composition engine + providers (`composeEnvironment`, `loadConfigLayers`, …)
-- `mxenv-core/contracts` — pure, IO-free contract layer (config schema, `mxenv://` syntax, audit/redaction types)
+- `@morphixai/mxenv-core` — composition engine + providers (`composeEnvironment`, `loadConfigLayers`, …)
+- `@morphixai/mxenv-core/contracts` — pure, IO-free contract layer (config schema, `mxenv://` syntax, audit/redaction types)
 
-Most users want the CLI instead: [`mxenv`](https://www.npmjs.com/package/mxenv) (project devDependency) or [`mxenv-cli`](https://www.npmjs.com/package/mxenv-cli) (global management face).
+Most users want the CLI instead: [`@morphixai/mxenv`](https://www.npmjs.com/package/@morphixai/mxenv) (project devDependency) or [`@morphixai/mxenv-cli`](https://www.npmjs.com/package/@morphixai/mxenv-cli) (global management face).
 
 ## License
 

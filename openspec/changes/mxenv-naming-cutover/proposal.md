@@ -25,6 +25,6 @@
 ## Impact
 
 - 代码：`src/refs.ts` 解析/生成只认 `mxenv://`；`src/config.ts` 路径常量改名并加旧名兼容读；bin alias、keychain 默认 service、插件解析、shim 清单位置随改。
-- 发布：npm 三包 0.12.0（结构归 `mxenv-package-split`）→ `morphix-env@0.12.0` 收尾转发 → `npm deprecate morphix-env`；GitHub Release 列迁移表。
+- 发布：npm 三包 0.12.0（`@morphixai/mxenv-core`/`@morphixai/mxenv`/`@morphixai/mxenv-cli`，2026-11-07 scope 定夺——unscoped `mxenv` 被 npm 名相似度政策拒绝；结构归 `mxenv-package-split`）→ `morphix-env@0.12.0` 收尾转发 → `npm deprecate morphix-env`；GitHub Release 列迁移表。
 - 本机与外部：zshrc 的 export eval 行、Trellis 侧 change 文案同步改名；skill 内容改名、安装目标不变。
 - 不改：值安全纪律、组合语义、migrate 的 dotenvx/keychain 行为本身；`migrate --home` 工具归 `mxenv-home-migration`。

@@ -3,12 +3,14 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-// 分层边界断言（package-split 2.3）：产品包（mxenv L2 / mxenv-cli L3）不得出现
-// 第二套值解密/揭示实现——keytar/dotenvx 等解密依赖不出现在依赖面与源码 import；
-// 值能力 compose（=composeEnvironment）唯一实现留在 mxenv-core。
+// 分层边界断言（package-split 2.3）：产品包（@morphixai/mxenv L2 / @morphixai/mxenv-cli L3）
+// 不得出现第二套值解密/揭示实现——keytar/dotenvx 等解密依赖不出现在依赖面与源码 import；
+// 值能力 compose（=composeEnvironment）唯一实现留在 @morphixai/mxenv-core。
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+/** 目录段（packages/<dir>）；npm 包身份= `@morphixai/<dir>`（2026-11-07 scope 切换）。 */
 const PRODUCT_PACKAGES = ['mxenv', 'mxenv-cli'] as const
+const npmName = (dir: string) => `@morphixai/${dir}`
 
 /** 解密/密钥材料依赖：出现即意味着产品包在自建第二套揭示能力。 */
 const FORBIDDEN_DEPS = ['keytar', '@dotenvx/dotenvx', 'dotenvx']
@@ -69,15 +71,15 @@ describe('产品包分层边界（2.3 值能力窄暴露收口）', () => {
     })
   }
 
-  it('产品包零互依：mxenv ↔ mxenv-cli 依赖面与源码 import 面互不指向（包自引用合法）', () => {
+  it('产品包零互依：@morphixai/mxenv ↔ @morphixai/mxenv-cli 依赖面与源码 import 面互不指向（包自引用合法）', () => {
     for (const pkg of PRODUCT_PACKAGES) {
-      const other = pkg === 'mxenv' ? 'mxenv-cli' : 'mxenv'
+      const other = npmName(pkg === 'mxenv' ? 'mxenv-cli' : 'mxenv')
       const manifest = JSON.parse(
         readFileSync(path.join(repoRoot, 'packages', pkg, 'package.json'), 'utf8'),
       ) as Record<string, Record<string, string> | undefined>
       for (const section of DEP_SECTIONS) {
         const deps = Object.keys(manifest[section] || {})
-        expect(deps, `${pkg} ${section} 出现 ${other} 依赖（产品包零互依）`).not.toContain(other)
+        expect(deps, `${npmName(pkg)} ${section} 出现 ${other} 依赖（产品包零互依）`).not.toContain(other)
       }
       const offenders: string[] = []
       for (const file of walkSources(path.join(repoRoot, 'packages', pkg))) {
@@ -87,11 +89,11 @@ describe('产品包分层边界（2.3 值能力窄暴露收口）', () => {
           }
         }
       }
-      expect(offenders, `${pkg} 源码 import 不得指向 ${other}`).toEqual([])
+      expect(offenders, `${npmName(pkg)} 源码 import 不得指向 ${other}`).toEqual([])
     }
   })
 
-  it('compose（=composeEnvironment）唯一实现位于 mxenv-core', () => {
+  it('compose（=composeEnvironment）唯一实现位于 @morphixai/mxenv-core', () => {
     const scanRoots = [
       path.join(repoRoot, 'src'),
       path.join(repoRoot, 'packages', 'mxenv-core', 'src'),

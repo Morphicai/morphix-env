@@ -249,7 +249,7 @@ async function resolveKeychain(entry: SourceEntry, source: KeychainSource): Prom
     throw new SourceError(
       entry.name,
       source.provider,
-      `[mxenv] os-keychain source "${entry.name}" needs the optional native module "keytar", which is not usable on this machine. Reinstall mxenv to rebuild it, or remove this source from the profile.`,
+      `[mxenv] os-keychain source "${entry.name}" needs the optional native module "keytar", which is not usable on this machine. Reinstall @morphixai/mxenv to rebuild it, or remove this source from the profile.`,
     )
   }
 

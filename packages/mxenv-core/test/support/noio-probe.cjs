@@ -1,6 +1,6 @@
 'use strict'
 // 无 IO 副作用探针：先给各 IO 面的函数打补丁，再通过包名自引用
-// require('mxenv-core/contracts')（走 exports map → dist 产物），
+// require('@morphixai/mxenv-core/contracts')（走 exports map → dist 产物），
 // 在进程退出时打印 JSON { resolved, calls, unpatched, exports }。
 // exports 为契约入口的运行时导出键名快照，供断言导出面不含值能力
 // （compose/composeEnvironment/revealSingle）。
@@ -142,7 +142,7 @@ installMethod(tryGet(require('node:net'), 'Server'), 'listen', 'net.Server.proto
 install(globalThis, 'fetch', 'global.fetch', false)
 install(globalThis, 'WebSocket', 'global.WebSocket', false)
 
-const resolved = require.resolve('mxenv-core/contracts')
+const resolved = require.resolve('@morphixai/mxenv-core/contracts')
 
 // 探针 setup 自噪声清零（精确排除，不是白名单放宽）：patch 安装/require.resolve
 // 等 setup 步骤本身会触发 Node 运行时机制性调用，与被测模块的 import 副作用无关。
@@ -151,7 +151,7 @@ const resolved = require.resolve('mxenv-core/contracts')
 // 在 setup 阶段落进 calls。断言面从 require 起算，setup 阶段不计入。
 calls.length = 0
 
-const contracts = require('mxenv-core/contracts')
+const contracts = require('@morphixai/mxenv-core/contracts')
 
 process.on('exit', () => {
   rawWriteSync(1, JSON.stringify({ resolved, calls, unpatched, exports: Object.keys(contracts) }))

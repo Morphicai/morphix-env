@@ -31,7 +31,7 @@
 | 层 | 现状 | 目标 |
 |---|---|---|
 | CLI bin | `mx-env` / `morphix-env` | `mxenv`（旧名留 alias 一个 minor 周期） |
-| npm 包 | `morphix-env` | `mxenv` / `mxenv-core` / `mxenv-cli` 三包（见 2.2） |
+| npm 包 | `morphix-env` | `@morphixai/mxenv` / `@morphixai/mxenv-core` / `@morphixai/mxenv-cli` 三包（见 2.2；npm 名相似度政策拒 unscoped `mxenv`，2026-11-07 定夺走 `@morphixai/*` scope） |
 | URI scheme | `mx-env://` | `mxenv://`（**抢在 Trellis W2 实施前定案**） |
 | 配置文件 / 全局目录 | `mx-env.config.json` / `~/.mx-env/` | `mxenv.config.json` / `~/.mxenv/`（旧名兼容读 + migrate 迁移） |
 
@@ -46,7 +46,7 @@
 | **L1 能力层**（共享） | 组合引擎（**全局变量 ∪ 项目 `env.local`**）、provider 适配、配置加载、审计读写、**值能力 `compose`/`revealSingle`（唯一实现）** | `mxenv-core` 主入口 |
 | **L0 契约层**（纯，无 IO） | 配置 schema、`mxenv://` 引用语法、组合/审计/IPC 类型、redaction 规则 | `mxenv-core/contracts` |
 
-包只有三个：**L0+L1 同属 `mxenv-core`**（包内双入口——`/contracts` 给只要类型的消费方，主入口给能力消费方）。分层是逻辑纪律，包是发布单元；层数 > 包数。
+包只有三个：**L0+L1 同属 `mxenv-core`**（包内双入口——`/contracts` 给只要类型的消费方，主入口给能力消费方）。分层是逻辑纪律，包是发布单元；层数 > 包数。**短名映射**：本文与层次图里的 `mxenv` / `mxenv-core` / `mxenv-cli` 短名指 npm 包 `@morphixai/mxenv` / `@morphixai/mxenv-core` / `@morphixai/mxenv-cli`（目录段仍是 `packages/mxenv*`）；bin/命令名（`mxenv`、`mxenv-cli`）不受 scope 影响。
 
 **依赖规则**：
 
@@ -67,7 +67,7 @@ L2 mxenv   ──┘
 由此消解两个问题：
 
 - **版本错位**：项目态写操作 spawn 项目本地 CLI（版本对齐）；契约演进由 core 的 semver 约束（additive-only），GUI/daemon/项目包各自节奏升级。
-- **仅项目级使用**：`mxenv` 独立完整工作（`npx mxenv …` / npm scripts），管理面是纯增益。终端自动注入与常驻面板天然属于机器级，只在全局安装后提供。
+- **仅项目级使用**：`mxenv` 独立完整工作（`npx @morphixai/mxenv …` / npm scripts），管理面是纯增益。终端自动注入与常驻面板天然属于机器级，只在全局安装后提供。
 
 ### 2.3 常驻 host + 本地面板（Wave B）
 

@@ -11,7 +11,7 @@ on:
     tags:
       - 'v*'
 
-# 发布顺序护栏（naming-cutover 4.1）：mxenv-core 必须最先发布，其余三包的
+# 发布顺序护栏（naming-cutover 4.1）：@morphixai/mxenv-core 必须最先发布，其余三包的
 # prepublishOnly（scripts/prepublish-guard.mjs）会在 registry 解析不到依赖时
 # 拒绝发布。CI 缺 NPM_AUTOMATION_TOKEN 时显式失败——勿假绿。
 jobs:
@@ -75,15 +75,16 @@ jobs:
           fi
       - name: Full test gate
         run: pnpm -r test && pnpm test
-      # 发布顺序：core → mxenv → mxenv-cli → morphix-env（收尾转发）。
-      # 各包 prepublishOnly（guard + 根包测试）在 npm publish 内自动执行。
-      - name: Publish mxenv-core (core-first)
+      # 发布顺序：@morphixai/mxenv-core → @morphixai/mxenv → @morphixai/mxenv-cli
+      # → morphix-env（收尾转发）。各包 prepublishOnly（guard + 根包测试）在
+      # npm publish 内自动执行。
+      - name: Publish @morphixai/mxenv-core (core-first)
         working-directory: packages/mxenv-core
         run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
-      - name: Publish mxenv
+      - name: Publish @morphixai/mxenv
         working-directory: packages/mxenv
         run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
-      - name: Publish mxenv-cli
+      - name: Publish @morphixai/mxenv-cli
         working-directory: packages/mxenv-cli
         run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
       - name: Publish morphix-env (deprecated forwarding shim)

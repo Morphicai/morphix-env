@@ -24,7 +24,7 @@ import {
   type LocalSource,
   type SecretSource,
   type SourceEntry,
-} from 'mxenv-core'
+} from '@morphixai/mxenv-core'
 
 export type MigrateTarget = 'dotenvx' | 'keychain'
 
@@ -399,7 +399,7 @@ function snapshotCovered(expected: Record<string, string>, actual: Record<string
 async function migrateToKeychain(unit: MigrationUnit, service: string, stamp: string, homeDir: string, backups: string[], renamedTo: Map<string, string>): Promise<{ warnings: string[] }> {
   if (process.platform !== 'darwin') throw new Error('the os-keychain target is supported on macOS only; use --to dotenvx on this machine.')
   const keytar = await loadKeytar()
-  if (!keytar) throw new Error('the os-keychain target needs the optional native module "keytar"; reinstall mxenv or use --to dotenvx.')
+  if (!keytar) throw new Error('the os-keychain target needs the optional native module "keytar"; reinstall @morphixai/mxenv or use --to dotenvx.')
 
   const snapshot = snapshotValues(unit)
   for (const file of unit.files) backups.push(backupFile(file, stamp))

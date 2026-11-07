@@ -5,7 +5,7 @@ L3 management face for [mxenv](https://github.com/Morphicai/morphix-env) — mac
 ## Install
 
 ```bash
-npm i -g mxenv-cli
+npm i -g @morphixai/mxenv-cli
 ```
 
 ## Commands
@@ -13,7 +13,7 @@ npm i -g mxenv-cli
 - `mxenv-cli shell-init` — generate/remove PATH shims and the marked rc block (global + project shim manifests)
 - `gui` / `global` / `host` — reserved for Wave B (not implemented; rejected with guidance)
 
-Project commands (`run`/`export`/`edit`/…) come from [`mxenv`](https://www.npmjs.com/package/mxenv) installed as a devDependency — the global face deliberately does not include them.
+Project commands (`run`/`export`/`edit`/…) come from [`@morphixai/mxenv`](https://www.npmjs.com/package/@morphixai/mxenv) installed as a devDependency — the global face deliberately does not include them.
 
 ## License
 

@@ -1,5 +1,5 @@
 {
-  "name": "mxenv-cli",
+  "name": "@morphixai/mxenv-cli",
   "version": "0.12.0",
   "description": "L3 management face for mxenv \u2014 machine-level extras like shell-init.",
   "license": "MIT",
@@ -31,10 +31,13 @@
   "engines": {
     "node": ">=18"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
-    "test": "pnpm --filter mxenv-core build && pnpm --filter mxenv build && pnpm build && vitest run",
-    "typecheck": "pnpm --filter mxenv-core build && tsc --noEmit",
+    "test": "pnpm --filter @morphixai/mxenv-core build && pnpm --filter @morphixai/mxenv build && pnpm build && vitest run",
+    "typecheck": "pnpm --filter @morphixai/mxenv-core build && tsc --noEmit",
     "prepublishOnly": "node ../../scripts/prepublish-guard.mjs"
   },
   "devDependencies": {
@@ -50,6 +53,6 @@
     "mxenv-cli": "./dist/cli.js"
   },
   "dependencies": {
-    "mxenv-core": "^0.12.0"
+    "@morphixai/mxenv-core": "^0.12.0"
   }
 }
