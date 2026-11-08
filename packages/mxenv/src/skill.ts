@@ -5,14 +5,21 @@ import { dirname, join } from 'path'
 export interface SkillOptions {
   target: string | null
   force: boolean
+  /** hermes: 分类目录名（~/.hermes/skills/<category>/mxenv/），默认 devops。 */
+  hermesCategory?: string | null
 }
 
-const SKILL_TARGETS = ['global', 'project', 'trellis'] as const
+const SKILL_TARGETS = ['global', 'project', 'trellis', 'hermes'] as const
 type SkillTarget = (typeof SKILL_TARGETS)[number]
 
-function resolveSkillPath(target: SkillTarget): string {
+const DEFAULT_HERMES_CATEGORY = 'devops'
+
+function resolveSkillPath(target: SkillTarget, hermesCategory?: string | null): string {
   if (target === 'project') return join(process.cwd(), '.claude', 'skills', 'mxenv', 'SKILL.md')
   if (target === 'trellis') return join(homedir(), '.trellis', 'skills', 'mxenv', 'SKILL.md')
+  if (target === 'hermes') {
+    return join(homedir(), '.hermes', 'skills', hermesCategory || DEFAULT_HERMES_CATEGORY, 'mxenv', 'SKILL.md')
+  }
   return join(homedir(), '.claude', 'skills', 'mxenv', 'SKILL.md')
 }
 
@@ -23,6 +30,9 @@ function targetHint(target: SkillTarget): string {
   if (target === 'trellis') {
     return 'Installed into the Trellis canonical store; run `trellis sync skills` to distribute it to managed agents.'
   }
+  if (target === 'hermes') {
+    return 'Installed into the Hermes skill tree; the Hermes agent discovers it through its skill index.'
+  }
   return 'Installed as a Claude Code global skill; available in every project.'
 }
 
@@ -30,6 +40,8 @@ function targetHint(target: SkillTarget): string {
 function legacySkillPath(target: SkillTarget): string {
   if (target === 'project') return join(process.cwd(), '.claude', 'skills', 'morphix-env', 'SKILL.md')
   if (target === 'trellis') return join(homedir(), '.trellis', 'skills', 'morphix-env', 'SKILL.md')
+  // hermes 是 0.12.x 新增 target，无改名前安装位。
+  if (target === 'hermes') return ''
   return join(homedir(), '.claude', 'skills', 'morphix-env', 'SKILL.md')
 }
 
@@ -55,7 +67,7 @@ export function cmdSkill(subcommand: string, options: SkillOptions): number {
   if (subcommand === 'show') {
     console.log(`[mxenv] Skill template: ${templatePath}`)
     for (const target of SKILL_TARGETS) {
-      const path = resolveSkillPath(target)
+      const path = resolveSkillPath(target, options.hermesCategory)
       if (!existsSync(path)) {
         console.log(`  ${target}: not installed (${path})`)
         continue
@@ -75,11 +87,11 @@ export function cmdSkill(subcommand: string, options: SkillOptions): number {
 
   const target = options.target ?? 'global'
   if (!SKILL_TARGETS.includes(target as SkillTarget)) {
-    console.error(`[mxenv] Unknown skill target "${options.target}". Use global, project, or trellis.`)
+    console.error(`[mxenv] Unknown skill target "${options.target}". Use global, project, trellis, or hermes.`)
     return 1
   }
 
-  const dest = resolveSkillPath(target as SkillTarget)
+  const dest = resolveSkillPath(target as SkillTarget, options.hermesCategory)
   if (existsSync(dest)) {
     if (readFileSync(dest, 'utf8') === template) {
       console.log(`[mxenv] Skill already installed and up to date: ${dest}`)

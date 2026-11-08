@@ -85,7 +85,7 @@ mxenv inspect [--profile dev]           # key 名 + source 归属 + 状态（无
 mxenv edit [--profile dev | --source X] # 可视化编辑器（loopback + 15 分钟 TTL；查看/回显/增改删/切源，显式结束会话）
 mxenv doc                               # 生成本项目的 key→source 工作流 Skill（.agents/skills/mxenv/）
 mxenv audit [tail]                      # 值无关的本地审计事件
-mxenv skill install [--target global|project|trellis] [--force]   # 安装本 Skill
+mxenv skill install [--target global|project|trellis|hermes] [--force]   # 安装本 Skill（hermes 配 --hermes-category 指定分类，默认 devops）
 mxenv skill show                        # 查看各目标安装状态
 mxenv migrate [--to dotenvx|keychain]   # local 明文迁加密存储（无 --to 为只读 plan；备份+等价验证+可回滚）
 mxenv-cli shell-init [--write|--remove] # 为声明的命令生成 PATH shim（全局管理面，shims: ["node","pnpm"] 配置项）

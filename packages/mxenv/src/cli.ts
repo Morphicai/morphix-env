@@ -67,6 +67,8 @@ interface Args {
   printEditorUrl: boolean
   source: string | null
   target: string | null
+  /** skill: hermes 分类目录（~/.hermes/skills/<category>/mxenv/），默认 devops。 */
+  hermesCategory: string | null
   /** migrate: destination provider (dotenvx|keychain). */
   to: string | null
   /** migrate: keychain service override (requires --source). */
@@ -90,7 +92,7 @@ function parseArgs(argv: string[]): Args {
     command: '', subArgs: [], positionals: [], envFiles: [], outFile: null, verbose: false,
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
-    target: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
+    target: null, hermesCategory: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
     write: false, remove: false, warnPlaintext: false, help: false, unknownFlags: [],
   }
 
@@ -130,6 +132,8 @@ function parseArgs(argv: string[]): Args {
       args.printEditorUrl = true
     } else if (arg === '--target') {
       if (argv[++i]) args.target = argv[i]
+    } else if (arg === '--hermes-category') {
+      if (argv[++i]) args.hermesCategory = argv[i]
     } else if (arg === '--to') {
       if (argv[++i]) args.to = argv[i]
     } else if (arg === '--service') {
@@ -854,7 +858,7 @@ Usage:
   mxenv doc [options]                    Generate a value-free project Skill
   mxenv audit [tail]                     Read value-free local audit events
   mxenv edit [--profile|--source <name>] Open the visual editor (15-min session)
-  mxenv skill install [--target <t>]     Install the Agent Skill (global|project|trellis)
+  mxenv skill install [--target <t>]     Install the Agent Skill (global|project|trellis|hermes)
   mxenv skill show                       Show skill install status per target
 
 The legacy bin names (mx-env, morphix-env) remain as deprecated aliases in 0.12.x.
@@ -872,7 +876,8 @@ Options:
   --allow-insecure-global  Allow a global .env with permissive file mode
   --warn-plaintext         Warn once on stderr when plaintext local sources supply keys
   --print-editor-url       Explicitly print the one-time local editor URL
-  --target <scope>         Skill install target: global, project, or trellis
+  --target <scope>         Skill install target: global, project, trellis, or hermes
+  --hermes-category <name> Hermes skill category directory (default: devops)
   --to <provider>          migrate destination: dotenvx or keychain (omit for a read-only plan)
   --source <name>          edit/migrate: select a single source
   --service <name>         migrate --to keychain: keychain service override (requires --source)
@@ -914,7 +919,7 @@ async function main(): Promise<number> {
     case 'doc': return cmdDoc(args)
     case 'skill': {
       const positional = process.argv.slice(3).find((arg) => !arg.startsWith('-')) ?? 'install'
-      return cmdSkill(positional, { target: args.target, force: args.force })
+      return cmdSkill(positional, { target: args.target, force: args.force, hermesCategory: args.hermesCategory })
     }
     case '--help':
     case '-h':
