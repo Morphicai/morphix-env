@@ -36,6 +36,7 @@ afterEach(() => {
   rmSync(join(TMP, '.claude'), { recursive: true, force: true })
   rmSync(join(TMP, 'home', '.claude'), { recursive: true, force: true })
   rmSync(join(TMP, 'home', '.trellis'), { recursive: true, force: true })
+  rmSync(join(TMP, 'home', '.hermes'), { recursive: true, force: true })
 })
 
 // ─── CLI 基本功能 ─────────────────────────────────────────
@@ -458,6 +459,20 @@ describe('mxenv skill', () => {
     expect(readFileSync(join(TMP, 'home', '.trellis', 'skills', 'mxenv', 'SKILL.md'), 'utf8')).toContain('name: mxenv')
   })
 
+  it('install --target hermes writes into the Hermes skill tree (default devops category)', () => {
+    const out = run(['skill', 'install', '--target', 'hermes'])
+    expect(out).toContain('Installed skill')
+    expect(out).toContain('Hermes skill tree')
+    expect(readFileSync(join(TMP, 'home', '.hermes', 'skills', 'devops', 'mxenv', 'SKILL.md'), 'utf8')).toContain('name: mxenv')
+  })
+
+  it('--hermes-category places the skill under the chosen category', () => {
+    run(['skill', 'install', '--target', 'hermes', '--hermes-category', 'custom-cat'])
+    expect(readFileSync(join(TMP, 'home', '.hermes', 'skills', 'custom-cat', 'mxenv', 'SKILL.md'), 'utf8')).toContain('name: mxenv')
+    // 默认类目不落文件
+    expect(existsSync(join(TMP, 'home', '.hermes', 'skills', 'devops', 'mxenv', 'SKILL.md'))).toBe(false)
+  })
+
   it('rejects an unknown target and unknown subcommand', () => {
     try {
       run(['skill', 'install', '--target', 'nowhere'])
@@ -473,11 +488,21 @@ describe('mxenv skill', () => {
     }
   })
 
+  it('repo-root skills/mxenv/ layout stays discoverable by the skills CLI', () => {
+    // `npx skills add Morphicai/morphix-env` discovers skills/<name>/SKILL.md
+    // with frontmatter `name` matching the folder — keep the layout stable.
+    const skillFile = join(__dirname, '..', '..', '..', 'skills', 'mxenv', 'SKILL.md')
+    expect(existsSync(skillFile)).toBe(true)
+    const content = readFileSync(skillFile, 'utf8')
+    expect(content).toMatch(/^name: mxenv$/m)
+  })
+
   it('show reports per-target install status', () => {
     run(['skill', 'install', '--target', 'project'])
     const out = run(['skill', 'show'])
     expect(out).toContain('project: installed (matches this version)')
     expect(out).toContain('global: not installed')
+    expect(out).toContain('hermes: not installed')
   })
 })
 
