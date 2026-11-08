@@ -1,6 +1,6 @@
 {
   "name": "morphix-env",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Deprecated SDK facade for mxenv — install `@morphixai/mxenv` (project) or `@morphixai/mxenv-cli` (global management) instead; this package re-exports the @morphixai/mxenv-core SDK. The legacy `mx-env`/`morphix-env` bins and `morphix-env/cli` forwarder were removed in 0.13.x.",
   "author": "MorphixAI <dev@morphixai.com>",
   "homepage": "https://github.com/Morphicai/morphix-env#readme",
