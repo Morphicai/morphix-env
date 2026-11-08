@@ -29,7 +29,8 @@ mxenv 是密钥**组装层**，不是新的保险库：值永远留在 provider�
 ## 安装与检测
 
 ```bash
-mxenv --version                          # 检测是否已安装
+npx skills add Morphicai/morphix-env     # 获取本 Skill（首选：装进已检测到的 Agent）
+mxenv --version                          # 检测 mxenv 是否已安装
 npm install -D @morphixai/mxenv          # 项目内安装运行面（推荐：run/inspect/edit/migrate 全在）
 npx @morphixai/mxenv@latest inspect      # 免安装试用
 npm install -g @morphixai/mxenv-cli      # 可选：机器级管理面（shell-init 等）
@@ -85,7 +86,7 @@ mxenv inspect [--profile dev]           # key 名 + source 归属 + 状态（无
 mxenv edit [--profile dev | --source X] # 可视化编辑器（loopback + 15 分钟 TTL；查看/回显/增改删/切源，显式结束会话）
 mxenv doc                               # 生成本项目的 key→source 工作流 Skill（.agents/skills/mxenv/）
 mxenv audit [tail]                      # 值无关的本地审计事件
-mxenv skill install [--target global|project|trellis|hermes] [--force]   # 安装本 Skill（hermes 配 --hermes-category 指定分类，默认 devops）
+mxenv skill install [--target global|project|trellis|hermes] [--force]   # 安装本 Skill（首选 npx skills add Morphicai/morphix-env；hermes 配 --hermes-category 指定分类，默认 devops）
 mxenv skill show                        # 查看各目标安装状态
 mxenv migrate [--to dotenvx|keychain]   # local 明文迁加密存储（无 --to 为只读 plan；备份+等价验证+可回滚）
 mxenv-cli shell-init [--write|--remove] # 为声明的命令生成 PATH shim（全局管理面，shims: ["node","pnpm"] 配置项）
@@ -124,4 +125,4 @@ mxenv-cli shell-init [--write|--remove] # 为声明的命令生成 PATH shim（�
 
 ---
 
-本 Skill 与安装它的 CLI 同版本分发：`mxenv skill install` 覆盖安装即升级。模板内容 value-free；项目专属的 key 清单请以 `mxenv doc` 的输出为准。
+本 Skill 源自仓库根 `skills/mxenv/`（skills CLI 可发现），并与安装它的 CLI 同版本分发：`npx skills add Morphicai/morphix-env`（首选）或 `mxenv skill install` 覆盖安装即升级。模板内容 value-free；项目专属的 key 清单请以 `mxenv doc` 的输出为准。

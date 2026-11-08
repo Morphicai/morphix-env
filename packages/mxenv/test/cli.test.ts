@@ -488,6 +488,15 @@ describe('mxenv skill', () => {
     }
   })
 
+  it('repo-root skills/mxenv/ layout stays discoverable by the skills CLI', () => {
+    // `npx skills add Morphicai/morphix-env` discovers skills/<name>/SKILL.md
+    // with frontmatter `name` matching the folder — keep the layout stable.
+    const skillFile = join(__dirname, '..', '..', '..', 'skills', 'mxenv', 'SKILL.md')
+    expect(existsSync(skillFile)).toBe(true)
+    const content = readFileSync(skillFile, 'utf8')
+    expect(content).toMatch(/^name: mxenv$/m)
+  })
+
   it('show reports per-target install status', () => {
     run(['skill', 'install', '--target', 'project'])
     const out = run(['skill', 'show'])

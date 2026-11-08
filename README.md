@@ -24,11 +24,13 @@ A project-only install is fully functional; installing the global CLI only adds 
 
 ## Quick start
 
-**With an Agent (recommended):** install the packaged skill, commit it, and let the agent do the rest. The skill carries the safety rules, the full configuration schema, onboarding steps, and troubleshooting — so this README does not have to:
+**With an Agent (recommended):** install the packaged skill and let the agent do the rest. The skill carries the safety rules, the full configuration schema, onboarding steps, and troubleshooting — so this README does not have to:
 
 ```bash
-npx @morphixai/mxenv@latest skill install --target project   # writes .claude/skills/mxenv/ — commit it with the repo
+npx skills add Morphicai/morphix-env     # preferred: installs the skill into every detected agent
 ```
+
+The same skill is also installable from the npm package when you want a committed project copy or a specific target (`npx @morphixai/mxenv@latest skill install --target project|global|trellis|hermes`).
 
 Then tell your agent something like "set up this project's environment with mxenv". The agent reads the skill and drives configuration, validation, and editing; nobody pastes a secret value into chat.
 
@@ -188,7 +190,7 @@ mxenv migrate [--to dotenvx|keychain]  # move plaintext local sources into encry
 mxenv edit [--profile dev | --source s] # session-based local visual editor (stays open across saves)
 mxenv generate --out public/__env.js   # public browser runtime config
 mxenv doc                              # write this project's key→source skill
-mxenv skill install | show             # packaged Agent Skill (global / project / trellis)
+mxenv skill install | show             # packaged Agent Skill (global / project / trellis / hermes)
 mxenv audit tail                       # value-free audit events
 ```
 
@@ -198,12 +200,19 @@ Full options live in `mxenv --help`; the packaged skill mirrors the commands of 
 
 ## Agent workflow
 
-The npm package ships a maintained, value-free Agent Skill (`dist/SKILL.md`) so agents adopt the whole workflow — safety red lines, the complete schema for all five providers, a command cheatsheet, project onboarding, troubleshooting — without a second distribution:
+The maintained, value-free Agent Skill lives at the repo root (`skills/mxenv/SKILL.md`) so agents adopt the whole workflow — safety red lines, the complete schema for all five providers, a command cheatsheet, project onboarding, troubleshooting — without a second distribution. The preferred install is the skills CLI, which detects your agents and wires the skill into each of them:
+
+```bash
+npx skills add Morphicai/morphix-env     # preferred: every detected agent (Claude Code, Codex, …)
+```
+
+The npm package ships the same skill (`dist/SKILL.md`) for explicit targets and offline use:
 
 ```bash
 mxenv skill install --target project   # <repo>/.claude/skills/mxenv/ — commit it with the repo
 mxenv skill install --target global    # ~/.claude/skills/mxenv/ — every project on this machine
 mxenv skill install --target trellis   # ~/.trellis/skills/mxenv/ — then `trellis sync skills`
+mxenv skill install --target hermes    # ~/.hermes/skills/devops/mxenv/ — the Hermes agent's skill tree
 ```
 
 Installs are idempotent, and a skill file the user has customized is never overwritten without `--force`. `mxenv skill show` reports each target's install state and template drift.
