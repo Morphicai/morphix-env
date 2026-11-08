@@ -154,6 +154,10 @@ function resolveEntries(layers: ConfigLayers, options: ComposeOptions): { name: 
     return { name: projectDefault, entries: [...globalDotenv, ...profileEntries(projectDefault, profiles, sources), ...cliLocalOverride] }
   }
   if (globalDefault) {
+    // Note: the synthesized name `${globalDefault}+legacy` is deliberately
+    // not reference-able — the `mxenv://` profile charset excludes `+` —
+    // so on machines with a configured defaultProfile the implicit tail is
+    // reachable only through the default path, never by explicit name.
     const baseline = profileEntries(globalDefault, profiles, sources)
     return {
       name: `${globalDefault}+legacy`,

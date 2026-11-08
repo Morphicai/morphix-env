@@ -73,7 +73,7 @@ describe('implicit default profile naming (mx-env-secret-source)', () => {
     const p = paths('implicit-legacy-ref')
     mkdirSync(join(p.home, '.mxenv'), { recursive: true })
     writeFileSync(join(p.home, '.mxenv', '.env'), 'MXTEST_IMPLICIT_KEY=from-global\n')
-      chmodSync(join(p.home, '.mxenv', '.env'), 0o600)
+    chmodSync(join(p.home, '.mxenv', '.env'), 0o600)
     const resolver = new ReferenceResolver(loadConfigLayers({ homeDir: p.home, cwd: p.project }), { homeDir: p.home, noInfisical: true })
     const out = await resolver.valueOf('legacy', 'MXTEST_IMPLICIT_KEY')
     expect(out.value).toBe('from-global')
