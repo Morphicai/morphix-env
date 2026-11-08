@@ -27,7 +27,7 @@
 - **THEN** 插件被正常调用；`mxenv-provider-<plugin>` 存在时优先
 
 **Reason**: 垫片窗按 0.12.0 的到期公告关闭——该 requirement 描述的是 0.12.x 窗口期行为（旧名等价转发、读回落、插件回退），窗期已满一个 minor 周期，行为面随 0.13.x 摘除，由下方 ADDED requirement 取代。
-**Migration**: 升级到 0.13.x：改用 `mxenv` 命令名；旧配置文件改名为 `mxenv.config.json`（或跑 `mxenv migrate --home` 走既有迁移）；插件包改用 `mxenv-provider-<plugin>` 名；存量旧 shim 重跑 `mxenv-cli shell-init` 再生成。详见 CHANGELOG 0.13.1 公告。
+**Migration**: 升级到 0.13.x：改用 `mxenv` 命令名；旧配置文件手工改名为 `mxenv.config.json`（`migrate --home` 只管 `~/.mx-env/` 全局目录迁移）；插件包改用 `mxenv-provider-<plugin>` 名；存量旧 shim 重跑 `mxenv-cli shell-init` 再生成。详见 CHANGELOG 0.13.1 公告。
 
 ## ADDED Requirements
 

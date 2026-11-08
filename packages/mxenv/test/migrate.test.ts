@@ -112,6 +112,8 @@ describe('executeUnit -> dotenvx', () => {
       // file at its full original path. With an indexOf bug the restore lands
       // on `a` and the original stays encrypted.
       expect(outcome.status).toBe('failed')
+      // 声称即闭合（review S2）：回滚措辞必须与状态一致出现。
+      expect(outcome.detail).toContain('restored from backup')
       expect(readFileSync(join(TMP, marked), 'utf8')).toContain(value)
     } finally {
       chmodSync(join(TMP, 'mxenv.config.json'), 0o644)

@@ -150,18 +150,13 @@ function backupOriginalPath(backup: string): string {
 function restoreBackups(backups: string[]): string[] {
   const failed: string[] = []
   for (const backup of backups) {
-    const original = backupOriginalPath(backup)
-    const target = original
+    const target = backupOriginalPath(backup)
     try {
       if (!target || !existsSync(backup)) continue
       // 未受损文件（如删除失败残留的原件）与备份逐字节一致即视作已还原：复制会
       // 因文件锁定失败，但状态本就闭合，不应误报 RESTORE FAILED。
       if (existsSync(target) && readFileSync(target).equals(readFileSync(backup))) continue
       copyFileSync(backup, target)
-      // 改名后旧路径理论上已被 rename 移除；防御性清残留以维持单一配置事实源。
-      if (original && target !== original && existsSync(original)) {
-        try { rmSync(original) } catch { /* 残留清理是防御性的，失败不改变还原结果 */ }
-      }
     } catch {
       if (target) failed.push(target)
     }
@@ -455,8 +450,6 @@ export async function executeUnit(
   }
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const backups: string[] = []
-  // 改名记账：rewriteDeclaredSource 把旧名配置 rename 至新名后，回滚必须还原到
-  // 新名（读侧生效路径），否则回滚形同虚设（review S2）。
   // A zero-key unit has nothing to move; dotenvx encrypt would report "no
   // change" and leave a plaintext file behind while the report claims success.
   if (!unit.keyNames.length) {

@@ -69,7 +69,7 @@ function loadProjectConfig(cwd: string): LoadedConfig {
     return primary
   }
   if (legacyExists) {
-    console.warn(`[mxenv] 发现旧名配置 ${LEGACY_CONFIG_FILE}：0.13.x 起不再读取，请改名为 ${CONFIG_FILE}（或运行 \`mxenv migrate --home\` 走既有迁移）`)
+    console.warn(`[mxenv] 发现旧名配置 ${LEGACY_CONFIG_FILE}：0.13.x 起不再读取，请手工改名为 ${CONFIG_FILE}（\`migrate --home\` 只管 ~/.mx-env/ 全局目录迁移）`)
   }
   return primary
 }

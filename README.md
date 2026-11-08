@@ -246,7 +246,7 @@ The npm package `morphix-env` is a deprecated SDK facade in favor of the three p
 
 ### Upgrading an existing project, step by step
 
-1. In `package.json`, swap the dependency: drop `"morphix-env"`, add `"@morphixai/mxenv": "^0.12.0"` as a devDependency (the run face carries `run`/`export`/`inspect`/`migrate`/`edit`). SDK consumers add `@morphixai/mxenv-core`; for machine-level `shell-init` install `@morphixai/mxenv-cli` globally — never both packages globally.
+1. In `package.json`, swap the dependency: drop `"morphix-env"`, add `"@morphixai/mxenv": "^0.13.1"` as a devDependency (the run face carries `run`/`export`/`inspect`/`migrate`/`edit`). SDK consumers add `@morphixai/mxenv-core`; for machine-level `shell-init` install `@morphixai/mxenv-cli` globally — never both packages globally.
 2. `npm i`. npm scripts keep working as-is: project-local bins always win over global ones.
 3. Rename invocations to `mxenv` (the legacy bin names were removed in 0.13.x — if any generated shims still delegate to `mx-env run`, re-run `mxenv-cli shell-init` to regenerate them). `mx-env shell-init` becomes `mxenv-cli shell-init`.
 4. `~/.mx-env/` still reads until you run `migrate --home`, and keychain services named `mx-env:<source>` keep working (the name is carried in config). The 0.12.x fallbacks for `mx-env.config.json` and `mx-env-provider-*` were removed in 0.13.x — rename your config to `mxenv.config.json` (a hint is printed when the old file is found). Do rename reference strings `mx-env://profile/KEY` → `mxenv://profile/KEY` — the old scheme is rejected with a hint.

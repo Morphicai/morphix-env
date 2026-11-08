@@ -860,7 +860,8 @@ Usage:
   mxenv skill install [--target <t>]     Install the Agent Skill (global|project|trellis|hermes)
   mxenv skill show                       Show skill install status per target
 
-The legacy bin names (mx-env, morphix-env) remain as deprecated aliases in 0.12.x.
+The legacy bin names (mx-env, morphix-env) were removed in 0.13.x — invoke mxenv only;
+regenerate old shims with mxenv-cli shell-init.
 
 Options:
   -p, --profile <name>     Select a named source profile
