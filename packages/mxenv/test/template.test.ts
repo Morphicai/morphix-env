@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'child_process'
-import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from 'fs'
+import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
@@ -152,5 +152,29 @@ describe('git output status', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn.mock.calls[0][0]).toContain('tracked by git')
     expect(warn.mock.calls[0][0]).not.toContain('{}')
+  })
+})
+
+
+describe('issue #9 leftovers', () => {
+  it('writePrivateFile refuses to write through a symbolic link (L4)', () => {
+    const dir = join(ROOT, 'l4')
+    mkdirSync(dir, { recursive: true })
+    const target = join(dir, 'target.env')
+    writeFileSync(target, 'original')
+    const link = join(dir, 'out.env')
+    symlinkSync(target, link)
+    expect(() => writePrivateFile(link, 'secret-value')).toThrow(/symbolic link/)
+    expect(readFileSync(target, 'utf8')).toBe('original')
+  })
+
+  it('gitOutputStatus classifies a fresh subdirectory of a repo instead of outside-repo (L2)', () => {
+    const repo = join(ROOT, 'l2-repo')
+    mkdirSync(repo, { recursive: true })
+    execFileSync('git', ['init', '-q'], { cwd: repo })
+    writeFileSync(join(repo, 'tracked.env'), 'x')
+    execFileSync('git', ['add', 'tracked.env'], { cwd: repo })
+    expect(gitOutputStatus(join(repo, 'fresh-sub', 'out.env'))).toBe('untracked')
+    expect(gitOutputStatus(join(repo, 'tracked.env'))).toBe('tracked')
   })
 })

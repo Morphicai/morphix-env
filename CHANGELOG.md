@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.3
+
+### Fixed
+
+- **0.8.0 发版 review 遗留清理**（issue #9）：`export` 直跑 TTY 时警告 scrollback 风险；渲染输出的 git 风险判定走上溯最近存在目录（未建子目录不再误判仓外，macOS 符号链接路径 realpath 对齐）；`render`/`inject` 拒写 symlink 目标（防写穿与误 chmod）；插件超时/信号终止的错误归因带 signal 与 killed 信息；值表全部改 null-prototype（`__proto__` 键名不再触碰原型链）。文档明确"值中的 `mxenv://` 文本一律视为引用、无转义"与 `run --serve` 只挡组合 key 的边界。
+
 ## 0.12.2
 
 ### Fixed

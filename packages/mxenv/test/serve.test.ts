@@ -234,3 +234,27 @@ describe('run without --serve', () => {
     expect(result.stdout).not.toContain(expected)
   }, 20_000)
 })
+
+
+describe('issue #9 F5: prototype-pollution-safe serve values', () => {
+  it('a value stored under a __proto__ key is servable and never leaks through the prototype chain', async () => {
+    const secret = value('proto')
+    const values: Record<string, string> = Object.create(null)
+    values.__proto__ = secret
+    values.PLAIN = value('plain')
+    const server = await startSecretServer(values)
+    try {
+      const proto = await fetch(`${server.endpoint}/key/__proto__`, {
+        headers: { Authorization: `Bearer ${server.token}` },
+      })
+      expect(proto.status).toBe(200)
+      expect(await proto.text()).toBe(secret)
+      const shadow = await fetch(`${server.endpoint}/key/toString`, {
+        headers: { Authorization: `Bearer ${server.token}` },
+      })
+      expect(shadow.status).toBe(404)
+    } finally {
+      await server.close()
+    }
+  })
+})

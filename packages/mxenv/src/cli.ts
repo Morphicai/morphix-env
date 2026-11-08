@@ -298,7 +298,7 @@ function writeRunAudit(composition: EnvironmentComposition, startedAt: number, o
  * and remain servable too.
  */
 async function startServeFor(composition: EnvironmentComposition, verbose: boolean): Promise<SecretServer> {
-  const values: Record<string, string> = {}
+  const values: Record<string, string> = Object.create(null)
   for (const key of Object.keys(composition.provenance)) {
     const value = composition.environment[key]
     if (value !== undefined) values[key] = value
@@ -490,6 +490,10 @@ async function cmdExport(args: Args): Promise<number> {
   if (args.dryRun) {
     for (const key of keys) console.log(key)
     return 0
+  }
+  // TTY 直跑会把值留在终端 scrollback（issue #9 L1）——警告但不阻断。
+  if (process.stdout.isTTY) {
+    console.error('[mxenv] Warning: exporting to a TTY leaves secret values in your terminal scrollback — prefer eval "$(mxenv export)" or redirect stdout to a file.')
   }
   // Resolve mxenv:// references so export matches run's semantics: consumers
   // of `eval "$(mxenv export)"` get the same values a run child would.

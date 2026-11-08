@@ -59,7 +59,7 @@ function assertSafeGlobalFile(file: string, context: SourceContext, entry: Sourc
 }
 
 function resolveLocal(entry: SourceEntry, source: LocalSource, context: SourceContext): LoadedSource {
-  const values: Record<string, string> = {}
+  const values: Record<string, string> = Object.create(null)
   let found = false
 
   for (const rawFile of source.files) {
@@ -299,7 +299,7 @@ function resolvePlugin(entry: SourceEntry, source: PluginSource, context: Source
   const legacy = `mx-env-provider-${source.plugin}`
   // 首个成功执行的候选名对本源全程沿用，保证一次加载内行为一致。
   let command: string | null = null
-  const values: Record<string, string> = {}
+  const values: Record<string, string> = Object.create(null)
 
   for (const key of source.keys) {
     let output: string | null = null
@@ -316,7 +316,9 @@ function resolvePlugin(entry: SourceEntry, source: PluginSource, context: Source
         break
       } catch (error: any) {
         if (error?.code === 'ENOENT') continue
-        const reason = typeof error?.code === 'string' ? error.code : `exit ${error?.status ?? 'unknown'}`
+        const reason = error?.signal
+          ? `killed by signal ${error.signal}${error.killed ? ' (timeout or forced kill)' : ''}`
+          : typeof error?.code === 'string' ? error.code : `exit ${error?.status ?? 'unknown'}`
         throw new SourceError(entry.name, source.provider, `[mxenv] plugin source "${entry.name}" failed for key "${key}" (${reason}).`)
       }
     }

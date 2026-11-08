@@ -162,3 +162,25 @@ describe('provider source adapters', () => {
     expect(mocks.execFileSync).toHaveBeenCalledWith('doppler', expect.arrayContaining(['--project', 'test-project', '--config', 'dev']), expect.any(Object))
   })
 })
+
+
+describe('issue #9 F6: plugin failure attribution', () => {
+  it('a plugin killed by a signal attributes the signal, never "exit unknown"', async () => {
+    const error: any = new Error('Command failed')
+    error.signal = 'SIGTERM'
+    error.killed = true
+    mocks.execFileSync.mockImplementation(() => { throw error })
+    await expect(
+      loadSource(entry('killer', { provider: 'plugin', plugin: 'killer', keys: ['MXTEST_K'] } as any), context()),
+    ).rejects.toThrow(/killed by signal SIGTERM/)
+  })
+
+  it('a plugin exiting with a status still reports exit N', async () => {
+    const error: any = new Error('Command failed')
+    error.status = 3
+    mocks.execFileSync.mockImplementation(() => { throw error })
+    await expect(
+      loadSource(entry('bad', { provider: 'plugin', plugin: 'bad', keys: ['MXTEST_K'] } as any), context()),
+    ).rejects.toThrow(/exit 3/)
+  })
+})

@@ -174,7 +174,10 @@ function resolveEntries(layers: ConfigLayers, options: ComposeOptions): { name: 
  */
 export async function composeEnvironment(layers: ConfigLayers, options: ComposeOptions = {}): Promise<EnvironmentComposition> {
   const { name: profileName, entries } = resolveEntries(layers, options)
-  const environment: NodeJS.ProcessEnv = { ...(options.baseEnvironment || process.env) }
+  // Null-prototype carrier: composed keys come from env files and provider
+  // output — a key literally named `__proto__` must land as an own property,
+  // never trigger the Object.prototype setter (issue #9 F5).
+  const environment: NodeJS.ProcessEnv = Object.assign(Object.create(null), options.baseEnvironment || process.env)
   const owner = new Map<string, KeyProvenance>()
   const sourceStatuses: SourceStatus[] = []
   const homeDir = options.homeDir || homedir()

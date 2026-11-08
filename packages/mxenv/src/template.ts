@@ -1,6 +1,6 @@
 import { spawnSync } from 'child_process'
-import { chmodSync, mkdirSync, writeFileSync } from 'fs'
-import { basename, dirname, resolve } from 'path'
+import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from 'fs'
+import { basename, dirname, join, relative, resolve } from 'path'
 
 /** POSIX single-quote escaping so `eval "$(mxenv export)"` round-trips any value. */
 export function shellQuote(value: string): string {
@@ -69,9 +69,19 @@ export function renderTemplate(text: string, environment: NodeJS.ProcessEnv): { 
   return { output, missing: [...missing] }
 }
 
-/** Owner-only output: creates parent dirs 0700 and forces mode 0600 even on overwrite. */
+/** Owner-only output: creates parent dirs 0700 and forces mode 0600 even on
+ * overwrite. A symlink target is refused outright (issue #9 L4): writing
+ * through the link would both leak the value to the link's destination and
+ * chmod someone else's file. */
 export function writePrivateFile(path: string, content: string): void {
   const absolute = resolve(path)
+  try {
+    if (lstatSync(absolute).isSymbolicLink()) {
+      throw new Error(`[mxenv] refusing to write ${path}: it is a symbolic link — replace the link with a regular file first.`)
+    }
+  } catch (error: any) {
+    if (error?.code !== 'ENOENT') throw error
+  }
   mkdirSync(dirname(absolute), { recursive: true, mode: 0o700 })
   writeFileSync(absolute, content, { mode: 0o600 })
   chmodSync(absolute, 0o600)
@@ -86,13 +96,29 @@ export type GitOutputStatus = 'ignored' | 'untracked' | 'tracked' | 'outside-rep
  */
 export function gitOutputStatus(path: string): GitOutputStatus {
   const absolute = resolve(path)
-  const cwd = dirname(absolute)
-  const name = basename(absolute)
-  const inside = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd, encoding: 'utf8' })
+  // The output's directory may not exist yet (render creates it); probe from
+  // the nearest existing ancestor so "inside a repo" is detected for a fresh
+  // subdirectory too (issue #9 L2). Classification then runs against the
+  // repo-relative path from the work-tree root.
+  let probe = dirname(absolute)
+  for (;;) {
+    if (existsSync(probe)) break
+    const parent = dirname(probe)
+    if (parent === probe) break
+    probe = parent
+  }
+  // realpath everything before comparing: macOS tmpdirs live behind a /var ->
+  // /private/var symlink and `--show-toplevel` reports resolved paths.
+  const suffix = relative(probe, absolute)
+  const realAbsolute = suffix ? join(realpathSync(probe), suffix) : realpathSync(probe)
+  const inside = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: probe, encoding: 'utf8' })
   if (inside.status !== 0) return 'outside-repo'
-  const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', name], { cwd, encoding: 'utf8' })
+  const toplevel = inside.stdout.trim()
+  const rel = relative(toplevel, realAbsolute)
+  if (rel.startsWith('..')) return 'outside-repo'
+  const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', rel], { cwd: toplevel, encoding: 'utf8' })
   if (tracked.status === 0) return 'tracked'
-  const ignored = spawnSync('git', ['check-ignore', '-q', '--', name], { cwd, encoding: 'utf8' })
+  const ignored = spawnSync('git', ['check-ignore', '-q', '--', rel], { cwd: toplevel, encoding: 'utf8' })
   if (ignored.status === 0) return 'ignored'
   if (ignored.status === 1) return 'untracked'
   return 'outside-repo'
