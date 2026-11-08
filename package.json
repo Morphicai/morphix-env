@@ -1,6 +1,6 @@
 {
   "name": "morphix-env",
-  "version": "0.12.4",
+  "version": "0.13.0",
   "description": "Deprecated forwarding shim for mxenv — install `@morphixai/mxenv` (project) or `@morphixai/mxenv-cli` (global management) instead; this package forwards the legacy `mx-env`/`morphix-env` bins and re-exports the @morphixai/mxenv-core SDK facade.",
   "author": "MorphixAI <dev@morphixai.com>",
   "homepage": "https://github.com/Morphicai/morphix-env#readme",

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.13.0
+
+### Added
+
+- **`revealSingle` value capability (mxenv-core)**: the single-key reveal becomes a first-class L1 value capability — the one implementation behind every "show me this key's value" action (paired with `compose` as the value-capability duo). Discipline is built into the capability, not its callers: default locked state rejects reveal without an explicit authorization context; one resident value per slot (revealing a new key evicts the previous resident; short residence TTL; `revealResidenceRelease(slotId)` for explicit release); value-free `reveal` audit events on every request (success/locked/not-found/read-error, distinguished via the new optional `reason` field on `AuditEvent`); errors and audit records never contain values. Reveal reads the **stored source value** (outer-env same-name values never participate) and multi-file sources are scoped per file via `fileIndex`, mirroring `set`/`del`.
+- `readStoredValue` / `readStoredValueFromSource` low-level single-key read primitives (the narrow-read foundation shared with future consumers).
+
+### Changed
+
+- The visual editor's value echo (dotenvx + keychain) now goes through `revealSingle` — the editor session token is the authorization context, reveal audits collapse to exactly one `reveal` event per request, and closing the editor releases the resident value. The editor no longer reads stored values on its own; `dotenvxReadValue` is retired. Interaction semantics are unchanged (still source stored values, still one resident value per page).
+
+### Docs
+
+- SKILL.md / README / docs/ux-architecture.md now state the `compose`/`revealSingle` value-capability duo and the value-exposure red lines.
+
 ## 0.12.4
 
 ### Added
