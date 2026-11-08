@@ -20,4 +20,4 @@
 
 ## 4. 收口
 
-- [ ] 4.1 `openspec validate --strict` 通过后发版 0.13.1（三包 lockstep）并两机对齐，验证 npm 落地与 `skill show` 同版（**发布须用户逐项放行**）
+- [x] 4.1 `openspec validate --strict` 通过后发版 0.13.1（三包 lockstep）并两机对齐，验证 npm 落地与 `skill show` 同版（**发布须用户逐项放行**）
