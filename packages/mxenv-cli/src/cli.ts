@@ -32,6 +32,8 @@ interface Args {
   printEditorUrl: boolean
   source: string | null
   target: string | null
+  /** skill: hermes 分类目录（~/.hermes/skills/<category>/mxenv/），默认 devops。 */
+  hermesCategory: string | null
   to: string | null
   service: string | null
   force: boolean
@@ -58,7 +60,7 @@ function parseArgs(argv: string[]): Args {
     command: '', subArgs: [], positionals: [], envFiles: [], outFile: null, verbose: false,
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
-    target: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
+    target: null, hermesCategory: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
     write: false, remove: false, warnPlaintext: false, help: false, unknownFlags: [],
   }
 
@@ -98,6 +100,8 @@ function parseArgs(argv: string[]): Args {
       args.printEditorUrl = true
     } else if (arg === '--target') {
       if (argv[++i]) args.target = argv[i]
+    } else if (arg === '--hermes-category') {
+      if (argv[++i]) args.hermesCategory = argv[i]
     } else if (arg === '--to') {
       if (argv[++i]) args.to = argv[i]
     } else if (arg === '--service') {
