@@ -10,11 +10,11 @@ L2 run face for [mxenv](https://github.com/Morphicai/morphix-env) — the projec
 npm i -D @morphixai/mxenv
 ```
 
-> ⚠️ **Do not install `@morphixai/mxenv` and `@morphixai/mxenv-cli` globally side by side** — both register the `mxenv`/`mx-env`/`morphix-env` bin names and the later install silently takes over the symlinks. Keep this package as a project devDependency and install `mxenv-cli` globally (or vice versa, never both).
+> ⚠️ **Do not install `@morphixai/mxenv` and `@morphixai/mxenv-cli` globally side by side** — both register the `mxenv` bin name and the later install silently takes over the symlink. Keep this package as a project devDependency and install `mxenv-cli` globally (or vice versa, never both).
 
 ## Commands
 
-`mxenv run|export|inspect|render|inject|generate|fetch|migrate|audit|edit|doc|skill` — see `mxenv --help`. Old bin names `mx-env`/`morphix-env` remain as deprecated aliases in 0.12.x (removed in the 0.13.x line).
+`mxenv run|export|inspect|render|inject|generate|fetch|migrate|audit|edit|doc|skill` — see `mxenv --help`. The legacy bin names `mx-env`/`morphix-env` were removed in 0.13.x — invoke `mxenv` only.
 
 Machine-level extras (`shell-init`, and the Wave B `gui/global/host` faces) live in [`@morphixai/mxenv-cli`](https://www.npmjs.com/package/@morphixai/mxenv-cli).
 

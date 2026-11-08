@@ -38,7 +38,7 @@ npm install -g @morphixai/mxenv-cli      # 可选：机器级管理面（shell-i
 ```
 
 > ⚠️ **不要把 `@morphixai/mxenv` 与 `@morphixai/mxenv-cli` 同时全局安装**：两者都注册
-> `mxenv`/`mx-env`/`morphix-env` bin，后装者会静默接管符号链接。项目用 devDep，
+> `mxenv` bin，后装者会静默接管符号链接。项目用 devDep，
 > 全局只装 cli；若确要全局装运行面，就不要再装 cli。
 
 ## 配置（mxenv.config.json）
@@ -109,7 +109,7 @@ mxenv-cli shell-init [--write|--remove] # 为声明的命令生成 PATH shim（�
 
 ## 旧名迁移（0.12.x 过渡期）
 
-旧名 `mx-env` / `morphix-env` 在 0.12.x 仍可运行（stderr 弃用提示）：旧 bin、`mx-env.config.json`、`~/.mx-env/`、`mx-env-provider-*` 读侧兼容，写侧一律落新名；keychain 旧 service 名（`mx-env:<source>`）由配置携带照读，**无需重迁移**；`mx-env://` 引用已切换 `mxenv://`（旧 scheme 报错提示改用新名）。`shell-init` 已迁全局管理面 `mxenv-cli`（旧名 bin 经 alias 转发到当值入口仍可用，0.13.x 摘除 alias 后须用新名）。见到旧配置/旧路径时引导用户跑 `mxenv migrate --home`（copy → 旧目录改名 `~/.mx-env.backup-<ts>` 留备份 → 值级等价验证，失败自动还原；成功后重接 shim PATH；全程值不落输出、幂等）并改用新名，不必手工搬运。
+旧名垫片已随 0.13.x 摘除（0.12.0 到期公告）：旧 bin 名 `mx-env` / `morphix-env` 不再安装或转发——存量旧 shim（委派 `mx-env run`）会失效，引导用户重跑 `mxenv-cli shell-init` 再生成；`mx-env.config.json`、`mx-env-provider-*` 不再读取（见到旧配置文件给改名指引，引导改名为 `mxenv.config.json`）。仍在兼容面：keychain 旧 service 名（`mx-env:<source>`）由配置携带照读，**无需重迁移**；`~/.mx-env/` 读侧持续到用户跑完 `mxenv migrate --home`（copy → 旧目录改名 `~/.mx-env.backup-<ts>` 留备份 → 值级等价验证，失败自动还原；成功后重接 shim PATH；全程值不落输出、幂等）。`mx-env://` 引用报错提示改用 `mxenv://`。
 
 > 时序注：`~/.mx-env/` 读回落与 `migrate --home` 已随 mxenv-home-migration 落地；兼容窗持续到用户跑完 `migrate --home` 为止（其间写也落旧目录，`migrate --home` 后读写统一切到 `~/.mxenv/`）。
 

@@ -29,20 +29,19 @@ function writeProject(): string {
 }
 
 describe('package exports', () => {
-  it('maps "." to the SDK facade and "./cli"/bin to the forwarding stub', () => {
+  it('maps "." to the SDK facade only（bin 与 ./cli 转发随垫片移除退役）', () => {
     const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
       main: string
       types: string
-      bin: Record<string, string>
+      bin?: Record<string, string>
       exports: Record<string, { types: string; default: string }>
     }
     expect(manifest.main).toBe('./dist/index.js')
     expect(manifest.types).toBe('./dist/index.d.ts')
     expect(manifest.exports['.']).toEqual({ types: './dist/index.d.ts', default: './dist/index.js' })
-    // 0.12.x 收尾转发 stub：旧 bin 与 ./cli 都落 forward-cli.js（不得再悬空指 dist/cli.js）。
-    expect(manifest.exports['./cli']).toEqual({ types: './bin/forward-cli.d.ts', default: './bin/forward-cli.js' })
-    expect(manifest.bin['mx-env']).toBe('./bin/forward-cli.js')
-    expect(manifest.bin['morphix-env']).toBe('./bin/forward-cli.js')
+    // 垫片移除：旧 bin 与 ./cli 转发入口不再发布。
+    expect(manifest.exports['./cli']).toBeUndefined()
+    expect(manifest.bin).toBeUndefined()
   })
 
   it('dist facade .d.ts 钉住公开类型面（防 tsup dts 丢 type re-export）', () => {

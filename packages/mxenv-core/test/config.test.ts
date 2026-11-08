@@ -62,10 +62,13 @@ describe('loadConfig', () => {
 })
 
 describe('配置双读垫片（naming-migration 旧名垫片与弃用窗口）', () => {
-  it('仅旧名 mx-env.config.json 存在时回退读取', () => {
+  it('仅旧名 mx-env.config.json 存在时不读取并给改名指引（垫片移除）', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     writeFileSync(LEGACY_CONFIG_PATH, JSON.stringify({ envFiles: ['.env.legacy'] }))
 
-    expect(loadConfig().envFiles).toEqual(['.env.legacy'])
+    expect(loadConfig()).toEqual({})
+    expect(warn.mock.calls.map((c) => String(c[0])).join('\n')).toContain('mx-env.config.json')
+    warn.mockRestore()
   })
 
   it('双配置并存新名优先，忽略旧文件并提示清理', () => {

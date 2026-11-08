@@ -94,7 +94,7 @@ describe('plugin source adapter', () => {
     } catch (error: any) {
       expect(error).toBeInstanceOf(SourceError)
       expect(error.message).toContain('mxenv-provider-absent on PATH')
-      expect(error.message).toContain('mx-env-provider-absent')  // 0.12.x 垫片提示旧名亦可
+      expect(error.message).not.toContain('mx-env-provider')  // 垫片移除：不再提示旧名回退
     }
 
     const optional = await loadSource(
@@ -105,17 +105,15 @@ describe('plugin source adapter', () => {
     expect(optional.values).toEqual({})
   })
 
-  it('插件名双认：仅旧名 mx-env-provider-* 存在时回退可用', async () => {
+  it('仅旧名 mx-env-provider-* 存在时不回退（垫片移除）', async () => {
     write('bin/mx-env-provider-fallback', '#!/bin/sh\necho legacy-ok\n', 0o755)
-    const loaded = await loadSource(
+    await expect(loadSource(
       entry({ provider: 'plugin', plugin: 'fallback', keys: ['MXTEST_PLUGIN_A'] }),
       { homeDir: ROOT, environment: pluginPathEnv() },
-    )
-    expect(loaded.availability).toBe('loaded')
-    expect(loaded.values).toEqual({ MXTEST_PLUGIN_A: 'legacy-ok' })
+    )).rejects.toMatchObject({ message: expect.stringContaining('mxenv-provider-fallback on PATH') })
   }, 20_000)
 
-  it('插件名双认：新旧并存时新名优先', async () => {
+  it('新名唯一生效：旧名文件存在与否不影响新名解析', async () => {
     write('bin/mxenv-provider-both', '#!/bin/sh\necho new-name-wins\n', 0o755)
     write('bin/mx-env-provider-both', '#!/bin/sh\necho legacy-loses\n', 0o755)
     const loaded = await loadSource(

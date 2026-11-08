@@ -53,22 +53,25 @@ function safeParseConfig(path: string): MxEnvConfig {
 }
 
 /**
- * 0.12.x 垫片：项目配置读取 `mxenv.config.json` 优先、缺失时回退旧名
- * `mx-env.config.json`（naming-migration「旧名垫片与弃用窗口」）。双文件并存
- * 时只认新名并提示清理旧文件；写侧落新名的收口在 migrate（写前备份+改名）。
+ * 垫片移除（naming-migration「垫片移除与到期公告」）：0.13.x 起项目配置只读
+ * `mxenv.config.json`；旧名 `mx-env.config.json` 不再参与解析。检测到旧文件
+ * 时给改名指引（非静默空配置、不自动改写用户文件——design 决策 1）。
  */
 const LEGACY_CONFIG_FILE = 'mx-env.config.json'
 
 function loadProjectConfig(cwd: string): LoadedConfig {
   const primary = loadConfigAt(resolve(cwd, CONFIG_FILE))
-  const legacyPath = resolve(cwd, LEGACY_CONFIG_FILE)
+  const legacyExists = existsSync(resolve(cwd, LEGACY_CONFIG_FILE))
   if (primary.exists) {
-    if (existsSync(legacyPath)) {
-      console.warn(`[mxenv] 同时存在 ${CONFIG_FILE} 与旧名 ${LEGACY_CONFIG_FILE}：已读取新名，旧文件请删除`)
+    if (legacyExists) {
+      console.warn(`[mxenv] 同时存在 ${CONFIG_FILE} 与旧名 ${LEGACY_CONFIG_FILE}：旧文件已不再读取，请删除`)
     }
     return primary
   }
-  return loadConfigAt(legacyPath)
+  if (legacyExists) {
+    console.warn(`[mxenv] 发现旧名配置 ${LEGACY_CONFIG_FILE}：0.13.x 起不再读取，请改名为 ${CONFIG_FILE}（或运行 \`mxenv migrate --home\` 走既有迁移）`)
+  }
+  return primary
 }
 
 /** Reads one config file. It intentionally does not resolve or load source values. */
@@ -86,7 +89,7 @@ export function loadConfigAt(path: string): LoadedConfig {
   }
 }
 
-/** Reads the current project's mxenv.config.json (legacy name falls back). */
+/** Reads the current project's mxenv.config.json (legacy name is no longer read). */
 export function loadConfig(cwd = process.cwd()): MxEnvConfig {
   return loadProjectConfig(cwd).config
 }

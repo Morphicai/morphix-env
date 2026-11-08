@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.1
+
+### Removed (announced in 0.12.0 — the compat shims lasted one minor cycle)
+
+- **BREAKING — legacy bin names `mx-env` / `morphix-env` are gone.** They are no longer installed or forwarded anywhere (including the deprecated `morphix-env` npm package, which is now a pure SDK facade without bins). Invoke `mxenv` only. **If any generated shims still delegate to `mx-env run`, re-run `mxenv-cli shell-init` to regenerate them** — old shims stop working now that nothing forwards the legacy name.
+- **BREAKING — the `mx-env.config.json` read fallback is gone.** Only `mxenv.config.json` is read. When the old file is found alone, a rename hint is printed (it is never read or auto-renamed); double-file setups still warn about the stale copy.
+- **BREAKING — the `mx-env-provider-<plugin>` resolution fallback is gone.** Plugin sources resolve `mxenv-provider-<plugin>` only and report it as missing otherwise.
+- Stale `mx-env` / `morphix-env` symlinks left in a global bin directory by previous installs may linger after upgrading — remove them by hand; `mxenv` itself is unaffected.
+
+### Kept on purpose
+
+- `~/.mx-env/` directory reads remain until you run `mxenv migrate --home` (that window is tied to the migration, not to a version).
+- Keychain services named `mx-env:<source>` keep working — the name is carried in config, so there is nothing to migrate.
+
 ## 0.13.0
 
 ### Added

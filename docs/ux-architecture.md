@@ -30,10 +30,10 @@
 
 | 层 | 现状 | 目标 |
 |---|---|---|
-| CLI bin | `mx-env` / `morphix-env` | `mxenv`（旧名留 alias 一个 minor 周期） |
+| CLI bin | `mx-env` / `morphix-env` | `mxenv`（旧名 alias 已随 0.13.x 垫片移除） |
 | npm 包 | `morphix-env` | `@morphixai/mxenv` / `@morphixai/mxenv-core` / `@morphixai/mxenv-cli` 三包（见 2.2；npm 名相似度政策拒 unscoped `mxenv`，2026-11-07 定夺走 `@morphixai/*` scope） |
 | URI scheme | `mx-env://` | `mxenv://`（**抢在 Trellis W2 实施前定案**） |
-| 配置文件 / 全局目录 | `mx-env.config.json` / `~/.mx-env/` | `mxenv.config.json` / `~/.mxenv/`（旧名兼容读 + migrate 迁移） |
+| 配置文件 / 全局目录 | `mx-env.config.json` / `~/.mx-env/` | `mxenv.config.json` / `~/.mxenv/`（config 旧名读回落已移除；`~/.mx-env/` 兼容读持续到 `migrate --home`） |
 
 ### 2.2 分层架构：L0–L3，依赖只向下，通用能力下沉
 
