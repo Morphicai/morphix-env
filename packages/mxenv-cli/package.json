@@ -1,7 +1,7 @@
 {
   "name": "@morphixai/mxenv-cli",
-  "version": "0.12.1",
-  "description": "L3 management face for mxenv \u2014 machine-level extras like shell-init.",
+  "version": "0.12.2",
+  "description": "L3 management face for mxenv — machine-level extras like shell-init.",
   "license": "MIT",
   "author": "MorphixAI <dev@morphixai.com>",
   "homepage": "https://github.com/Morphicai/morphix-env#readme",
