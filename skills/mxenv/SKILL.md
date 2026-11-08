@@ -17,6 +17,7 @@ mxenv 是密钥**组装层**，不是新的保险库：值永远留在 provider�
 2. 只用 key 名验证状态：`mxenv inspect --profile <name>` 输出 key → source 归属与状态，不含值。
 3. 增删改密钥一律走可视化编辑器：`mxenv edit`（可加 `--profile <name>` / `--source <name>` 收窄范围），用户在本地浏览器完成，值不经过 CLI 与对话。
 4. 进程获得密钥的唯一方式是 `mxenv run`；子进程 stdout/stderr 中的注入值会被替换为 `[REDACTED]`。
+5. 值揭示（编辑器"显示"）经 `revealSingle` 唯一实现：逐键、单值驻留、审计只记 key 名；需要看值时引导用户走编辑器，不在对话/终端展示值。
 
 ## 推荐用法（收敛与轮换）
 

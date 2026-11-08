@@ -10,6 +10,8 @@ import {
   isDotenvxEncrypted,
   loadKeytar,
   parseEnvFile,
+  revealResidenceRelease,
+  revealSingle,
   writeAudit,
   type EnvironmentComposition,
   type SourceEntry,
@@ -93,26 +95,6 @@ function dotenvxCli(): string {
   return dotenvxCliCache
 }
 
-/**
- * Read one dotenvx value in-process (browser-bound, never printed). `--overload`
- * makes the file value win over same-named variables of the allowlisted child
- * env (without it `get HOME` would return the child's HOME — verified on dotenvx
- * 2.30). `get` prints the bare value plus one trailing newline; exactly that
- * newline is removed and nothing else. Honest limitation: every dotenvx load
- * path expands `$name` sequences, so a legacy stored value containing `$` is
- * revealed in its expanded (consumer-visible) form — `set` refuses to store new
- * `$` values, matching migrate's semantics.
- */
-function dotenvxReadValue(file: string, key: string): string {
-  const raw = execFileSync(dotenvxCli(), ['get', key, '-f', file, '--overload'], {
-    env: dotenvxEnv(file),
-    cwd: dirname(file),
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-  })
-  return raw.endsWith('\n') ? raw.slice(0, -1) : raw
-}
-
 function dotenvxMutate(action: 'set' | 'del', key: string, value: string | undefined, file: string): void {
   // `--` keeps dash-leading values (e.g. `-f`) from being parsed as dotenvx
   // options (verified on 2.30). Known limitation: the value travels as a CLI
@@ -120,7 +102,7 @@ function dotenvxMutate(action: 'set' | 'del', key: string, value: string | undef
   // no stdin/env channel for `set`; probes 2026-11-06). The read path is
   // unaffected.
   const args = action === 'set' ? ['set', key, '-f', file, '--', value ?? ''] : ['del', key, '-f', file]
-  // Never logs CLI output; per-file env as in dotenvxReadValue.
+  // Never logs CLI output; per-file env keeps dotenvx's .env.keys lookup stable.
   execFileSync(dotenvxCli(), args, { env: dotenvxEnv(file), cwd: dirname(file), stdio: ['ignore', 'ignore', 'ignore'] })
 }
 
@@ -302,6 +284,7 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
         if (req.method === 'POST') {
           const body = await requestBody(req)
           if (body.get('action') === 'close') {
+            revealResidenceRelease(state.token)
             const started = Date.now()
             auditEditor(state, null, 'close', [], 'success', started)
             respond(res, 200, renderEditorHtml('Session ended', closedUiState(state)))
@@ -364,9 +347,9 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
         }
         try {
           if (action === 'reveal') {
-            const value = dotenvxReadValue(file, key)
-            auditEditor(state, entry, 'reveal', [key], 'success', started)
-            return respond(res, 200, renderEditorHtml('Edit dotenvx source', localUiState(state, entry, fileIndex, { revealed: { key, value } })))
+            // 值揭示唯一实现（value-reveal spec）：授权=编辑会话上下文；审计由能力记账。
+            const revealed = await revealSingle({ key, entry, fileIndex, subject: 'editor', slotId: state.token, authorized: true, profileName: state.profileName, options: { homeDir: state.homeDir } })
+            return respond(res, 200, renderEditorHtml('Edit dotenvx source', localUiState(state, entry, fileIndex, { revealed: { key, value: revealed.value } })))
           }
           if (action === 'delete') {
             dotenvxMutate('del', key, undefined, file)
@@ -376,8 +359,11 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
           dotenvxMutate('set', key, body.get('value') || '', file)
           auditEditor(state, entry, 'set', [key], 'success', started)
           return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, 'set', key, fileIndex)))
-        } catch {
-          auditEditor(state, entry, action, [key], 'failure', started)
+        } catch (editorErr) {
+          // reveal 的能力内失败已由 revealSingle 记账（audited 标）；其余补记，保证每次请求恰一条事件。
+          if (action !== 'reveal' || !(editorErr as { audited?: boolean } | null)?.audited) {
+            auditEditor(state, entry, action, [key], 'failure', started)
+          }
           return respond(res, 400, renderEditorHtml(action === 'reveal' ? 'Read failed' : 'Edit failed', actionErrorState(state, action)))
         }
       }
@@ -397,10 +383,9 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
           const keytar = await requireKeytar()
           if (action === 'reveal') {
             const credentials = await keytar.findCredentials(entry.source.service)
-            const found = credentials.find((candidate) => candidate.account === account)
-            if (!found) throw new Error('Unknown account')
-            auditEditor(state, entry, 'reveal', [account], 'success', started)
-            return respond(res, 200, renderEditorHtml('Edit Keychain source', keychainPageState(state, entry, credentials, { key: account, value: found.password })))
+            // 值揭示唯一实现（value-reveal spec）：取值走能力（含 not-found 语义），列表仅取 account 名。
+            const revealed = await revealSingle({ key: account, entry, subject: 'editor', slotId: state.token, authorized: true, profileName: state.profileName, options: { homeDir: state.homeDir } })
+            return respond(res, 200, renderEditorHtml('Edit Keychain source', keychainPageState(state, entry, credentials, { key: account, value: revealed.value })))
           }
           if (action === 'delete') {
             await keytar.deletePassword(entry.source.service, account)
@@ -410,8 +395,10 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
           await keytar.setPassword(entry.source.service, account, body.get('value') || '')
           auditEditor(state, entry, 'set', [account], 'success', started)
           return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, 'set', account, 0)))
-        } catch {
-          auditEditor(state, entry, action, [account], 'failure', started)
+        } catch (editorErr) {
+          if (action !== 'reveal' || !(editorErr as { audited?: boolean } | null)?.audited) {
+            auditEditor(state, entry, action, [account], 'failure', started)
+          }
           return respond(res, 400, renderEditorHtml(action === 'reveal' ? 'Read failed' : 'Edit failed', actionErrorState(state, action)))
         }
       }

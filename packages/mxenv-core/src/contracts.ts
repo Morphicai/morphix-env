@@ -289,6 +289,8 @@ export interface AuditEvent {
    * events carry key names only, never values.
    */
   action?: 'set' | 'delete' | 'reveal' | 'close'
+  /** Value-free reveal outcome detail (`locked` / `not-found` / `read-error`). */
+  reason?: string
 }
 
 // ─── `mxenv://` 引用语法（纯解析层） ──────────────────────────────

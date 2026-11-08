@@ -219,6 +219,13 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
 
 type KeytarModule = typeof import('keytar')
 let keytarModule: KeytarModule | null | undefined
+let keytarLoaderOverride: (() => Promise<KeytarModule | null>) | null = null
+
+/** 测试专用注入点（非能力 API）：覆写 keytar 加载器；传 null 恢复默认并清缓存。 */
+export function __setKeytarLoaderForTests(loader: (() => Promise<KeytarModule | null>) | null): void {
+  keytarLoaderOverride = loader
+  keytarModule = undefined
+}
 
 /**
  * keytar is an optional native module. Load it lazily so machines where the
@@ -226,6 +233,7 @@ let keytarModule: KeytarModule | null | undefined
  * source; only an actual os-keychain source reports the missing module.
  */
 export async function loadKeytar(): Promise<KeytarModule | null> {
+  if (keytarLoaderOverride) return keytarLoaderOverride()
   if (keytarModule !== undefined) return keytarModule
   try {
     const imported = await import('keytar')

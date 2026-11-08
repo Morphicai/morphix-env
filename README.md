@@ -217,7 +217,7 @@ mxenv skill install --target hermes    # ~/.hermes/skills/devops/mxenv/ — the 
 
 Installs are idempotent, and a skill file the user has customized is never overwritten without `--force`. `mxenv skill show` reports each target's install state and template drift.
 
-When the consumer is an agent, prefer `mxenv run --serve -- <command>`: values never enter any process environment, and the agent fetches them one at a time over loopback. Keep secrets in encrypted storage (`mxenv migrate`) and this forms the chain where an agent never touches plaintext — at rest or in env. (Once native keychain ACLs land, the keychain itself can additionally gate access behind Touch ID.)
+Human-facing value reveal (the editor's "show" action, and later the daemon panel) goes through the core `revealSingle` capability — one key at a time, one resident value at a time, and a value-free audit event per reveal. When the consumer is an agent, prefer `mxenv run --serve -- <command>`: values never enter any process environment, and the agent fetches them one at a time over loopback. Keep secrets in encrypted storage (`mxenv migrate`) and this forms the chain where an agent never touches plaintext — at rest or in env. (Once native keychain ACLs land, the keychain itself can additionally gate access behind Touch ID.)
 
 For project-specific guidance, `mxenv doc --profile <name>` generates a value-free skill listing this project's resolved key names and their winning sources (`.agents/skills/mxenv/SKILL.md`).
 
