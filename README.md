@@ -248,7 +248,7 @@ The npm package `morphix-env` ships one final release and is deprecated in favor
 
 1. In `package.json`, swap the dependency: drop `"morphix-env"`, add `"@morphixai/mxenv": "^0.12.0"` as a devDependency (the run face carries `run`/`export`/`inspect`/`migrate`/`edit`). SDK consumers add `@morphixai/mxenv-core`; for machine-level `shell-init` install `@morphixai/mxenv-cli` globally — never both packages globally.
 2. `npm i`. npm scripts keep working as-is: project-local bins always win over global ones.
-3. Rename invocations to `mxenv` (old bin names stay as warning shims through 0.12.x and are removed in 0.13). `mx-env shell-init` becomes `mxenv-cli shell-init`.
+3. Rename invocations to `mxenv` (old bin names stay as warning shims through 0.12.x and are removed in the 0.13.x line). `mx-env shell-init` becomes `mxenv-cli shell-init`.
 4. Config and data need no immediate rewrite — 0.12.x still reads `mx-env.config.json`, `~/.mx-env/`, `mx-env-provider-*`, and keychain services named `mx-env:<source>`; every write lands on the new names. Do rename reference strings `mx-env://profile/KEY` → `mxenv://profile/KEY` — the old scheme is rejected with a hint.
 5. Once per machine, move the global store: `mxenv migrate --home` (copy → value-level equivalence check → timestamped backup of the old directory).
 6. If you used to run project commands from a global install (`mx-env run …`), switch to the project-local binary (`npx mxenv run …` or an npm script) — the global management CLI (`mxenv-cli`) does not ship project commands.
