@@ -93,6 +93,8 @@ Choosing between Infisical and Doppler still depends on each provider's own iden
 
 This is leakage minimization, not a cryptographic boundary: a process that receives a secret can still transform or exfiltrate it deliberately. For a high-risk agent capability, use a provider proxy/broker as a separate security design rather than passing that credential through `run`.
 
+There is no escaping in reference resolution: any `mxenv://<profile>/<KEY>` text inside a composed value is treated as a reference on `run`/`export`/`render`/`generate` — including values that merely happen to contain the pattern. To deliver such text literally, alter the stored value (e.g. split the substring) before it is composed.
+
 ## On-demand secrets with `run --serve`
 
 `mxenv run --serve -- <command>` (modeled on aws-vault's `--ecs-server`) starts a loopback HTTP server on 127.0.0.1 at a random port that shares the child's lifetime:
@@ -100,6 +102,7 @@ This is leakage minimization, not a cryptographic boundary: a process that recei
 - Composed non-public values never enter the child environment — not the direct child, its descendants, `/proc/<pid>/environ`, or core dumps. The child receives only `MXENV_ENDPOINT` and a random `MXENV_TOKEN`, and the token is redacted from child output like any injected value. Honest caveat on token visibility: an environment-delivered capability token is readable by same-uid processes on Linux via the child's `/proc/<pid>/environ` — the same inherent property as aws-vault's `--ecs-server`; the *values* themselves still appear in no process environment anywhere.
 - The child fetches one value at a time: `mxenv fetch <KEY>` (thin client that reads endpoint/token from its own environment and prints the exact value with no trailing newline), or a direct `GET /key/<KEY>` with `Authorization: Bearer $MXENV_TOKEN`. The endpoint answers 401 without the token and 404 for unknown keys; no request or value is ever logged.
 - Browser-public keys (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`) stay in the environment so build tools can inline them; they remain servable as well.
+- Only keys composed by mxenv are withheld — variables already exported in the invoking shell pass through to the child unchanged. `--serve` narrows what mxenv injects; it never scrubs the inherited environment.
 - The server is destroyed the moment the child exits (and dies with the parent process itself), so no listener outlives the run.
 
 `mxenv run` without `--serve` is unchanged: values are injected into the environment and redacted from forwarded output.

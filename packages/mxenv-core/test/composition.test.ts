@@ -183,3 +183,20 @@ describe('configuration validation', () => {
     expect(errors).toContain('fixture: remote source "remote" cannot be optional')
   })
 })
+
+
+describe('issue #9 F5: prototype-pollution-safe value maps', () => {
+  it('a key literally named __proto__ lands as an own property and never pollutes prototypes', async () => {
+    // Reachable injection paths (plugin-declared keys, baseEnvironment) must
+    // land as own properties. File-sourced `__proto__` keys are dropped one
+    // layer earlier at the `dotenv` library boundary (plain-object assignment
+    // to __proto__ is a silent no-op) — covered by the map safety below.
+    const result = await compose('proto-key', () => {}, {
+      baseEnvironment: { ['__proto__']: 'poison', SAFE: 'ok' } as NodeJS.ProcessEnv,
+    })
+    expect(Object.prototype.hasOwnProperty.call(result.environment, '__proto__')).toBe(true)
+    expect((result.environment as Record<string, string>)['__proto__']).toBe('poison')
+    expect(result.environment.SAFE).toBe('ok')
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+})

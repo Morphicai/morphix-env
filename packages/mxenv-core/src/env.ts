@@ -54,7 +54,7 @@ const PUBLIC_PREFIXES = ['NEXT_PUBLIC_', 'VITE_', 'EXPO_PUBLIC_']
 
 /** 从 process.env 中提取客户端公开变量 */
 export function extractPublicVars(environment: NodeJS.ProcessEnv = process.env): Record<string, string> {
-  const vars: Record<string, string> = {}
+  const vars: Record<string, string> = Object.create(null)
   for (const [key, value] of Object.entries(environment)) {
     if (value && PUBLIC_PREFIXES.some(p => key.startsWith(p))) {
       vars[key] = value
