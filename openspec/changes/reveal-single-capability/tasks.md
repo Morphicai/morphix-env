@@ -16,4 +16,4 @@
 
 - [x] 3.1 运行 `pnpm -r test` 全门与两包 typecheck，验证全部通过（不以单包测试代替）
 - [x] 3.2 文档口径同步：SKILL.md/README 的值能力表述补 revealSingle（compose/revealSingle 双件套），`docs/ux-architecture.md` 状态行注记本 change 落地，验证文档互校无矛盾表述
-- [ ] 3.3 发版 `mxenv-core`（minor）+ `mxenv`（跟随）并两机对齐，验证 npm 落地与 `skill show` 同版（**发布须用户逐项放行**）
+- [x] 3.3 发版 `mxenv-core`（minor）+ `mxenv`（跟随）并两机对齐，验证 npm 落地与 `skill show` 同版（**发布须用户逐项放行**）——0.13.0 已发布（发版含 Linux CI 平台守卫回归修复 a1cb84e），两机七副本 hash 同版
