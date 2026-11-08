@@ -1,7 +1,7 @@
 {
   "name": "morphix-env",
   "version": "0.13.0",
-  "description": "Deprecated forwarding shim for mxenv — install `@morphixai/mxenv` (project) or `@morphixai/mxenv-cli` (global management) instead; this package forwards the legacy `mx-env`/`morphix-env` bins and re-exports the @morphixai/mxenv-core SDK facade.",
+  "description": "Deprecated SDK facade for mxenv — install `@morphixai/mxenv` (project) or `@morphixai/mxenv-cli` (global management) instead; this package re-exports the @morphixai/mxenv-core SDK. The legacy `mx-env`/`morphix-env` bins and `morphix-env/cli` forwarder were removed in 0.13.x.",
   "author": "MorphixAI <dev@morphixai.com>",
   "homepage": "https://github.com/Morphicai/morphix-env#readme",
   "repository": {
@@ -11,20 +11,12 @@
   "bugs": {
     "url": "https://github.com/Morphicai/morphix-env/issues"
   },
-  "bin": {
-    "morphix-env": "./bin/forward-cli.js",
-    "mx-env": "./bin/forward-cli.js"
-  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./cli": {
-      "types": "./bin/forward-cli.d.ts",
-      "default": "./bin/forward-cli.js"
     },
     "./package.json": "./package.json"
   },
@@ -36,7 +28,6 @@
     "prepublishOnly": "node scripts/prepublish-guard.mjs && pnpm test"
   },
   "files": [
-    "bin",
     "dist",
     "docs/logo.svg",
     "SECURITY.md"
@@ -71,7 +62,6 @@
     "vitest": "^4.1.1"
   },
   "dependencies": {
-    "@morphixai/mxenv": "^0.12.0",
-    "@morphixai/mxenv-core": "^0.12.0"
+    "@morphixai/mxenv-core": "^0.13.0"
   }
 }

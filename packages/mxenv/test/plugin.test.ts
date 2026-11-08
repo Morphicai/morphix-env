@@ -36,7 +36,7 @@ beforeEach(() => {
   rmSync(ROOT, { recursive: true, force: true })
   mkdirSync(PLUGIN_DIR, { recursive: true })
   mkdirSync(HOME, { recursive: true })
-  write('bin/mx-env-provider-fake', PLUGIN_SCRIPT, 0o755)
+  write('bin/mxenv-provider-fake', PLUGIN_SCRIPT, 0o755)
 })
 
 afterEach(() => {

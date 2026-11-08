@@ -302,42 +302,33 @@ const PLUGIN_TIMEOUT_MS = 30_000
 
 /**
  * Runs `mxenv-provider-<plugin> <KEY>` once per declared key (legacy
- * `mx-env-provider-<plugin>` accepted as fallback while the 0.12.x shim window
- * lasts; new name wins when both exist). The plugin's stdout is the value (one
+ * `mx-env-provider-<plugin>` is no longer resolved — naming-migration
+ * 「垫片移除与到期公告」). The plugin's stdout is the value (one
  * trailing line ending stripped); its stderr never reaches the terminal
  * because it may contain sensitive material.
  */
 function resolvePlugin(entry: SourceEntry, source: PluginSource, context: SourceContext): LoadedSource {
   const primary = `mxenv-provider-${source.plugin}`
-  const legacy = `mx-env-provider-${source.plugin}`
-  // 首个成功执行的候选名对本源全程沿用，保证一次加载内行为一致。
-  let command: string | null = null
   const values: Record<string, string> = Object.create(null)
 
   for (const key of source.keys) {
     let output: string | null = null
-    const candidates: string[] = command ? [command] : [primary, legacy]
-    for (const candidate of candidates) {
-      try {
-        output = execFileSync(candidate, [key], {
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'pipe'],
-          env: { ...process.env, ...context.environment },
-          timeout: PLUGIN_TIMEOUT_MS,
-        })
-        command = candidate
-        break
-      } catch (error: any) {
-        if (error?.code === 'ENOENT') continue
-        const reason = error?.signal
-          ? `killed by signal ${error.signal}${error.killed ? ' (timeout or forced kill)' : ''}`
-          : typeof error?.code === 'string' ? error.code : `exit ${error?.status ?? 'unknown'}`
-        throw new SourceError(entry.name, source.provider, `[mxenv] plugin source "${entry.name}" failed for key "${key}" (${reason}).`)
+    try {
+      output = execFileSync(primary, [key], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ...context.environment },
+        timeout: PLUGIN_TIMEOUT_MS,
+      })
+    } catch (error: any) {
+      if (error?.code === 'ENOENT') {
+        if (source.optional) return { name: entry.name, provider: source.provider, values: {}, availability: 'missing-optional' }
+        throw new SourceError(entry.name, source.provider, `[mxenv] plugin source "${entry.name}" needs ${primary} on PATH.`)
       }
-    }
-    if (output === null) {
-      if (source.optional) return { name: entry.name, provider: source.provider, values: {}, availability: 'missing-optional' }
-      throw new SourceError(entry.name, source.provider, `[mxenv] plugin source "${entry.name}" needs ${primary} on PATH (0.12.x 内旧名 ${legacy} 亦可).`)
+      const reason = error?.signal
+        ? `killed by signal ${error.signal}${error.killed ? ' (timeout or forced kill)' : ''}`
+        : typeof error?.code === 'string' ? error.code : `exit ${error?.status ?? 'unknown'}`
+      throw new SourceError(entry.name, source.provider, `[mxenv] plugin source "${entry.name}" failed for key "${key}" (${reason}).`)
     }
     values[key] = output.endsWith('\r\n') ? output.slice(0, -2) : output.endsWith('\n') ? output.slice(0, -1) : output
   }

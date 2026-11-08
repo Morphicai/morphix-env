@@ -22,7 +22,7 @@ function findDotenvxBin(): string {
   }
 }
 const REPO_DOTENVX = findDotenvxBin()
-const TMP = join(tmpdir(), `mx-env-migrate-${randomUUID()}`)
+const TMP = join(tmpdir(), `mxenv-migrate-${randomUUID()}`)
 const HOME = join(TMP, 'home')
 const secretValue = (label: string) => `mxenv_migrate_${label}_${randomUUID().replace(/-/g, '')}`
 // 失败注入用 macOS 独有的 chflags uchg——非 darwin 跳过而非假红（Linux/CI 可移植性）。
@@ -112,67 +112,11 @@ describe('executeUnit -> dotenvx', () => {
       // file at its full original path. With an indexOf bug the restore lands
       // on `a` and the original stays encrypted.
       expect(outcome.status).toBe('failed')
+      // 声称即闭合（review S2）：回滚措辞必须与状态一致出现。
+      expect(outcome.detail).toContain('restored from backup')
       expect(readFileSync(join(TMP, marked), 'utf8')).toContain(value)
     } finally {
       chmodSync(join(TMP, 'mxenv.config.json'), 0o644)
-    }
-  }, 30_000)
-
-  it('写只落新名：读自旧名 mx-env.config.json 的改写先备份再改名至 mxenv.config.json', async () => {
-    const value = secretValue('rename')
-    // 仅旧名配置存在（读回落路径）：改写 SHALL 落新名并维持单一配置事实源。
-    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
-      sources: { plain: { provider: 'local', files: ['.env.local'] } },
-      profiles: { dev: { sources: ['plain'] } },
-      defaultProfile: 'dev',
-    }, null, 2))
-    writeFileSync(join(TMP, '.env.local'), `REN_A=${value}\n`)
-
-    const [unit] = discoverPlaintextUnits(layers(), HOME)
-    expect(unit.configPath!.endsWith('mx-env.config.json')).toBe(true)
-    const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
-    expect(outcome.status).toBe('migrated')
-
-    // 新名文件是唯一事实源：改写落 mxenv.config.json，旧名文件已改名不复存在。
-    expect(existsSync(join(TMP, 'mxenv.config.json'))).toBe(true)
-    expect(existsSync(join(TMP, 'mx-env.config.json'))).toBe(false)
-    const rewritten = JSON.parse(readFileSync(join(TMP, 'mxenv.config.json'), 'utf8'))
-    expect(rewritten.sources.plain.provider).toBe('dotenvx')
-    // 改名前备份在场（可回滚）。
-    const backup = outcome.backups.find((b) => b.includes('mx-env.config.json'))
-    expect(backup).toBeTruthy()
-    expect(existsSync(backup!)).toBe(true)
-
-    const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
-    expect(composition.environment.REN_A).toBe(value)
-  }, 30_000)
-
-  itDarwin('回滚闭合：rename 失败（配置锁定）时还原回原路径、组合等值', async () => {
-    const value = secretValue('rbrenfail')
-    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
-      sources: { plain: { provider: 'local', files: ['.env.local'] } },
-      profiles: { dev: { sources: ['plain'] } },
-      defaultProfile: 'dev',
-    }, null, 2))
-    writeFileSync(join(TMP, '.env.local'), `RB_B=${value}\n`)
-    // uchg 锁定配置：rename 必败——命中"改名未发生"分支的还原目标语义。
-    expect(spawnSync('chflags', ['uchg', join(TMP, 'mx-env.config.json')]).status).toBe(0)
-    try {
-      const [unit] = discoverPlaintextUnits(layers(), HOME)
-      const outcome = await executeUnit(unit, 'dotenvx', {}, HOME)
-      expect(outcome.status).toBe('failed')
-      expect(outcome.detail).toContain('restored from backup')
-      // rename 未发生：还原目标=原路径，不产生新名文件。
-      expect(existsSync(join(TMP, 'mxenv.config.json'))).toBe(false)
-      const config = JSON.parse(readFileSync(join(TMP, 'mx-env.config.json'), 'utf8'))
-      expect(config.sources.plain.provider).toBe('local')
-      // encrypt 已就地改写明文——回滚须靠备份回写，组合等值迁移前。
-      expect(readFileSync(join(TMP, '.env.local'), 'utf8')).toContain(value)
-      expect(existsSync(join(TMP, '.env.keys'))).toBe(false)
-      const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
-      expect(composition.environment.RB_B).toBe(value)
-    } finally {
-      spawnSync('chflags', ['nouchg', join(TMP, 'mx-env.config.json')])
     }
   }, 30_000)
 
@@ -433,48 +377,6 @@ describe('executeUnit -> keychain', () => {
       expect(readFileSync(join(TMP, '.env.local'), 'utf8')).toContain(newValue)
     } finally {
       chmodSync(join(TMP, 'mxenv.config.json'), 0o644)
-      for (const credential of await keytar.findCredentials(service)) {
-        await keytar.deletePassword(service, credential.account)
-      }
-    }
-  }, 30_000)
-
-  itDarwin('回滚闭合：改名已发生的配置还原到新名生效路径（rmSync 失败注入）', async () => {
-    const keytar = await loadKeytar()
-    if (!keytar) {
-      console.warn('[mxenv test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
-      return
-    }
-    const service = `mxenv-test-${randomUUID()}`
-    const value = secretValue('rbrename')
-    // 仅旧名配置存在 → rewriteDeclaredSource 走 rename 分支（改名至新名再写）。
-    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({
-      sources: { plain: { provider: 'local', files: ['.env.local'] } },
-      profiles: { dev: { sources: ['plain'] } },
-      defaultProfile: 'dev',
-    }, null, 2))
-    writeFileSync(join(TMP, '.env.local'), `RB_A=${value}\n`)
-    // 锁定明文：rewrite（含 rename）之后的 rmSync 必败——命中"删除失败"窗口。
-    // uchg 在 finally 解锁，保证 afterEach 可清理。
-    expect(spawnSync('chflags', ['uchg', join(TMP, '.env.local')]).status).toBe(0)
-    try {
-      const [unit] = discoverPlaintextUnits(layers(), HOME)
-      expect(unit.configPath!.endsWith('mx-env.config.json')).toBe(true)
-      const outcome = await executeUnit(unit, 'keychain', { service }, HOME)
-      expect(outcome.status).toBe('failed')
-      // 声称还原时状态必须真的闭合：否则回滚形同虚设（review S2）。
-      expect(outcome.detail).toContain('restored from backup')
-      // 生效配置=新名文件且内容=迁移前声明（读侧双读优先新名，还原到旧名即断链）。
-      const effective = JSON.parse(readFileSync(join(TMP, 'mxenv.config.json'), 'utf8'))
-      expect(effective.sources.plain.provider).toBe('local')
-      expect(existsSync(join(TMP, 'mx-env.config.json'))).toBe(false)
-      // 明文完好、keychain 无孤儿键 → 组合等值迁移前。
-      expect(readFileSync(join(TMP, '.env.local'), 'utf8')).toContain(value)
-      expect(await keytar.findCredentials(service)).toEqual([])
-      const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
-      expect(composition.environment.RB_A).toBe(value)
-    } finally {
-      spawnSync('chflags', ['nouchg', join(TMP, '.env.local')])
       for (const credential of await keytar.findCredentials(service)) {
         await keytar.deletePassword(service, credential.account)
       }

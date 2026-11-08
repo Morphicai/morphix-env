@@ -48,11 +48,9 @@
   },
   "bin": {
     "mxenv": "./dist/cli.js",
-    "mx-env": "./dist/cli.js",
-    "morphix-env": "./dist/cli.js",
     "mxenv-cli": "./dist/cli.js"
   },
   "dependencies": {
-    "@morphixai/mxenv-core": "^0.12.0"
+    "@morphixai/mxenv-core": "^0.13.0"
   }
 }

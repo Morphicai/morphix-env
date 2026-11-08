@@ -53,8 +53,8 @@ export interface DopplerSource extends SourceBase {
 
 /**
  * External provider plugin: any executable named `mxenv-provider-<plugin>`
- * found on PATH (legacy `mx-env-provider-<plugin>` accepted as fallback while
- * the 0.12.x shim window lasts; new name wins when both exist). It is invoked
+ * found on PATH (legacy `mx-env-provider-<plugin>` is no longer resolved).
+ * It is invoked
  * once per key with the key name as argv[1] and writes the value to stdout
  * (one trailing line ending stripped). Provider login/bootstrap stays inside
  * the plugin, never in repository config.

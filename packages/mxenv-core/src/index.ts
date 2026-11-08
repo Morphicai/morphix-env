@@ -3,7 +3,6 @@
 // 本入口暴露（消费者面不倒退）。值能力窄暴露（compose/revealSingle 唯一实现）
 // 收口见任务 2.3：compose = composeEnvironment（唯一实现在 composition）；
 // revealSingle 暂无既有实现可迁（详见 package-split 2.3 处置记录）。
-export * from './bin-compat'
 export * from './contracts'
 export * from './audit'
 export * from './composition'

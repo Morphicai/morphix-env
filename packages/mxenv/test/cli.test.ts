@@ -42,33 +42,12 @@ afterEach(() => {
 // ─── CLI 基本功能 ─────────────────────────────────────────
 
 describe('CLI basic', () => {
-  it('publishes mxenv as the primary bin, with mx-env/morphix-env as deprecated aliases', () => {
+  it('publishes mxenv as the only bin（垫片移除：旧名不再安装）', () => {
     const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as { bin: Record<string, string> }
+    expect(Object.keys(manifest.bin)).toEqual(['mxenv'])
     expect(manifest.bin['mxenv']).toBe('./dist/cli.js')
-    expect(manifest.bin['mx-env']).toBe(manifest.bin['mxenv'])
-    expect(manifest.bin['morphix-env']).toBe(manifest.bin['mxenv'])
-  })
-
-  it('旧名 bin 调用行为等价且 stderr 一行弃用提示（export stdout 纯净）', () => {
-    writeFileSync(join(TMP, '.env.local'), 'MXTEST_ALIAS=alias-value-visible-in-export\n')
-    const binDir = join(TMP, 'bin')
-    mkdirSync(binDir, { recursive: true })
-    for (const legacy of ['mx-env', 'morphix-env']) {
-      const link = join(binDir, legacy)
-      rmSync(link, { force: true })
-      symlinkSync(CLI, link)
-      const result = spawnSync('node', [link, 'export', '--no-infisical'], {
-        encoding: 'utf8',
-        env: { ...process.env, HOME: join(TMP, 'home') },
-        cwd: TMP,
-      })
-      expect(result.status).toBe(0)
-      const lines = result.stdout.trim().split('\n').filter(Boolean)
-      expect(lines.length).toBeGreaterThan(0)
-      for (const line of lines) expect(line.startsWith('export ')).toBe(true)
-      expect(result.stderr).toContain('已弃用')
-      expect(result.stdout).not.toContain('已弃用')
-    }
+    expect(manifest.bin['mx-env']).toBeUndefined()
+    expect(manifest.bin['morphix-env']).toBeUndefined()
   })
 
   it('新名调用（mxenv / 直接 node dist/cli.js）不出弃用提示', () => {

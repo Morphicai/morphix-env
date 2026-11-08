@@ -11,12 +11,12 @@ import { randomUUID } from 'crypto'
 // 打包+安装只做一次（beforeAll，慢属预期）；工作项目=消费项目本身，
 // 每用例清理产物（保留 node_modules/package.json 清单）。
 
-const SCRATCH = join(tmpdir(), `mx-env-project-install-${randomUUID()}`)
+const SCRATCH = join(tmpdir(), `mxenv-project-install-${randomUUID()}`)
 const TARBALLS = join(SCRATCH, 'tarballs')
 const CONSUMER = join(SCRATCH, 'consumer')
 const HOME = join(SCRATCH, 'home')
 const BIN_DIR = join(CONSUMER, 'node_modules', '.bin')
-const CLI = join(BIN_DIR, 'mx-env')
+const CLI = join(BIN_DIR, 'mxenv')
 const PKG_MXENV = join(__dirname, '..')
 const PKG_CORE = join(PKG_MXENV, '..', 'mxenv-core')
 
@@ -61,7 +61,7 @@ function runCli(args: string[], opts: { env?: Record<string, string>; expectStat
   })
   const output = `${res.stdout ?? ''}${res.stderr ?? ''}`
   const expectStatus = opts.expectStatus ?? 0
-  expect(res.status, `mx-env ${args.join(' ')} 期望退出 ${expectStatus}，实际 ${res.status}\n${output}`).toBe(expectStatus)
+  expect(res.status, `mxenv ${args.join(' ')} 期望退出 ${expectStatus}，实际 ${res.status}\n${output}`).toBe(expectStatus)
   return { stdout: res.stdout ?? '', stderr: res.stderr ?? '', output }
 }
 
@@ -114,9 +114,10 @@ afterAll(() => {
 })
 
 describe('项目装即完整可用（验收口径①）', () => {
-  it('安装形态：本地 bin 双名可用，--version 与安装产物一致，零全局目录写', { timeout: 30_000 }, () => {
-    expect(existsSync(CLI), 'node_modules/.bin/mx-env 缺失').toBe(true)
-    expect(existsSync(join(BIN_DIR, 'morphix-env')), 'node_modules/.bin/morphix-env 缺失').toBe(true)
+  it('安装形态：本地 bin 新名唯一（垫片移除），--version 与安装产物一致，零全局目录写', { timeout: 30_000 }, () => {
+    expect(existsSync(CLI), 'node_modules/.bin/mxenv 缺失').toBe(true)
+    expect(existsSync(join(BIN_DIR, 'mx-env')), '旧名 bin 不应再安装').toBe(false)
+    expect(existsSync(join(BIN_DIR, 'morphix-env')), '旧名 bin 不应再安装').toBe(false)
 
     const installed = JSON.parse(readFileSync(join(CONSUMER, 'node_modules', '@morphixai', 'mxenv', 'package.json'), 'utf8')) as { version: string }
     const out = runCli(['--version']).stdout

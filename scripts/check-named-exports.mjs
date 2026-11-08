@@ -27,7 +27,8 @@ const checks = [
   {
     file: 'packages/mxenv-core/dist/index.js',
     label: '@morphixai/mxenv-core 主入口（抽样）',
-    names: ['composeEnvironment', 'loadConfigLayers', 'validateConfig', 'auditDir', 'resolveGlobalDir', 'warnDeprecatedBinInvocation'],
+    // warnDeprecatedBinInvocation 已随垫片移除退役（0.13.x），不得回潮。
+    names: ['composeEnvironment', 'loadConfigLayers', 'validateConfig', 'auditDir', 'resolveGlobalDir'],
   },
 ]
 

@@ -56,13 +56,13 @@ afterEach(() => {
 describe('resolveLocalCli', () => {
   it('prefers cwd node_modules/.bin over PATH (ensureCommand order)', () => {
     const marker = join(TMP, 'm1')
-    const local = writeStubCli(join(PROJECT, 'node_modules', '.bin'), 'mx-env', marker, 'local')
+    const local = writeStubCli(join(PROJECT, 'node_modules', '.bin'), 'mxenv', marker, 'local')
     const pathDir = join(TMP, 'pathbin')
-    writeStubCli(pathDir, 'mx-env', marker, 'path')
+    writeStubCli(pathDir, 'mxenv', marker, 'path')
     expect(resolveLocalCli(PROJECT, { PATH: pathDir })).toBe(local)
   })
 
-  it('新名 mxenv 优先于旧名 alias（本地并存时取新名）', () => {
+  it('只认新名 mxenv（垫片移除：旧名 stub 不被解析）', () => {
     const marker = join(TMP, 'm4')
     const binDir = join(PROJECT, 'node_modules', '.bin')
     const primary = writeStubCli(binDir, 'mxenv', marker, 'new-name')
@@ -73,15 +73,14 @@ describe('resolveLocalCli', () => {
   it('falls back to PATH when the project has no local install', () => {
     const marker = join(TMP, 'm2')
     const pathDir = join(TMP, 'pathbin')
-    const onPath = writeStubCli(pathDir, 'mx-env', marker, 'path')
+    const onPath = writeStubCli(pathDir, 'mxenv', marker, 'path')
     expect(resolveLocalCli(PROJECT, { PATH: pathDir })).toBe(onPath)
   })
 
-  it('resolves the morphix-env alias bin and returns null when nothing resolves', () => {
+  it('旧名 alias 不被解析（垫片移除），无匹配时返回 null', () => {
     const marker = join(TMP, 'm3')
-    const alias = writeStubCli(join(PROJECT, 'node_modules', '.bin'), 'morphix-env', marker, 'alias')
-    expect(resolveLocalCli(PROJECT, { PATH: '' })).toBe(alias)
-    // 清掉本地 stub 后什么也不应解析到（同一 tmp 夹具须先移除再断言 null）。
+    writeStubCli(join(PROJECT, 'node_modules', '.bin'), 'morphix-env', marker, 'alias')
+    expect(resolveLocalCli(PROJECT, { PATH: '' })).toBeNull()
     rmSync(join(PROJECT, 'node_modules'), { recursive: true })
     expect(resolveLocalCli(PROJECT, { PATH: '/nonexistent-dir' })).toBeNull()
   })
@@ -90,9 +89,9 @@ describe('resolveLocalCli', () => {
 describe('spawnLocalCliWrite', () => {
   it('项目写走本地版本：写操作由项目本地 CLI 执行，PATH 干扰项不接手', () => {
     const marker = join(TMP, 'write-marker')
-    writeStubCli(join(PROJECT, 'node_modules', '.bin'), 'mx-env', marker, 'project-local-0.12.x')
+    writeStubCli(join(PROJECT, 'node_modules', '.bin'), 'mxenv', marker, 'project-local')
     const decoyDir = join(TMP, 'decoybin')
-    writeStubCli(decoyDir, 'mx-env', marker, 'path-decoy')
+    writeStubCli(decoyDir, 'mxenv', marker, 'path-decoy')
 
     const status = spawnLocalCliWrite(['edit', '--source', 'local'], {
       cwd: PROJECT,
@@ -100,7 +99,7 @@ describe('spawnLocalCliWrite', () => {
     })
     expect(status).toBe(0)
     const log = readMarker(marker)
-    expect(log).toContain('who:project-local-0.12.x')
+    expect(log).toContain('who:project-local')
     expect(log).toContain('argv:edit --source local')
     expect(log).not.toContain('path-decoy')
   })
@@ -108,7 +107,7 @@ describe('spawnLocalCliWrite', () => {
   it('无本地 CLI 明确失败：硬失败带安装指引，不做任何写入', () => {
     const marker = join(TMP, 'write-marker')
     const before = snapshotTree(PROJECT)
-    // PATH 里也没有任何 mx-env/morphix-env。
+    // PATH 里也没有任何本地 CLI。
     expect(() => spawnLocalCliWrite(['edit'], { cwd: PROJECT, env: { PATH: '/usr/bin:/bin' } }))
       .toThrowError(LocalCliMissingError)
     try {
@@ -126,7 +125,7 @@ describe('spawnLocalCliWrite', () => {
   it('子进程退出码原样返回（写失败不吞）', () => {
     const dir = join(PROJECT, 'node_modules', '.bin')
     mkdirSync(dir, { recursive: true })
-    const failing = join(dir, 'mx-env')
+    const failing = join(dir, 'mxenv')
     writeFileSync(failing, '#!/bin/sh\nexit 9\n')
     chmodSync(failing, 0o755)
     expect(spawnLocalCliWrite(['edit'], { cwd: PROJECT, env: { PATH: '' } })).toBe(9)

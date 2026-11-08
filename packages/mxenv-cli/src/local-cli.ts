@@ -13,8 +13,8 @@ import { delimiter, join, resolve } from 'path'
  */
 
 /** L2 CLI 的 bin 名（命名全切归 mxenv-naming-cutover，此处不改名）。 */
-/** 新名 `mxenv` 优先；旧名 alias 于 0.12.x 垫片窗口内照认（naming-migration）。 */
-export const LOCAL_CLI_BIN_NAMES = ['mxenv', 'mx-env', 'morphix-env'] as const
+/** 垫片移除后唯一 bin 名 `mxenv`（naming-migration「垫片移除与到期公告」）。 */
+export const LOCAL_CLI_BIN_NAMES = ['mxenv'] as const
 
 export class LocalCliMissingError extends Error {
   readonly cwd: string

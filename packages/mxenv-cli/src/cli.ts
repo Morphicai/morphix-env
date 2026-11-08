@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { homedir } from 'os'
-import { loadConfigLayers, sanitizeBootEnv, shimsDir, suppressLegacyHomeHint, validateShimList, warnDeprecatedBinInvocation, type ConfigLayers } from '@morphixai/mxenv-core'
+import { loadConfigLayers, sanitizeBootEnv, shimsDir, suppressLegacyHomeHint, validateShimList, type ConfigLayers } from '@morphixai/mxenv-core'
 import {
   defaultRcPath,
   detectHandmadeReservedShims,
@@ -278,8 +278,6 @@ const PROJECT_COMMANDS = new Set([
 ])
 
 async function main(): Promise<number> {
-  // 旧名 bin 弃用提示（同 L2）：stderr 一行，stdout 纯净。
-  warnDeprecatedBinInvocation(process.argv[1])
   // Same boot discipline as the L2 CLI: strip shim PATH entries before any
   // work so nothing we spawn can recurse into a shim.
   Object.assign(bootInfo, sanitizeBootEnv())

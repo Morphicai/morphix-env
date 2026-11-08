@@ -513,16 +513,16 @@ mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状
 <section id="naming">
   <div class="wrap">
     <div class="sec-head"><span class="sec-num">04</span><h2>命名与迁移：一次 BREAKING 全切</h2></div>
-    <p class="sec-sub">0.12.x 一个窗口把所有命名切到 mxenv 家族；垫片保证存量用户无感升级一个 minor 周期（0.13 移除）。</p>
+    <p class="sec-sub">0.12.x 一个窗口把所有命名切到 mxenv 家族；垫片保证存量用户无感升级一个 minor 周期（已于 0.13.x 摘除）。</p>
 
     <table>
       <tr><th>面</th><th>旧名</th><th>新名</th><th>过渡（0.12.x）</th></tr>
-      <tr><td>CLI bin</td><td><code>mx-env</code> / <code>morphix-env</code></td><td><strong><code>mxenv</code></strong></td><td>alias bin 转发 + stderr 弃用提示（stdout 保持纯净）</td></tr>
-      <tr><td>npm 包</td><td><code>morphix-env</code></td><td><strong><code>@morphixai/mxenv</code> / <code>@morphixai/mxenv-core</code> / <code>@morphixai/mxenv-cli</code></strong></td><td>旧包发收尾版 + deprecate 指路（unscoped 名被 npm 相似度政策拒绝，2026-11-07 定夺走 scope）</td></tr>
+      <tr><td>CLI bin</td><td><code>mx-env</code> / <code>morphix-env</code></td><td><strong><code>mxenv</code></strong></td><td>旧名 alias 已随 0.13.x 垫片移除（0.12.x 窗口内曾转发 + stderr 弃用提示）</td></tr>
+      <tr><td>npm 包</td><td><code>morphix-env</code></td><td><strong><code>@morphixai/mxenv</code> / <code>@morphixai/mxenv-core</code> / <code>@morphixai/mxenv-cli</code></strong></td><td>旧包保留为 deprecated SDK facade（bin 转发与 ./cli 入口已随 0.13.x 垫片移除；unscoped 名被 npm 相似度政策拒绝，2026-11-07 定夺走 scope）</td></tr>
       <tr><td>URI scheme</td><td><code>mx-env://</code></td><td><strong><code>mxenv://</code></strong></td><td>无垫片直切（已实证零存量消费者），旧 scheme 报错提示</td></tr>
-      <tr><td>配置文件</td><td><code>mx-env.config.json</code></td><td><strong><code>mxenv.config.json</code></strong></td><td>读双认（新优先）；写只落新名，旧文件来源写前备份改名</td></tr>
+      <tr><td>配置文件</td><td><code>mx-env.config.json</code></td><td><strong><code>mxenv.config.json</code></strong></td><td>0.13.x 起只读新名，旧文件在场给改名指引（不自动改写）；写只落新名</td></tr>
       <tr><td>全局目录</td><td><code>~/.mx-env/</code></td><td><strong><code>~/.mxenv/</code></strong></td><td>读回落旧目录 + 提示；<code>mxenv migrate --home</code> 搬迁</td></tr>
-      <tr><td>插件</td><td><code>mx-env-provider-&lt;name&gt;</code></td><td><strong><code>mxenv-provider-&lt;name&gt;</code></strong></td><td>解析双认（新优先）</td></tr>
+      <tr><td>插件</td><td><code>mx-env-provider-&lt;name&gt;</code></td><td><strong><code>mxenv-provider-&lt;name&gt;</code></strong></td><td>0.13.x 起只认新名，报缺失新名</td></tr>
       <tr><td>keychain service</td><td><code>mx-env:&lt;source&gt;</code></td><td><strong><code>mxenv:&lt;source&gt;</code></strong></td><td>旧 service 名由配置携带照读，<strong>不要求重迁移</strong></td></tr>
       <tr><td>shell-init</td><td><code>mx-env shell-init</code></td><td><strong><code>mxenv-cli shell-init</code></strong></td><td>随三包拆分迁往全局管理面</td></tr>
     </table>

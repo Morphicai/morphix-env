@@ -7,3 +7,4 @@ dist/
 *.tgz
 src/editor-ui/generated/
 packages/mxenv/src/editor-ui/generated/
+tmp/

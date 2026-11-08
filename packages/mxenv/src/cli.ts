@@ -19,7 +19,6 @@ import {
   stripShimsFromPath,
   suppressLegacyHomeHint,
   validateShimList,
-  warnDeprecatedBinInvocation,
   writeAudit,
   type ComposeOptions,
   type ConfigLayers,
@@ -861,7 +860,8 @@ Usage:
   mxenv skill install [--target <t>]     Install the Agent Skill (global|project|trellis|hermes)
   mxenv skill show                       Show skill install status per target
 
-The legacy bin names (mx-env, morphix-env) remain as deprecated aliases in 0.12.x.
+The legacy bin names (mx-env, morphix-env) were removed in 0.13.x — invoke mxenv only;
+regenerate old shims with mxenv-cli shell-init.
 
 Options:
   -p, --profile <name>     Select a named source profile
@@ -889,9 +889,6 @@ Options:
 }
 
 async function main(): Promise<number> {
-  // 旧名 bin（mx-env/morphix-env）经 symlink 调用时 argv[1] 保留调用名，
-  // stderr 弃用提示一次；stdout 纯净（export/eval 场景）。
-  warnDeprecatedBinInvocation(process.argv[1])
   // Sanitize before anything composes: provider subprocesses spawned during
   // composition inherit PATH, so a shimmed provider CLI would recurse
   // shim → run → provider → shim. See design decision 3.
