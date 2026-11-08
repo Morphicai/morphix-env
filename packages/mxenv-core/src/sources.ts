@@ -245,11 +245,16 @@ export async function loadKeytar(): Promise<KeytarModule | null> {
 }
 
 async function resolveKeychain(entry: SourceEntry, source: KeychainSource): Promise<LoadedSource> {
-  if (source.platform === 'macos' && process.platform !== 'darwin') {
-    throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" is only available on macOS.`)
-  }
-  if (process.platform !== 'darwin') {
-    throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" is currently supported on macOS only.`)
+  // 测试替身（__setKeytarLoaderForTests 非 null loader）已接管 keychain 通道时
+  // 跳过平台守卫：守卫针对真 keytar/真 macOS keychain，替身存取是平台无关的。
+  // 真实调用方不设置 override——此跳过只存在于测试注入面（非能力 API）。
+  if (!keytarLoaderOverride) {
+    if (source.platform === 'macos' && process.platform !== 'darwin') {
+      throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" is only available on macOS.`)
+    }
+    if (process.platform !== 'darwin') {
+      throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" is currently supported on macOS only.`)
+    }
   }
 
   const keytar = await loadKeytar()

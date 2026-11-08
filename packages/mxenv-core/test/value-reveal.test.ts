@@ -9,6 +9,7 @@ import {
   revealSingle,
   RevealError,
   __residentSlotCountForTests,
+  __setKeytarLoaderForTests,
   type SourceEntry,
 } from '../src/index'
 
@@ -237,5 +238,52 @@ describe('file scope and read-failure paths', () => {
 
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
     spies.forEach((s) => s.mockRestore())
+  })
+})
+
+// ─── keychain 平台守卫 vs 测试替身（CI Linux 回归钉） ─────────────
+// PR #25 把编辑器 keychain 揭示收敛到 revealSingle 后，揭示首次经过
+// resolveKeychain 的"仅 macOS"守卫——Linux CI 上被拦（本地 macOS 看不见）。
+// 语义钉死：测试替身接管通道（非 null loader）时守卫放行；无替身时守卫照拦。
+
+describe('keychain platform guard vs test double', () => {
+  const kcEntry: SourceEntry = { name: 'kc', source: { provider: 'os-keychain', platform: 'macos', service: 'mxenv-test-svc' }, baseDir: ROOT }
+
+  async function revealUnderPlatform(platform: string): Promise<Error | { value: string }> {
+    const real = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { value: platform })
+    try {
+      return await revealSingle({ key: 'KC_GUARD', entry: kcEntry, subject: 'editor', slotId: 's-kc', authorized: true })
+        .catch((err: Error) => err)
+    } finally {
+      if (real) Object.defineProperty(process, 'platform', real)
+    }
+  }
+
+  afterEach(() => {
+    __setKeytarLoaderForTests(null)
+  })
+
+  it('lets a test double reveal through the guard on a non-darwin platform', async () => {
+    const sentinel = value('kc-double')
+    __setKeytarLoaderForTests(async () => ({
+      findCredentials: async () => [{ account: 'KC_GUARD', password: sentinel }],
+      setPassword: async () => undefined,
+      deletePassword: async () => true,
+    } as never))
+
+    const result = await revealUnderPlatform('linux')
+
+    expect((result as { value?: string }).value).toBe(sentinel)
+    ;(result as { release?: () => void }).release?.()
+  })
+
+  it('still blocks keychain reveal on a non-darwin platform without a test double', async () => {
+    __setKeytarLoaderForTests(null)
+
+    const result = await revealUnderPlatform('linux')
+
+    expect(result).toBeInstanceOf(Error)
+    expect((result as Error).message).toContain('macOS')
   })
 })
