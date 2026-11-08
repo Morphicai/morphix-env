@@ -5,23 +5,24 @@ import { dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { createEditorServer, type RunningEditor } from '../src/editor'
+import { __setKeytarLoaderForTests } from '@morphixai/mxenv-core'
 import { revealedValue, stateOnPage } from './support/editorPage'
 
 // Keychain editing is exercised against a keytar test double so the suite has
 // no native-module dependency; dotenvx paths run against the real CLI.
 const keychainStore = vi.hoisted(() => ({ entries: new Map<string, string>() }))
 
-vi.mock('@morphixai/mxenv-core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@morphixai/mxenv-core')>()
-  return {
-    ...actual,
-    loadKeytar: async () => ({
-      findCredentials: async () => [...keychainStore.entries].map(([account, password]) => ({ account, password })),
-      setPassword: async (_service: string, account: string, value: string) => { keychainStore.entries.set(account, value) },
-      deletePassword: async (_service: string, account: string) => { keychainStore.entries.delete(account); return true },
-    }),
-  }
-})
+// keytar 经 core 的显式测试注入点提供（vi.mock 对 aliased 源码的 dynamic
+// import 不拦截，dist bundle 内部更是够不着）：编辑器与 value-reveal 揭示
+// 路径共用同一 mock，无需原生 keytar 依赖。
+function installKeytarMock(): void {
+  __setKeytarLoaderForTests(async () => ({
+    findCredentials: async () => [...keychainStore.entries].map(([account, password]) => ({ account, password })),
+    setPassword: async (_service: string, account: string, value: string) => { keychainStore.entries.set(account, value) },
+    deletePassword: async (_service: string, account: string) => { keychainStore.entries.delete(account); return true },
+  } as any))
+}
+installKeytarMock()
 
 const ROOT = join(tmpdir(), `mxenv-editor-${randomUUID()}`)
 const HOME = join(ROOT, 'home')
@@ -227,6 +228,8 @@ describe('visual editor', () => {
     const actions = events.map((event) => event.action)
     expect(actions).toContain('set')
     expect(actions).toContain('reveal')
+    // 并轨口径：一次揭示恰一条 reveal 事件（能力记账、编辑器不再自记第二条）
+    expect(actions.filter((action) => action === 'reveal')).toHaveLength(1)
     expect(actions).toContain('delete')
     for (const event of events) {
       expect(event.keys).toContain('MXTEST_AUD_A')
@@ -235,6 +238,13 @@ describe('visual editor', () => {
     const serialized = JSON.stringify(events)
     expect(serialized).not.toContain('sentinel-aud-new')
     expect(serialized).not.toContain('sentinel-aud-old')
+
+    // MAJOR-1 回归钉：能力前置失败（keytar 不可用）也恰一条失败 reveal 事件
+    __setKeytarLoaderForTests(async () => null)
+    await post(`${sourceRoot('kc')}/keychain`, { action: 'reveal', account: 'KC_GONE' })
+    installKeytarMock()
+    const after = auditEvents().filter((event) => event.via === 'editor' && event.action === 'reveal')
+    expect(after.filter((event) => event.outcome === 'failure')).toHaveLength(1)
     expect(serialized).not.toContain('sentinel-from-file')
   }, 15_000)
 

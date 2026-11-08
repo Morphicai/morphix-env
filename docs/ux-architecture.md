@@ -1,6 +1,6 @@
 # mxenv UX 与架构升级：解决什么问题，怎么解决
 
-> 状态：架构基准（分层 L0–L3 + 三条产品要求已对齐；Wave A 实施 change：`mxenv-package-split`/`mxenv-naming-cutover`/`mxenv-home-migration`，实施与本文逐条互校） · owner：morphix-env
+> 状态：架构基准（分层 L0–L3 + 三条产品要求已对齐；Wave A 实施 change：`mxenv-package-split`/`mxenv-naming-cutover`/`mxenv-home-migration`，实施与本文逐条互校；`reveal-single-capability` 已落地——L1 `revealSingle` 唯一实现 + 编辑器值回显收敛） · owner：morphix-env
 > 边界：本文只覆盖本仓产品方向；Trellis 侧 `mxenv://` 消费实施见 Trellis 仓 change `mx-env-secret-source`。
 > 更新：2026-11-07
 
