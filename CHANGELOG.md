@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.2
+
+### Fixed
+
+- **Explicit `profile: 'legacy'` resolves the implicit default profile** (mx-env-secret-source prerequisite): composition synthesizes a default profile named `legacy` when no config declares profiles, but an explicit request for that name threw `Unknown profile` — so `mxenv://legacy/KEY` references (`ReferenceResolver`/`mxenv inject`) failed on machines running the implicit default. A profile actually declared under the name still wins.
+
 ## 0.12.1
 
 ### Fixed

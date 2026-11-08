@@ -5,6 +5,7 @@ import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { composeEnvironment, CompositionError } from '../src/composition'
 import { loadConfigLayers, validateConfig } from '../src/config'
+import { ReferenceResolver } from '../src/refs'
 
 const ROOT = join(tmpdir(), `mxenv-composition-${randomUUID()}`)
 
@@ -40,6 +41,43 @@ async function compose(name: string, setup: (p: { home: string; project: string 
 
 afterEach(() => {
   if (existsSync(ROOT)) rmSync(ROOT, { recursive: true, force: true })
+})
+
+describe('implicit default profile naming (mx-env-secret-source)', () => {
+  it('explicit profile: "legacy" composes the implicit default when nothing declares it', async () => {
+    const result = await compose('implicit-legacy', (p) => {
+      mkdirSync(join(p.home, '.mxenv'), { recursive: true })
+      writeFileSync(join(p.home, '.mxenv', '.env'), 'MXTEST_IMPLICIT_KEY=from-global\n')
+      chmodSync(join(p.home, '.mxenv', '.env'), 0o600)
+    }, { profile: 'legacy' })
+    expect(result.profileName).toBe('legacy')
+    expect(result.environment.MXTEST_IMPLICIT_KEY).toBe('from-global')
+  })
+
+  it('a profile actually declared as "legacy" wins over the implicit fallback', async () => {
+    const result = await compose('declared-legacy', (p) => {
+      mkdirSync(join(p.home, '.mxenv'), { recursive: true })
+      writeFileSync(join(p.home, '.mxenv', '.env'), 'MXTEST_IMPLICIT_KEY=from-global\n')
+      chmodSync(join(p.home, '.mxenv', '.env'), 0o600)
+      writeFileSync(join(p.project, 'mxenv.config.json'), JSON.stringify({
+        sources: { local1: { provider: 'local', files: ['extra.env'] } },
+        profiles: { legacy: ['local1'] },
+      }))
+      writeFileSync(join(p.project, 'extra.env'), 'MXTEST_DECLARED=from-declared\n')
+    }, { profile: 'legacy' })
+    expect(result.environment.MXTEST_DECLARED).toBe('from-declared')
+    expect(result.environment.MXTEST_IMPLICIT_KEY).toBe('from-global')
+  })
+
+  it('a reference resolver valueOf against the implicit default name resolves', async () => {
+    const p = paths('implicit-legacy-ref')
+    mkdirSync(join(p.home, '.mxenv'), { recursive: true })
+    writeFileSync(join(p.home, '.mxenv', '.env'), 'MXTEST_IMPLICIT_KEY=from-global\n')
+      chmodSync(join(p.home, '.mxenv', '.env'), 0o600)
+    const resolver = new ReferenceResolver(loadConfigLayers({ homeDir: p.home, cwd: p.project }), { homeDir: p.home, noInfisical: true })
+    const out = await resolver.valueOf('legacy', 'MXTEST_IMPLICIT_KEY')
+    expect(out.value).toBe('from-global')
+  })
 })
 
 describe('environment composition', () => {

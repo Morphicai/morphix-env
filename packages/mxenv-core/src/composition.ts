@@ -140,6 +140,14 @@ function resolveEntries(layers: ConfigLayers, options: ComposeOptions): { name: 
   }] : []
 
   if (explicitProfile) {
+    // The implicit default profile has a name too ('legacy'): an explicit
+    // request for that name must compose exactly what the default path
+    // composes — otherwise `mxenv://legacy/KEY` references name a profile
+    // that composition itself reports as unknown (mx-env-secret-source).
+    // A profile actually declared under that name still wins.
+    if (!projectDefault && !globalDefault && explicitProfile === 'legacy' && !profiles.has('legacy')) {
+      return { name: 'legacy', entries: [...globalDotenv, ...legacy] }
+    }
     return { name: explicitProfile, entries: [...globalDotenv, ...profileEntries(explicitProfile, profiles, sources), ...cliLocalOverride] }
   }
   if (projectDefault) {
