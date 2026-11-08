@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.4
+
+### Added
+
+- **`mxenv skill install --target hermes`**: installs the Agent Skill into the Hermes skill tree (`~/.hermes/skills/<category>/mxenv/`; default category `devops`, override with `--hermes-category <name>`). The Hermes agent discovers it through its skill index; `skill show` reports the install state like every other target.
+- The skill source now lives at the repo root (`skills/mxenv/SKILL.md`) so the skills CLI can install it straight from GitHub: **`npx skills add Morphicai/morphix-env`** (preferred). The build copies the same file into `dist/` — one source, two distribution channels.
+
+### Docs
+
+- README and SKILL.md now lead with `npx skills add Morphicai/morphix-env`; `mxenv skill install` remains the explicit-target/offline channel (`project|global|trellis|hermes`).
+
 ## 0.12.3
 
 ### Fixed
