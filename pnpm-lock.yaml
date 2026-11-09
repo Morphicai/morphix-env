@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@morphixai/mxenv-core':
-        specifier: ^0.13.0
+        specifier: ^0.14.0
         version: link:packages/mxenv-core
     devDependencies:
       '@dotenvx/dotenvx':
@@ -31,7 +31,7 @@ importers:
   packages/mxenv:
     dependencies:
       '@morphixai/mxenv-core':
-        specifier: ^0.13.0
+        specifier: ^0.14.0
         version: link:../mxenv-core
       cross-spawn:
         specifier: ^7.0.6
@@ -95,7 +95,7 @@ importers:
   packages/mxenv-cli:
     dependencies:
       '@morphixai/mxenv-core':
-        specifier: ^0.13.0
+        specifier: ^0.14.0
         version: link:../mxenv-core
     devDependencies:
       '@types/node':

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.14.0
+
+### Added
+
+- **`mxenv gui` — session-based panel host (Wave B first slice)**: one command into the visual management surface. `mxenv gui` starts a local host session (loopback random port, 4h TTL, 30-minute idle auto-close, explicit `mxenv gui close`) and opens the panel; repeat invocations attach idempotently — an `O_EXCL` start lock guarantees concurrent `mxenv gui` spawns exactly one session (stale sessions are detected via pid liveness and recovered). `mxenv gui status` reports run state / port / lock state. The session token lives in `~/.mxenv/host/runtime.json` (0600, created and cleared with the session).
+- **Panel API resource model**: `GET /keys` (names-only key surface from local/dotenvx/os-keychain/plugin-declared keys, enumerated per `fileIndex` for multi-file sources), `POST /reveal` (per-key, `Cache-Control: no-store`), `POST /unlock` / `POST /lock`, `GET /status`, `POST /shutdown`. Contract types (`PanelKeyInfo`, `PanelRevealRequest`) are exported from mxenv-core as the B2 panel base.
+- **Consumer boundary on value access**: panel reveal goes through `revealSingle` — the one implementation (per-key, one resident value per session slot, cleared on lock/expiry/close). `/reveal` and `/unlock` accept only human-driven panel sessions (the `X-Mxenv-Panel` marker); Agents and scripts are confined to the names-only surface — their reveal/unlock calls are rejected and audited.
+- **Default lock + explicit unlock window**: locked state serves key names only; `POST /unlock` opens a bounded window (15 min default) validated against the wall clock on every request (survives sleep), with an idle auto-lock (5 min) that counts only explicit actions — panel polling never extends it.
+- **Audit extensions (mxenv-core)**: `AuditEvent` gains `via: 'host'`, `action: 'start' | 'unlock' | 'lock'`, and `configPath` (the real config file path, or `'-'` when none exists — never a phantom path). Host sessions audit reveal/unlock/lock/auth-refusals/session start+stop value-free; names-only queries stay silent. run/edit audits now carry `configPath` too.
+- **host-runtime (mxenv-core)**: `~/.mxenv/host/` (0700) runtime file read/write and `O_EXCL` start-lock primitives.
+
+### Notes
+
+- The host is L3 product logic built on L1 capabilities (no L2 imports). The panel UI (`mxenv-panel-ui`) and residency (launchd / unbounded TTL) are follow-up changes with zero contract churn.
+- Honest boundary note: same-uid processes are not walled off — the guarantees are the consumer boundary, default lock, per-key narrow exposure and full audit, not process isolation.
+
 ## 0.13.1
 
 ### Removed (announced in 0.12.0 — the compat shims lasted one minor cycle)
