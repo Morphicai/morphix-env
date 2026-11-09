@@ -25,4 +25,4 @@
 
 - [x] 5.1 运行 `pnpm -r test` + `pnpm test` 全门与三包 typecheck（发版门纪律见记忆 mxenv-parseargs-parity-full-gate；本 change 不改 parseArgs flag 仍随全门复核）
 - [x] 5.2 文档口径：docs/ux-architecture.md 2.3 状态注记（会话式定案、常驻化后置触发器）、SKILL/README 补 `mxenv gui` 面与消费者红线，验证文档互校无矛盾
-- [ ] 5.3 发版 mxenv-core（minor）+ mxenv-cli（minor）+ mxenv（跟随），lockstep 四 manifest **同步 workspace 依赖 specifier**，两机对齐验证 npm 落地与 `skill show` 同版（**发布须用户逐项放行**）
+- [x] 5.3 发版 mxenv-core（minor）+ mxenv-cli（minor）+ mxenv（跟随），lockstep 四 manifest **同步 workspace 依赖 specifier**，两机对齐验证 npm 落地与 `skill show` 同版（**发布须用户逐项放行**）——2026-11-09 放行执行：v0.14.0 四包 npm 落地（CI 被 CDN 读延迟绊倒，guard 拒发后按 guard 文档化兜底本地按序补发）、GitHub Release v0.14.0、两机 0.14.0 同版 + skill show 全 matches
