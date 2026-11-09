@@ -185,6 +185,23 @@ describe('reveal audit', () => {
     expect(JSON.stringify(events)).not.toContain(sentinel)
     rmSync(homeDir, { recursive: true, force: true })
   })
+
+  it('attributes configPath to the real config file when one exists (never a phantom path)', async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), 'mxenv-reveal-cfgpath-'))
+    const projDir = mkdtempSync(join(tmpdir(), 'mxenv-reveal-proj-'))
+    writeFileSync(join(projDir, 'mxenv.config.json'), '{}')
+    writeFileSync(join(projDir, 'a.env'), `VR_CFG=${value('cfg')}\n`)
+    const e: SourceEntry = { name: 'p', source: { provider: 'local', files: ['a.env'], optional: true }, baseDir: projDir }
+
+    const ok = await revealSingle({ key: 'VR_CFG', entry: e, subject: 'host', slotId: 's-cp', authorized: true, options: { homeDir }, profileName: 'x' })
+    ok.release()
+    // resolveAuditConfigPath 的 cwd 口径：显式 cwd 指向有配置目录
+    const { resolveAuditConfigPath } = await import('../src/index')
+    expect(resolveAuditConfigPath({ homeDir }, projDir)).toBe(join(projDir, 'mxenv.config.json'))
+    expect(resolveAuditConfigPath({ homeDir }, join(projDir, 'nope'))).toBe('-')
+    rmSync(homeDir, { recursive: true, force: true })
+    rmSync(projDir, { recursive: true, force: true })
+  })
 })
 
 // ─── 1.4 暴露面红线：错误信息不含值 ─────────────────────────────

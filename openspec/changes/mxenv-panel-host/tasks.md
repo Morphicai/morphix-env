@@ -8,7 +8,7 @@
 
 ## 2. 会话宿主与 panel API（mxenv-cli）
 
-- [x] 2.1 会话宿主（L3 经 L1 能力、不 import L2）：spawn detached + `listen(0,'127.0.0.1')` + stdout 握手回 URL + Bearer token 认证（token 不进 argv/日志/审计）+ TTL 4h/空闲 30 分钟关 + 显式 close 清 runtime.json，验证集成测试（临时 HOME + 假 token：无 token 拒绝、会话终止即失效、token 不落日志）
+- [x] 2.1 会话宿主（L3 经 L1 能力、不 import L2）：spawn detached + `listen(0,'127.0.0.1')` + runtime 发现文件回 URL（父进程短轮询）+ Bearer token 认证（token 不进 argv/日志/审计）+ TTL 4h/空闲 30 分钟关 + 显式 close 清 runtime.json，验证集成测试（临时 HOME + 假 token：无 token 拒绝、会话终止即失效、token 不落日志）
 - [x] 2.2 panel API 资源模型与消费者边界：`GET /keys`（names-only、`?profile=` 过滤）、`POST /reveal`（`{key, source, fileIndex?}` 经 revealSingle、单值驻留 slot=会话、`Cache-Control: no-store`）、`POST /unlock|lock`（墙钟窗口判定 + 只计显式动作的空闲锁）；非面板会话调用 reveal/unlock 拒绝并审计（SKILL 红线同步补"不调用 reveal/unlock 端点"），验证测试覆盖：锁定态只出键名/墙钟到期拒绝（假时钟）/轮询不续命/消费者边界拒绝/驻留互斥/错误与响应无值
 - [x] 2.3 审计记账范围：reveal/unlock/lock/认证拒绝/会话启停记 `via: 'host'`（含 configPath），names-only 查询不记账，验证测试断言"解锁+揭示+若干查询恰两条事件"
 - [x] 2.4 并发与附着：`O_EXCL` 锁下并发 `mxenv gui` 只一个会话、`--attach` 复用、`status` 报运行态/端口/锁定态，验证并发用例
