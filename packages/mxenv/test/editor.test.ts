@@ -244,6 +244,7 @@ describe('visual editor', () => {
     await post(`${sourceRoot('kc')}/keychain`, { action: 'reveal', account: 'KC_GONE' })
     installKeytarMock()
     const after = auditEvents().filter((event) => event.via === 'editor' && event.action === 'reveal')
+    expect(after.every((event) => typeof event.configPath === 'string')).toBe(true)
     expect(after.filter((event) => event.outcome === 'failure')).toHaveLength(1)
     expect(serialized).not.toContain('sentinel-from-file')
   }, 15_000)

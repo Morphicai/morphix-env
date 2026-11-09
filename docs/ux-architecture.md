@@ -71,6 +71,9 @@ L2 mxenv   ──┘
 
 ### 2.3 常驻 host + 本地面板（Wave B）
 
+> 2026-11-09 架构评审定案（用户拍板）：**会话式面板宿主**先行（`mxenv gui`，复用编辑器会话机；暴露面随使用生灭），常驻化（launchd 托管、TTL 翻无限、稳定端点消费者）后置为契约零变更的独立 change——触发器：云 relay 定案 / Agent 轮询真实需求 / 用户反馈敲命令是摩擦。下方 daemon 行保留为终局形态描述，实施入口见 change `mxenv-panel-host`。
+
+
 - **daemon**：loopback HTTP（127.0.0.1，每会话一次性 token，文件 0600），launchd 可选托管（`mxenv host install`）+ 手动启动并存。
 - **面板**（editor-ui 的常驻化超集）：来源/上游总览（provider 登录态、来源编排、profiles）、键管理与编辑、migrate 入口、审计查看器。
 - **安全模型升级**（短命会话 → 常驻但默认锁定）：

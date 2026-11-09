@@ -166,6 +166,25 @@ describe('reveal audit', () => {
     expect(raw).not.toContain(sentinel)
     rmSync(homeDir, { recursive: true, force: true })
   })
+
+  it('records via: host for panel-host sessions (locked and success)', async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), 'mxenv-reveal-hostvia-'))
+    const sentinel = value('hostvia')
+    writeFileSync(join(ROOT, 'k.env'), `VR_HOST=${sentinel}\n`)
+    const e = localEntry('k', 'k.env')
+    const opts = { homeDir }
+
+    const ok = await revealSingle({ key: 'VR_HOST', entry: e, subject: 'host', slotId: 's-h1', authorized: true, options: opts })
+    ok.release()
+    await revealSingle({ key: 'VR_HOST', entry: e, subject: 'host', slotId: 's-h2', options: opts }).catch(() => undefined)
+
+    const events = auditLines(homeDir)
+    expect(events.map((ev) => ev.via)).toEqual(['host', 'host'])
+    expect(events.map((ev) => ev.outcome)).toEqual(['success', 'failure'])
+    expect(events.every((ev) => ev.configPath === '-')).toBe(true) // 无配置口径='-'，非幻影路径
+    expect(JSON.stringify(events)).not.toContain(sentinel)
+    rmSync(homeDir, { recursive: true, force: true })
+  })
 })
 
 // ─── 1.4 暴露面红线：错误信息不含值 ─────────────────────────────

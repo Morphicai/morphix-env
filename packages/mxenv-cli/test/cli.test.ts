@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from 'child_process'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-// 4.3 Wave B 骨架预留：gui/global/host 占位不实现，--help 不得暴露它们。
+// Wave B：gui 已落地（panel-host）；global/host 仍骨架预留，--help 不得暴露它们。
 
 const CLI = join(__dirname, '..', 'dist', 'cli.js')
 
@@ -22,9 +22,10 @@ describe('mxenv-cli face', () => {
     expect(out).toContain('Usage:')
     // --no-global 是真实生效 flag，必须可发现（help 文档化不得触发 gate）。
     expect(out).toContain('--no-global')
-    // 未实现命令不得作为命令列出（占位只在 dispatch 里拦）。gate 按命令行
-    // 行首匹配，不做子串禁令——flag 文档（含 "global" 字样）不属此列。
-    expect(out).not.toMatch(/^\s+(gui|global|host)\b/m)
+    // gui 已实现须可发现；未实现命令（global/host）不得列出（占位只在
+    // dispatch 里拦）。gate 按行首匹配，不做子串禁令。
+    expect(out).toMatch(/^mxenv gui\b/m)
+    expect(out).not.toMatch(/^\s+(global|host)\b/m)
   })
 
   it('--version matches the package manifest', () => {
@@ -33,7 +34,7 @@ describe('mxenv-cli face', () => {
   })
 
   it('reserved Wave B commands fail as not implemented', () => {
-    for (const command of ['gui', 'global', 'host']) {
+    for (const command of ['global', 'host']) {
       const result = runCapture([command])
       expect(result.status, command).toBe(1)
       expect(result.stderr, command).toContain('not implemented')

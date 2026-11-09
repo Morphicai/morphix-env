@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
 import {
+  resolveAuditConfigPath,
   collectRedactionValues,
   composeEnvironment,
   extractPublicVars,
@@ -290,6 +291,7 @@ function writeRunAudit(composition: EnvironmentComposition, startedAt: number, o
     exitCode,
     durationMs: Date.now() - startedAt,
     via: bootInfo.viaShim ? 'shim' : 'cli',
+    configPath: resolveAuditConfigPath(),
   })
 }
 
@@ -595,6 +597,7 @@ async function cmdInject(args: Args): Promise<number> {
     outcome: 'success',
     exitCode: 0,
     durationMs: Date.now() - startedAt,
+    configPath: resolveAuditConfigPath(),
   })
   console.log(`[mxenv] Injected ${templatePath} -> ${outPath} (${references.length} references, ${resolved.missing.length} unresolved)`)
   return 0
@@ -727,6 +730,7 @@ async function cmdMigrate(args: Args): Promise<number> {
         outcome: 'success',
         exitCode: 0,
         durationMs: Date.now() - startedAt,
+        configPath: '-', // 全局目录迁移不归属项目配置
       })
       return 0
     }
@@ -820,6 +824,7 @@ async function cmdMigrate(args: Args): Promise<number> {
     outcome: failed.length ? 'failure' : 'success',
     exitCode,
     durationMs: Date.now() - startedAt,
+    configPath: resolveAuditConfigPath(),
   })
   if (outcomes.some((outcome) => outcome.backups.length)) {
     console.log('[mxenv] Backups are 0600 copies of the original plaintext — delete them once your workflows are verified.')

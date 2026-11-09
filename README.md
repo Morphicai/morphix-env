@@ -15,7 +15,7 @@ The tool ships as three packages with strict layering (dependencies only point d
 | Package | Layer | Role | Install |
 |---|---|---|---|
 | `@morphixai/mxenv` | L2 run face | `run`/`export`/`inspect`/`render`/`inject`/`generate`, source management (custom upstreams), `edit`, `migrate`, skills | `npm i -D @morphixai/mxenv` in a project (or `npm i -g @morphixai/mxenv`) |
-| `@morphixai/mxenv-cli` | L3 management face | machine-level extras: terminal shims (`shell-init`) today; global-key management and a local GUI next | `npm i -g @morphixai/mxenv-cli` |
+| `@morphixai/mxenv-cli` | L3 management face | machine-level extras: terminal shims (`shell-init`) and the panel-host session (`mxenv gui` — keys view & safe reveal, values never leave the machine; Agent/automation consumes names-only only) | `npm i -g @morphixai/mxenv-cli` |
 | `@morphixai/mxenv-core` | L0/L1 shared layer | composition engine + pure contracts (`@morphixai/mxenv-core/contracts`) for SDK consumers (e.g. Trellis MCP) | `npm i @morphixai/mxenv-core` |
 
 > 2026-11-07 注：npm 的名称相似度政策拒绝 unscoped `mxenv`（与 exenv/osenv 过近），包名走 `@morphixai/*` scope；目录名（`packages/mxenv*`）、bin 命令（`mxenv`/`mxenv-cli`）、配置与 scheme 命名均不变（旧 bin 名 `mx-env`/`morphix-env` 随 0.13.x 垫片移除退役）。

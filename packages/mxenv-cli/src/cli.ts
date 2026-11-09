@@ -12,6 +12,9 @@ import {
   upsertRcBlock,
   writeShims,
 } from './shims'
+import { spawn } from 'child_process'
+import { collectEntries, hostStatus, startHostSession } from './host'
+import { clearHostSession, readHostSession, releaseHostLock } from '@morphixai/mxenv-core'
 import pkg from '../package.json'
 
 const VERSION = pkg.version
@@ -260,9 +263,93 @@ Options:
   --help, -h               Show this help
   --version                Show version
 
+mxenv gui [status|close]   Panel-host session (machine-level keys view & safe
+                           reveal; values never leave this machine; opens the
+                           panel in a browser — distinct from the project
+                           editor \`mxenv edit\`)
+
 Project-level commands (run, export, inspect, edit, migrate, …) come from the
 project-local install (node_modules/.bin); this CLI manages the machine only.
 `)
+}
+
+/**
+ * `mxenv gui`：面板宿主会话（panel-host）。无会话则起（detached 子进程
+ * `gui serve`）并开浏览器；有会话则附着打印 URL。`gui status`/`gui close`
+ * 管理生命周期。值红线：输出永不含值与 token。
+ */
+async function cmdGui(args: Args): Promise<number> {
+  const sub = args.subArgs[0] || ''
+  const homeDir = homedir()
+
+  if (sub === 'status') {
+    const st = hostStatus(homeDir)
+    if (st.running) console.log(`[mxenv] host session running — port ${st.port}, started ${st.startedAt}`)
+    else console.log('[mxenv] no running host session')
+    return st.running ? 0 : 1
+  }
+
+  if (sub === 'close') {
+    const session = readHostSession(homeDir)
+    if (!session) {
+      console.log('[mxenv] no running host session')
+      return 0
+    }
+    // 优雅关闭：宿主 /shutdown 清文件退进程；本地双保险再清一次（幂等）。
+    try {
+      await fetch(`http://127.0.0.1:${session.port}/shutdown`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${session.token}` },
+      })
+    } catch { /* 宿主已亡则本地清理兜底 */ }
+    clearHostSession(homeDir)
+    releaseHostLock(homeDir)
+    console.log('[mxenv] host session closed')
+    return 0
+  }
+
+  if (sub === 'serve') {
+    // 内部模式：detached 子进程持有会话（TTL/空闲/close 到期自清）。
+    const layers = loadConfigLayers({ homeDir })
+    const started = await startHostSession({ homeDir, cwd: process.cwd(), entries: collectEntries(layers) })
+    if (!('runtime' in started)) return 0 // 竞态下已有会话：子进程即退（幂等）
+    await new Promise<void>((resolve) => started.runtime.server.on('close', () => resolve()))
+    return 0
+  }
+
+  // 默认：起或附着（spec：再次执行附着已运行会话，不产生第二实例）。
+  // 会话判断走 runtime 发现文件；无会话则 spawn detached 子进程持有会话。
+  const existing = readHostSession(homeDir)
+  if (existing) {
+    const url = `http://127.0.0.1:${existing.port}/${existing.token}`
+    console.log(`[mxenv] attaching to running host session: ${url}`)
+    openInBrowser(url)
+    return 0
+  }
+  const child = spawn(process.execPath, [process.argv[1], 'gui', 'serve'], { detached: true, stdio: 'ignore' })
+  child.unref()
+  const deadline = Date.now() + 5_000
+  let session = readHostSession(homeDir)
+  while (!session && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 100))
+    session = readHostSession(homeDir)
+  }
+  if (!session) {
+    console.error('[mxenv] host session did not come up within 5s')
+    return 1
+  }
+  const url = `http://127.0.0.1:${session.port}/${session.token}`
+  console.log(`[mxenv] host session up: ${url}`)
+  openInBrowser(url)
+  return 0
+}
+
+function openInBrowser(url: string): void {
+  try {
+    spawn('open', [url], { stdio: 'ignore' }).unref()
+  } catch {
+    console.log(`[mxenv] open the panel manually: ${url}`)
+  }
 }
 
 /** Wave B placeholders: reserved command names, deliberately not implemented. */
@@ -291,8 +378,8 @@ async function main(): Promise<number> {
   }
   switch (args.command) {
     case 'shell-init': return cmdShellInit(args)
+    case 'gui': return cmdGui(args)
     // Wave B skeleton (package-split 4.3): reserved, not implemented.
-    case 'gui':
     case 'global':
     case 'host': return cmdReserved(args.command)
     case '--help':

@@ -5,6 +5,7 @@ import { homedir } from 'os'
 import { isAbsolute, dirname, join, resolve } from 'path'
 import { randomBytes } from 'crypto'
 import {
+  resolveAuditConfigPath,
   ensureCommand,
   expandHomePath,
   isDotenvxEncrypted,
@@ -143,6 +144,7 @@ function auditEditor(state: EditorState, entry: SourceEntry | null, action: 'set
     durationMs: Date.now() - startedAt,
     via: 'editor',
     action,
+    configPath: resolveAuditConfigPath({ homeDir: state.homeDir }),
   }, state.homeDir)
 }
 

@@ -282,15 +282,42 @@ export interface AuditEvent {
    * an observational dimension, not a security assertion: the marker travels
    * as an env var and is forgeable by any same-uid process. `editor` marks
    * actions taken in the one-shot visual editor (values never enter events).
+   * `host` marks panel-host session actions (reveal/unlock/lock/session life).
    */
-  via?: 'cli' | 'shim' | 'editor'
+  via?: 'cli' | 'shim' | 'editor' | 'host'
   /**
-   * Editor action kind for `via: 'editor'` events. Value-free by contract:
-   * events carry key names only, never values.
+   * Action kind. Value-free by contract: events carry key names only, never
+   * values. `unlock`/`lock` are panel-host session state transitions.
    */
-  action?: 'set' | 'delete' | 'reveal' | 'close'
+  action?: 'set' | 'delete' | 'reveal' | 'close' | 'unlock' | 'lock'
   /** Value-free reveal outcome detail (`locked` / `not-found` / `read-error`). */
   reason?: string
+  /**
+   * Project config path this event is attributed to (value-free). `'-'` when
+   * no config file actually exists (never a phantom candidate path). Used by
+   * the project registry aggregation (ux-architecture 2.4); older events omit
+   * the field and readers tolerate its absence.
+   */
+  configPath?: string
+}
+
+// ─── panel-host API 资源模型（L0 契约；消费方=面板 UI 与未来 SDK） ─────
+
+/** names-only key row for `GET /keys` (values never appear). */
+export interface PanelKeyInfo {
+  key: string
+  source: string
+  /** File scope within a multi-file source (set/del/reveal symmetry). */
+  fileIndex?: number
+  /** Whether the key currently has a stored value (`present`/`missing`). */
+  status: 'present' | 'missing'
+}
+
+/** Reveal request for `POST /reveal` (scoped like the editor: key + owning source). */
+export interface PanelRevealRequest {
+  key: string
+  source: string
+  fileIndex?: number
 }
 
 // ─── `mxenv://` 引用语法（纯解析层） ──────────────────────────────
