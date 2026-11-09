@@ -14,10 +14,20 @@
 import { homedir } from 'os'
 import type { ComposeOptions, LoadedSource, SecretProvider, SourceEntry } from './contracts'
 import { writeAudit } from './audit'
+import { loadConfigLayers } from './config'
 import { loadSource } from './sources'
 
-/** 揭示请求方标识（审计 via 维度）；daemon/panel 随 Wave B 扩展此 union。 */
-export type RevealSubject = 'cli' | 'editor'
+/**
+ * 审计归属的配置路径（值无关）：配置文件真实存在才记其路径，否则 `'-'`
+ * （不写幻影候选路径；panel-host design 决策 7）。run/edit/host 共用。
+ */
+export function resolveAuditConfigPath(options?: Pick<ComposeOptions, 'homeDir'>, cwd?: string): string {
+  const layers = loadConfigLayers({ homeDir: options?.homeDir || homedir(), cwd })
+  return layers.project.exists ? layers.project.path : '-'
+}
+
+/** 揭示请求方标识（审计 via 维度）。'host' = 面板宿主会话（消费者边界见 panel-host spec）。 */
+export type RevealSubject = 'cli' | 'editor' | 'host'
 
 export class RevealError extends Error {
   readonly code: 'locked' | 'not-found'
@@ -110,6 +120,7 @@ function auditReveal(params: RevealParams, sources: string[], outcome: 'success'
     via: params.subject,
     action: 'reveal',
     ...(reason ? { reason } : {}),
+    configPath: resolveAuditConfigPath(params.options),
   }, params.options?.homeDir || homedir())
 }
 
