@@ -17,6 +17,7 @@ import {
   readHostSession,
   releaseHostLock,
   resolveAuditConfigPath,
+  revealResidenceRelease,
   revealSingle,
   writeAudit,
   writeHostSession,
@@ -97,24 +98,38 @@ export function collectEntries(layers: { global: { config: { sources?: Record<st
 
 // ─── names-only 资源（GET /keys） ───────────────────────────────
 
+/** 可本地枚举的来源（design 决策 5 口径）：local/dotenvx/os-keychain/plugin 声明 keys；
+ *  infisical/doppler 需网络与上游凭据，键面留后续扩（不在 names-only 总览静默混入）。 */
+const ENUMERABLE_PROVIDERS = new Set(['local', 'dotenvx', 'os-keychain'])
+
 async function collectKeys(entries: SourceEntry[], context: { homeDir: string }): Promise<PanelKeyInfo[]> {
   const rows: PanelKeyInfo[] = []
   for (const entry of entries) {
-    if (!('keys' in entry.source) && entry.source.provider !== 'local' && entry.source.provider !== 'dotenvx') continue
-    let loaded: LoadedSource
-    try {
-      loaded = await loadSource(entry, { homeDir: context.homeDir, environment: {} })
-    } catch {
-      continue // 来源不可用时不阻塞其余来源；状态由 present/missing 表达
-    }
-    const files = 'files' in entry.source ? entry.source.files : undefined
-    for (const [key, value] of Object.entries(loaded.values)) {
-      rows.push({
-        key,
-        source: entry.name,
-        ...(files && files.length > 1 ? { fileIndex: 0 } : {}),
-        status: value === undefined || value === null ? 'missing' : 'present',
-      })
+    const source = entry.source
+    const enumerable = ENUMERABLE_PROVIDERS.has(source.provider) || 'keys' in source
+    if (!enumerable) continue
+    // 多文件来源逐文件枚举（fileIndex 与揭示的单文件作用域对称——同名跨文件不串读）。
+    const files = 'files' in source ? source.files : undefined
+    const scopes: Array<number | undefined> = files && files.length > 1 ? files.map((_, i) => i) : [undefined]
+    for (const fileIndex of scopes) {
+      const scoped: SourceEntry =
+        fileIndex !== undefined && files
+          ? { ...entry, source: { ...source, files: [files[fileIndex]] } as SourceEntry['source'] }
+          : entry
+      let loaded: LoadedSource
+      try {
+        loaded = await loadSource(scoped, { homeDir: context.homeDir, environment: {} })
+      } catch {
+        continue // 来源不可用时不阻塞其余来源
+      }
+      for (const key of Object.keys(loaded.values)) {
+        rows.push({
+          key,
+          source: entry.name,
+          ...(fileIndex !== undefined ? { fileIndex } : {}),
+          status: 'present', // 枚举自存储实际键；配置声明而存储缺失的 missing 行留 B2 细化
+        })
+      }
     }
   }
   return rows.sort((a, b) => a.key.localeCompare(b.key))
@@ -134,10 +149,16 @@ export interface HostRuntime {
 
 const PANEL_HEADER = 'x-mxenv-panel'
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, limit = 64 * 1024): Promise<string> {
   return new Promise((resolve) => {
     let data = ''
-    req.on('data', (chunk) => (data += chunk))
+    req.on('data', (chunk) => {
+      data += chunk
+      if (data.length > limit) {
+        req.destroy()
+        resolve(data.slice(0, limit))
+      }
+    })
     req.on('end', () => resolve(data))
   })
 }
@@ -159,8 +180,14 @@ export function createHostHandler(runtime: HostRuntime) {
       configPath: resolveConfigPath(runtime.homeDir, runtime.cwd),
     }
 
-    if (sessionExpired(s, now) && !s.closing) {
+    if (s.closing) {
+      // 终止即失效：closing 后任何连接（含 keep-alive 存量）都不得再服务。
+      send(res, 503, { error: 'session closed' })
+      return
+    }
+    if (sessionExpired(s, now)) {
       s.closing = true
+      auditHost(auditState, { keys: [], outcome: 'success', action: 'close', reason: 'expired' }, startedAt)
       await runtime.close()
       send(res, 503, { error: 'session expired' })
       return
@@ -170,7 +197,7 @@ export function createHostHandler(runtime: HostRuntime) {
     const auth = req.headers.authorization || ''
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
     if (!token || token !== s.token) {
-      auditHost(auditState, { keys: [], outcome: 'failure', action: 'close', reason: 'auth' }, startedAt)
+      auditHost(auditState, { keys: [], outcome: 'failure', action: undefined, reason: 'auth' }, startedAt)
       send(res, 401, { error: 'unauthorized' })
       return
     }
@@ -180,6 +207,12 @@ export function createHostHandler(runtime: HostRuntime) {
     const isPanelClient = req.headers[PANEL_HEADER] === '1'
 
     try {
+      if (req.method === 'GET' && url.pathname === '/status') {
+        // names-only 会话状态（gui status 用）：不含值与 token。
+        send(res, 200, { locked: !windowOpen(s, now), startedAt: new Date(s.startedAt).toISOString() })
+        return
+      }
+
       if (req.method === 'GET' && url.pathname === '/keys') {
         const profile = url.searchParams.get('profile')
         let entries = runtime.entries
@@ -208,6 +241,7 @@ export function createHostHandler(runtime: HostRuntime) {
         } else {
           s.unlockAt = null
           s.lastActionAt = now
+          revealResidenceRelease(s.token) // 锁回即清已展示值的驻留
           auditHost(auditState, { keys: [], outcome: 'success', action: 'lock' }, startedAt)
           send(res, 200, { unlocked: false })
         }
@@ -234,17 +268,25 @@ export function createHostHandler(runtime: HostRuntime) {
           return
         }
         if (!windowOpen(s, now)) {
+          revealResidenceRelease(s.token) // 窗口关即清驻留（防值残留到下次解锁）
           auditHost(auditState, { keys: [], outcome: 'failure', action, reason: 'locked' }, startedAt)
           send(res, 423, { error: 'locked: unlock window is not open' })
           return
         }
-        const body = JSON.parse((await readBody(req)) || '{}') as { key?: string; source?: string; fileIndex?: number }
+        let body: { key?: string; source?: string; fileIndex?: number }
+        try {
+          body = JSON.parse((await readBody(req)) || '{}') as typeof body
+        } catch {
+          send(res, 400, { error: 'invalid JSON body' })
+          return
+        }
         if (!body.key || !body.source) {
           auditHost(auditState, { keys: [body.key || ''], outcome: 'failure', action, reason: 'not-found' }, startedAt)
           send(res, 400, { error: 'key and source are required' })
           return
         }
-        const entry = runtime.entries.find((e) => e.name === body.source)
+        // 同名来源后序获胜（与 readStoredValue 的覆盖语义一致）
+        const entry = [...runtime.entries].reverse().find((e) => e.name === body.source)
         if (!entry) {
           auditHost(auditState, { keys: [body.key], outcome: 'failure', action, reason: 'not-found' }, startedAt)
           send(res, 404, { error: `unknown source "${body.source}"` })
@@ -290,17 +332,35 @@ export interface StartHostOptions {
   entries?: SourceEntry[]
 }
 
+/** pid 存活校验（design 决策 2 的崩溃残留自愈）：死 pid 的发现文件/锁即陈旧。 */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function startHostSession(options: StartHostOptions): Promise<{ runtime: HostRuntime; url: string } | { alreadyRunning: true; url: string }> {
   const { homeDir, cwd } = options
   const existing = readHostSession(homeDir)
   if (existing) {
-    // 幂等附着：会话仍存活（pid 存活校验交给操作系统——连接成功即活）。
-    return { alreadyRunning: true, url: `http://127.0.0.1:${existing.port}/${existing.token}` }
+    if (pidAlive(existing.pid)) {
+      return { alreadyRunning: true, url: `http://127.0.0.1:${existing.port}/${existing.token}` }
+    }
+    // 崩溃残留：死会话的发现文件与锁一并清除后重取（自愈）。
+    clearHostSession(homeDir)
+    releaseHostLock(homeDir)
   }
   if (!acquireHostLock(homeDir)) {
-    const raced = readHostSession(homeDir)
-    if (raced) return { alreadyRunning: true, url: `http://127.0.0.1:${raced.port}/${raced.token}` }
-    throw new Error('[mxenv] host session lock is held by another process and no runtime session exists; remove ~/.mxenv/host/lock if a crash left it behind.')
+    // 竞争方刚持锁、runtime.json 尚未写入：短暂等待 winner 的发现文件。
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 50))
+      const raced = readHostSession(homeDir)
+      if (raced) return { alreadyRunning: true, url: `http://127.0.0.1:${raced.port}/${raced.token}` }
+    }
+    throw new Error('[mxenv] host session lock is held by another process and no runtime session appeared; remove ~/.mxenv/host/lock if a crash left it behind.')
   }
 
   const token = randomBytes(24).toString('base64url')
@@ -323,8 +383,11 @@ export async function startHostSession(options: StartHostOptions): Promise<{ run
     close: async () => {
       // 先清发现文件再停服务：server.close 回调要等连接全关（keep-alive 会拖住），
       // "停止即失效"必须是即时语义（spec：close 后旧 token 落空）。
+      revealResidenceRelease(state.token)
       clearHostSession(homeDir)
       releaseHostLock(homeDir)
+      // server.close 只拒新连接；存量 keep-alive 必须显式断开（终止即失效）。
+      runtime.server?.closeAllConnections?.()
       await new Promise<void>((resolve) => runtime.server?.close(() => resolve()))
     },
   }
@@ -338,6 +401,11 @@ export async function startHostSession(options: StartHostOptions): Promise<{ run
   })
   const port = (runtime.server.address() as { port: number }).port
   writeHostSession({ port, pid: process.pid, token, startedAt: new Date().toISOString() }, homeDir)
+  auditHost(
+    { homeDir, profileName: runtime.profileName, configPath: resolveAuditConfigPath({ homeDir }, cwd) },
+    { keys: [], outcome: 'success', action: 'start' },
+    state.startedAt,
+  )
 
   // TTL/空闲兜底定时器（墙钟判定在请求路径逐次校验——定时器只兜底）
   const timer = setInterval(() => {
@@ -351,7 +419,23 @@ export async function startHostSession(options: StartHostOptions): Promise<{ run
   return { runtime, url: `http://127.0.0.1:${port}/${token}` }
 }
 
-export function hostStatus(homeDir: string): { running: boolean; port?: number; startedAt?: string; unlocked?: boolean } {
+export function hostStatus(homeDir: string): { running: boolean; port?: number; startedAt?: string } {
   const session = readHostSession(homeDir)
   return session ? { running: true, port: session.port, startedAt: session.startedAt } : { running: false }
+}
+
+/** gui status 的锁定态查询（names-only GET /status；token 取自 0600 发现文件）。 */
+export async function hostLockState(homeDir: string): Promise<{ locked: boolean } | null> {
+  const session = readHostSession(homeDir)
+  if (!session) return null
+  try {
+    const res = await fetch(`http://127.0.0.1:${session.port}/status`, {
+      headers: { authorization: `Bearer ${session.token}` },
+      signal: AbortSignal.timeout(3_000),
+    })
+    const body = (await res.json()) as { locked: boolean }
+    return { locked: body.locked }
+  } catch {
+    return null
+  }
 }

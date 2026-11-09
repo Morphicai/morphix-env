@@ -8,12 +8,12 @@
 
 ### Requirement: 会话生命周期与 token 认证
 
-面板宿主 SHALL 以会话形态运行：绑定 127.0.0.1 随机端口，会话 token 落 `~/.mxenv/host/runtime.json`（0600，含 port/pid/startedAt），会话 TTL 上限 4 小时、空闲 30 分钟关、显式关闭即终；会话消亡 SHALL 清除 runtime 文件。API 请求 SHALL 持有效 token（`Authorization: Bearer`），缺失或错误 token SHALL 被拒绝并审计；token SHALL NOT 出现在命令行参数、日志或审计事件中。宿主启动 SHALL 以文件锁互斥（同名锁 `O_EXCL` 语义）：并发启动只产生一个会话，其余幂等附着或退出。
+面板宿主 SHALL 以会话形态运行：绑定 127.0.0.1 随机端口，会话 token 落 `~/.mxenv/host/runtime.json`（0600，含 port/pid/startedAt），会话 TTL 上限 4 小时、空闲 30 分钟关、显式关闭即终；会话消亡 SHALL 清除 runtime 文件。API 请求 SHALL 持有效 token（`Authorization: Bearer`），缺失或错误 token SHALL 被拒绝并审计；token SHALL NOT 出现在 mxenv 自身进程的命令行参数、日志或审计事件中（经浏览器打开面板 URL 的传输是既定形态，见 design Risks）。宿主启动 SHALL 以文件锁互斥（同名锁 `O_EXCL` 语义）：并发启动只产生一个会话，其余幂等附着或退出。
 
 #### Scenario: 无 token 拒绝且 token 不落日志
 
 - **WHEN** 本机请求未携带有效 token
-- **THEN** 请求被拒绝并记审计；token 不出现在任何日志、审计事件或 argv 中
+- **THEN** 请求被拒绝并记审计；token 不出现在 mxenv 自身的任何日志、审计事件或 argv 中
 
 #### Scenario: 会话终止即失效
 
@@ -69,8 +69,8 @@
 
 #### Scenario: 值操作记账、查询不记账
 
-- **WHEN** 一次解锁 + 一次揭示 + 若干次键列表查询
-- **THEN** 审计恰新增解锁与揭示两条 `via: 'host'` 事件（含键名与结果、不含值），查询无事件
+- **WHEN** 会话启动后一次解锁 + 一次揭示 + 若干次键列表/状态查询
+- **THEN** 审计新增 start、unlock、reveal 三条 `via: 'host'` 事件（含键名与结果、不含值），查询无事件
 
 #### Scenario: configPath 只记真实路径
 

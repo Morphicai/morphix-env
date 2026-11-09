@@ -13,7 +13,7 @@ import {
   writeShims,
 } from './shims'
 import { spawn } from 'child_process'
-import { collectEntries, hostStatus, startHostSession } from './host'
+import { collectEntries, hostLockState, hostStatus, startHostSession } from './host'
 import { clearHostSession, readHostSession, releaseHostLock } from '@morphixai/mxenv-core'
 import pkg from '../package.json'
 
@@ -284,9 +284,14 @@ async function cmdGui(args: Args): Promise<number> {
 
   if (sub === 'status') {
     const st = hostStatus(homeDir)
-    if (st.running) console.log(`[mxenv] host session running — port ${st.port}, started ${st.startedAt}`)
-    else console.log('[mxenv] no running host session')
-    return st.running ? 0 : 1
+    if (!st.running) {
+      console.log('[mxenv] no running host session')
+      return 1
+    }
+    const lock = await hostLockState(homeDir)
+    const lockLabel = lock ? (lock.locked ? 'locked' : 'unlocked') : 'unknown (host not answering)'
+    console.log(`[mxenv] host session running — port ${st.port}, started ${st.startedAt}, ${lockLabel}`)
+    return 0
   }
 
   if (sub === 'close') {
@@ -300,6 +305,7 @@ async function cmdGui(args: Args): Promise<number> {
       await fetch(`http://127.0.0.1:${session.port}/shutdown`, {
         method: 'POST',
         headers: { authorization: `Bearer ${session.token}` },
+        signal: AbortSignal.timeout(3_000),
       })
     } catch { /* 宿主已亡则本地清理兜底 */ }
     clearHostSession(homeDir)
@@ -345,11 +351,10 @@ async function cmdGui(args: Args): Promise<number> {
 }
 
 function openInBrowser(url: string): void {
-  try {
-    spawn('open', [url], { stdio: 'ignore' }).unref()
-  } catch {
-    console.log(`[mxenv] open the panel manually: ${url}`)
-  }
+  // spawn 对缺失命令抛异步 'error' 事件而非同步 throw——必须挂监听兜底。
+  const child = spawn('open', [url], { stdio: 'ignore' })
+  child.on('error', () => console.log(`[mxenv] open the panel manually: ${url}`))
+  child.unref()
 }
 
 /** Wave B placeholders: reserved command names, deliberately not implemented. */

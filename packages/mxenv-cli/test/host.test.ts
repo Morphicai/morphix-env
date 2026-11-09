@@ -138,7 +138,7 @@ describe('audit scope and session lifecycle', () => {
     await api('/keys')
 
     const events = auditEvents()
-    expect(events.map((e) => e.action)).toEqual(['unlock', 'reveal'])
+    expect(events.map((e) => e.action)).toEqual(['start', 'unlock', 'reveal'])
     expect(events.every((e) => e.via === 'host')).toBe(true)
     expect(events.every((e) => typeof e.configPath === 'string')).toBe(true)
     expect(JSON.stringify(events)).not.toContain(sentinel)
@@ -158,6 +158,31 @@ describe('audit scope and session lifecycle', () => {
     const again = await startHostSession({ homeDir: HOME, cwd: ROOT, entries: [] })
     expect('runtime' in again).toBe(false)
     expect((again as { alreadyRunning: true }).alreadyRunning).toBe(true)
+  })
+
+  it('after shutdown the old token is dead: further requests are refused (closing gate + connections cut)', async () => {
+    await api('/shutdown', { method: 'POST' })
+    // 终止即失效：closing 闸 + closeAllConnections——同一 fetch 客户端再请求须落空（拒绝或 503）
+    const after = await api('/keys').then(
+      (r) => r.status,
+      () => 'refused' as const,
+    )
+    expect(after === 'refused' || after === 503).toBe(true)
+  })
+
+  it('concurrent starts produce exactly one session (O_EXCL lock)', async () => {
+    await runtime.close() // 清场，让两个 start 真竞争
+    const [a, b] = await Promise.all([
+      startHostSession({ homeDir: HOME, cwd: ROOT, entries: [] }),
+      startHostSession({ homeDir: HOME, cwd: ROOT, entries: [] }),
+    ])
+    const started = [a, b].filter((r) => 'runtime' in r)
+    const attached = [a, b].filter((r) => !('runtime' in r))
+    expect(started).toHaveLength(1)
+    expect(attached).toHaveLength(1)
+    if ('runtime' in (started[0] as object & { runtime?: unknown })) {
+      await (started[0] as { runtime: HostRuntime }).runtime.close()
+    }
   })
 })
 

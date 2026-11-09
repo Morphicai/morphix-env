@@ -289,7 +289,7 @@ export interface AuditEvent {
    * Action kind. Value-free by contract: events carry key names only, never
    * values. `unlock`/`lock` are panel-host session state transitions.
    */
-  action?: 'set' | 'delete' | 'reveal' | 'close' | 'unlock' | 'lock'
+  action?: 'set' | 'delete' | 'reveal' | 'close' | 'unlock' | 'lock' | 'start'
   /** Value-free reveal outcome detail (`locked` / `not-found` / `read-error`). */
   reason?: string
   /**
