@@ -130,22 +130,46 @@ jobs:
       # 发布顺序：@morphixai/mxenv-core → @morphixai/mxenv → @morphixai/mxenv-cli
       # → morphix-env（收尾转发）。各包 prepublishOnly（guard + 根包测试）在
       # npm publish 内自动执行。
-      - name: Publish @morphixai/mxenv-core (core-first)
-        working-directory: packages/mxenv-core
-        run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
-      - name: Publish @morphixai/mxenv
-        working-directory: packages/mxenv
-        run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
-      - name: Publish @morphixai/mxenv-cli
-        working-directory: packages/mxenv-cli
-        run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
-      - name: Publish morphix-env (deprecated forwarding shim)
-        run: npm publish --access public --tag "${{ steps.tag.outputs.tag }}"
-      # 只在发布成功后建 GitHub Release（Release 存在 ⇒ 对应 npm 版本已上线）。
+      #
+      # 发布链容错（0.14.0 事故 followup，run 42551081396）：npm publish 对已发布
+      # 版本会 EPUBLISHCONFLICT 且不可重发，半途失败后重跑整个链曾无法续跑。
+      # 现每个包：预检 registry 已有该版本即跳过；publish 失败后复查 registry，
+      # 已上线（预检漏判/CDN 延迟）视为成功继续——链路可整体重跑恢复。
+      - name: Publish packages (core-first, 已发布跳过可续跑)
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          publish_one() {
+            local dir="$1" name="$2"
+            if npm view "$name@$VERSION" version --prefer-online >/dev/null 2>&1; then
+              echo "::notice::$name@$VERSION 已在 registry，跳过发布（链路续跑）"
+              return 0
+            fi
+            if (cd "$dir" && npm publish --access public --tag "$TAG"); then
+              return 0
+            fi
+            if npm view "$name@$VERSION" version --prefer-online >/dev/null 2>&1; then
+              echo "::notice::$name@$VERSION 已在 registry（预检漏判），继续"
+              return 0
+            fi
+            echo "::error::$name@$VERSION 发布失败且 registry 无此版本——查上方 prepublish-guard 输出；修复后重跑本 workflow 即可续跑（已发布包自动跳过）"
+            return 1
+          }
+          publish_one packages/mxenv-core @morphixai/mxenv-core
+          publish_one packages/mxenv @morphixai/mxenv
+          publish_one packages/mxenv-cli @morphixai/mxenv-cli
+          publish_one . morphix-env
+      # 只在发布成功后建 GitHub Release（Release 存在 ⇒ 对应 npm 版本已上线）；
+      # Release 已存在时跳过（链路续跑/手动兜底后重跑的去重）。
       - name: Create GitHub Release (含迁移表)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          if gh release view "v${{ steps.tag.outputs.version }}" >/dev/null 2>&1; then
+            echo "::notice::GitHub Release v${{ steps.tag.outputs.version }} 已存在，跳过"
+            exit 0
+          fi
           node -e '
             const fs = require("fs")
             const changelog = fs.readFileSync("CHANGELOG.md", "utf8")
