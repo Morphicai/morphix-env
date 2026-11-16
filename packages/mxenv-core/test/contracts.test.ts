@@ -88,6 +88,10 @@ describe('mxenv-core/contracts 入口', () => {
       'findMxEnvReferences',
       'hasMxEnvReference',
       'StreamingRedactor',
+      'isRedactableValue',
+      'highCollisionValueKeys',
+      'MIN_REDACTABLE_VALUE_LENGTH',
+      'SHORT_VALUE_WARN_LENGTH',
     ]) {
       expect(out.exports, `/contracts 应导出契约符号 ${name}`).toContain(name)
     }
@@ -107,7 +111,11 @@ describe('mxenv-core/contracts 入口', () => {
       'collectRedactionValues',
       'findMxEnvReferences',
       'hasMxEnvReference',
+      'highCollisionValueKeys',
       'isPublicKey',
+      'isRedactableValue',
+      'MIN_REDACTABLE_VALUE_LENGTH',
+      'SHORT_VALUE_WARN_LENGTH',
       'normalizeProfile',
       'referencePattern',
       'validateConfig',
@@ -124,5 +132,44 @@ describe('mxenv-core/contracts 入口', () => {
     ]) {
       expect(existsSync(path.join(pkgRoot, f)), `${f} 缺失（test 脚本应已先 build）`).toBe(true)
     }
+  })
+})
+
+
+// ─── 短值脱敏豁免与碰撞告警（issue #31）─────────────────
+
+import {
+  collectRedactionValues,
+  highCollisionValueKeys,
+  type KeyProvenance,
+} from '../src/contracts'
+
+describe('redaction value policy (issue #31)', () => {
+  const prov = (key: string): KeyProvenance => ({
+    key, source: 'test', provider: 'local', precedence: 0, overriddenSources: [],
+  })
+  const environment = {
+    SHORT_ONE: '1',
+    SHORT_TWO: 'ab',
+    SHORT_THREE: 'xyz',
+    LONG: 'a-real-long-secret-value',
+    EMPTY: '',
+    NEXT_PUBLIC_SHORT: 'sh',
+  } as unknown as NodeJS.ProcessEnv
+  const provenance = {
+    SHORT_ONE: prov('SHORT_ONE'),
+    SHORT_TWO: prov('SHORT_TWO'),
+    SHORT_THREE: prov('SHORT_THREE'),
+    NEXT_PUBLIC_SHORT: prov('NEXT_PUBLIC_SHORT'),
+    LONG: prov('LONG'),
+    EMPTY: prov('EMPTY'),
+  }
+
+  it('collectRedactionValues 丢弃 ≤2 字符值，保留 ≥3 字符值', () => {
+    expect(collectRedactionValues(environment, provenance).sort()).toEqual(['a-real-long-secret-value', 'xyz'])
+  })
+
+  it('highCollisionValueKeys 只点名 1–4 字符的非公开 key；空值与公开前缀不含', () => {
+    expect(highCollisionValueKeys(environment, provenance)).toEqual(['SHORT_ONE', 'SHORT_THREE', 'SHORT_TWO'])
   })
 })

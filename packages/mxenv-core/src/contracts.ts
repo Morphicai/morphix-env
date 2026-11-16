@@ -389,9 +389,35 @@ export function hasMxEnvReference(text: string): boolean {
 // ─── redaction 规则 ────────────────────────────────────────────────
 
 /**
+ * Minimum length for a composed value to participate in substring redaction.
+ * 1–2 character values carry at most ~13 bits of entropy — they cannot be
+ * usable credentials — while substring-redacting them deterministically
+ * corrupts ordinary output (a value of "1" marks every "1" in the stream;
+ * issue #31). Length is the only "shape" signal used here on purpose:
+ * source provenance already defines secrecy, and token-look heuristics miss
+ * weak-but-real secrets while false-positiving on ordinary strings.
+ */
+export const MIN_REDACTABLE_VALUE_LENGTH = 3
+
+/**
+ * Composed values at or below this length trigger a compose-time collision
+ * warning: ≤2 chars are exempt from redaction entirely, 3–4 chars still
+ * redact but collide with ordinary output easily. Both shapes are
+ * config-like, not credentials — the durable fix lives in secret-source
+ * admission, not in the redactor.
+ */
+export const SHORT_VALUE_WARN_LENGTH = 4
+
+/** Whether a composed value participates in output redaction (length floor). */
+export function isRedactableValue(value: string | undefined): value is string {
+  return typeof value === 'string' && value.length >= MIN_REDACTABLE_VALUE_LENGTH
+}
+
+/**
  * Values worth redacting from child output: every non-public sourced value
- * still present in the environment. Also used after `mxenv://` reference
- * resolution, which can introduce new values for the same keys.
+ * still present in the environment, above the redaction length floor. Also
+ * used after `mxenv://` reference resolution, which can introduce new values
+ * for the same keys.
  */
 export function collectRedactionValues(
   environment: NodeJS.ProcessEnv,
@@ -400,7 +426,25 @@ export function collectRedactionValues(
   return [...new Set(Object.entries(provenance)
     .filter(([key]) => !isPublicKey(key) && Boolean(environment[key]))
     .map(([key]) => environment[key] as string)
-    .filter(Boolean))]
+    .filter(isRedactableValue))]
+}
+
+/**
+ * Key names whose composed non-public values are ≤SHORT_VALUE_WARN_LENGTH
+ * chars: exempt from redaction (≤2) or redacting with extreme collision
+ * risk (3–4). Names only — never values; feeds the compose-time warning
+ * that pushes config-like values out of secret sources.
+ */
+export function highCollisionValueKeys(
+  environment: NodeJS.ProcessEnv,
+  provenance: Record<string, KeyProvenance>,
+): string[] {
+  return Object.entries(provenance)
+    .filter(([key]) => !isPublicKey(key))
+    .map(([key]) => [key, environment[key]] as const)
+    .filter(([, value]) => typeof value === 'string' && value.length > 0 && value.length <= SHORT_VALUE_WARN_LENGTH)
+    .map(([key]) => key)
+    .sort((a, b) => a.localeCompare(b))
 }
 
 /**
@@ -413,7 +457,11 @@ export class StreamingRedactor {
   private pending = ''
 
   constructor(values: string[]) {
-    this.values = [...new Set(values.filter(Boolean))].sort((a, b) => b.length - a.length)
+    // Length floor (issue #31): 1–2 char values are exempt — no meaningful
+    // entropy, deterministic output corruption. This constructor is the
+    // authoritative filter; collectRedactionValues applies the same rule so
+    // the public composition field matches redactor behavior.
+    this.values = [...new Set(values.filter(isRedactableValue))].sort((a, b) => b.length - a.length)
   }
 
   write(chunk: Buffer | string): string {

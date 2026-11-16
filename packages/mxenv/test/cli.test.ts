@@ -287,6 +287,44 @@ describe('plaintext marking and optional reminder', () => {
   })
 })
 
+// ─── 短值脱敏豁免与碰撞告警（issue #31）─────────────────
+
+describe('short-value redaction exemption and collision warning (issue #31)', () => {
+  // execFileSync 不返成功路径的 stderr；脱敏/告警断言需要同时看两侧。
+  function runCaptureShort(args: string[], env?: Record<string, string>) {
+    const { MXENV_SHIM, MXENV_ENDPOINT, MXENV_TOKEN, MXENV_WARN_PLAINTEXT, DOTENV_KEY, INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET, ...base } = process.env
+    return spawnSync('node', [CLI, ...args], {
+      encoding: 'utf8',
+      env: { ...base, ...env, HOME: join(TMP, 'home') },
+      cwd: TMP,
+    })
+  }
+
+  it('值为 "1" 的 key 不再洗掉输出里的数字 1，且 stderr 告警点名该 key', () => {
+    writeFileSync(join(TMP, '.env.local'), 'MXTEST_SHORT=1\n')
+    const result = runCaptureShort(['run', '--no-infisical', '--', 'node', '-e', 'console.log("probe-111-2026")'])
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('probe-111-2026')
+    expect(result.stderr).toContain('MXTEST_SHORT')
+    expect(result.stderr).toContain('very short values')
+  })
+
+  it('3 字符值仍被脱敏但同样触发告警', () => {
+    writeFileSync(join(TMP, '.env.local'), 'MXTEST_MID=xyz\n')
+    const result = runCaptureShort(['run', '--no-infisical', '--', 'node', '-e', 'console.log("a xyz b")'])
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('a [REDACTED] b')
+    expect(result.stderr).toContain('MXTEST_MID')
+  })
+
+  it('无短值时不告警', () => {
+    writeFileSync(join(TMP, '.env.local'), `MXTEST_LONG=${testValue('long')}\n`)
+    const result = runCaptureShort(['run', '--no-infisical', '--', 'node', '-e', 'process.exit(0)'])
+    expect(result.status).toBe(0)
+    expect(result.stderr).not.toContain('very short values')
+  })
+})
+
 // ─── mxenv.config.json ─────────────────────────────────
 
 describe('config file integration', () => {

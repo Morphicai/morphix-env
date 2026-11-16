@@ -33,4 +33,21 @@ describe('StreamingRedactor', () => {
     const redactor = new StreamingRedactor([value()])
     expect(redactor.write('ordinary diagnostic\n') + redactor.flush()).toBe('ordinary diagnostic\n')
   })
+
+  it('exempts 1–2 char values: a "1" secret must not scrub every digit (issue #31)', () => {
+    const redactor = new StreamingRedactor(['1', 'ab', 'probe-secret-value'])
+    expect(redactor.write('probe-111-ab-2026 ok probe-secret-value end') + redactor.flush())
+      .toBe('probe-111-ab-2026 ok [REDACTED] end')
+  })
+
+  it('still redacts 3-char values (the floor, not a heuristic)', () => {
+    const redactor = new StreamingRedactor(['xyz'])
+    expect(redactor.write('a xyz b') + redactor.flush()).toBe('a [REDACTED] b')
+  })
+
+  it('exempt short values cause no cross-chunk holdback', () => {
+    const redactor = new StreamingRedactor(['ab'])
+    const output = redactor.write('1a') + redactor.write('b2') + redactor.flush()
+    expect(output).toBe('1ab2')
+  })
 })
