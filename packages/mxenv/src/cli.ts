@@ -8,10 +8,12 @@ import {
   resolveAuditConfigPath,
   collectRedactionValues,
   composeEnvironment,
+  CONFIG_FILE,
   extractPublicVars,
   findMxEnvReferences,
   hasMxEnvReference,
   highCollisionValueKeys,
+  infisicalEnvPins,
   isPublicKey,
   isRedactableValue,
   SHORT_VALUE_WARN_LENGTH,
@@ -27,6 +29,8 @@ import {
   type ComposeOptions,
   type ConfigLayers,
   type EnvironmentComposition,
+  type InfisicalEnvPin,
+  type MxEnvConfig,
   type UnresolvedReference,
 } from '@morphixai/mxenv-core'
 import { launchEditor, startEditorServer } from './editor'
@@ -279,6 +283,40 @@ function warnHighCollisionValues(composition: EnvironmentComposition): void {
   console.warn(`[mxenv] Warning: key(s) ${keys.join(', ')} have very short values (≤${SHORT_VALUE_WARN_LENGTH} chars) — values ≤2 chars are not redacted and 3–4 char values redact with high collision risk; move config-like values out of secret sources or rotate them.`)
 }
 
+/**
+ * Unpinned Infisical env is a latent fail-closed error: this run may be saved
+ * by --env/INFISICAL_ENV/DEPLOY_ENV, but any later invocation without them
+ * refuses to run (0.15.0+). This is config fragility, not run completeness —
+ * it warns even under --no-infisical (unlike skipped-source warnings, which
+ * stay quiet for the user's own explicit choice). Once per process; names
+ * only, never values.
+ */
+let envPinWarned = false
+
+function warnUnpinnedInfisicalEnv(composition: EnvironmentComposition, args: Args): void {
+  if (envPinWarned) return
+  envPinWarned = true
+  const pins = infisicalEnvPins(configLayers().project.config, { envName: args.env })
+  const active = new Set(composition.sourceStatuses.map((source) => source.name))
+  for (const pin of pins) {
+    if (pin.pinned || !pin.resolvedVia || !active.has(pin.name)) continue
+    const via = pin.resolvedVia === 'cli-env' ? '--env/-e'
+      : pin.resolvedVia === 'deploy-env' ? 'DEPLOY_ENV'
+      : 'INFISICAL_ENV'
+    console.warn(`[mxenv] Warning: Infisical source "${pin.name}" has no pinned env (this run resolved "${pin.env}" via ${via}); declare "env" on the source — runs without --env/-e fail closed.`)
+  }
+}
+
+/** Value-free one-line env resolution state for an Infisical source. */
+function envPinLabel(pin: InfisicalEnvPin): string {
+  if (!pin.env) return 'env: <fail-closed>'
+  if (pin.pinned) return `env: ${pin.env} (pinned)`
+  const via = pin.resolvedVia === 'cli-env' ? '--env'
+    : pin.resolvedVia === 'deploy-env' ? 'DEPLOY_ENV'
+    : 'INFISICAL_ENV'
+  return `env: ${pin.env} (via ${via}, unpinned)`
+}
+
 function generatedOptions(args: Args): { outFile: string; filter: string | null } {
   const config = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() }).project.config
   return {
@@ -419,6 +457,7 @@ async function cmdRun(args: Args): Promise<number> {
   warnPlaintextSources(composition, args)
   warnSkippedSources(composition, Boolean(args.noInfisical))
   warnHighCollisionValues(composition)
+  warnUnpinnedInfisicalEnv(composition, args)
   if (args.verbose) {
     for (const source of composition.sourceStatuses) {
       console.log(`[mxenv] ${source.name}: ${source.availability}${source.detail ? ` (${source.detail})` : ''} (${source.keyCount} keys)`)
@@ -507,6 +546,7 @@ async function cmdGenerate(args: Args): Promise<number> {
   warnPlaintextSources(composition, args)
   warnSkippedSources(composition, Boolean(args.noInfisical))
   warnHighCollisionValues(composition)
+  warnUnpinnedInfisicalEnv(composition, args)
   // Resolve mxenv:// references first: a generated client env must contain
   // the same values a run child would receive, not literal reference strings.
   await resolveEnvironmentReferences(composition, args)
@@ -523,11 +563,20 @@ async function cmdInspect(args: Args): Promise<number> {
   console.log(`profile: ${composition.profileName}`)
   warnSkippedSources(composition, Boolean(args.noInfisical))
   warnHighCollisionValues(composition)
+  warnUnpinnedInfisicalEnv(composition, args)
+  // Infisical 源的环境解析状态直接标在 source 行上：钉定与否是配置健康度的
+  // 一部分，不能等 fail-closed 报错才可见（doctor 会做全量体检）。
+  const envPins = new Map(
+    infisicalEnvPins(configLayers().project.config, { envName: args.env }).map((pin) => [pin.name, pin]),
+  )
   for (const source of composition.sourceStatuses) {
     // local 明文源钉死"仅开发用"定位（issue #7）；dotenvx 加密文件不在此列。
     const plaintextMark = source.provider === 'local' ? ' [plaintext, dev-only]' : ''
     const detailMark = source.detail ? ` (${source.detail})` : ''
-    console.log(`source: ${source.name} (${source.provider}) — ${source.availability}${detailMark}, ${source.keyCount} keys${plaintextMark}`)
+    const envMark = source.provider === 'infisical' && envPins.has(source.name)
+      ? ` [${envPinLabel(envPins.get(source.name)!)}]`
+      : ''
+    console.log(`source: ${source.name} (${source.provider}) — ${source.availability}${detailMark}, ${source.keyCount} keys${plaintextMark}${envMark}`)
   }
   for (const [key, provenance] of Object.entries(composition.provenance).sort(([a], [b]) => a.localeCompare(b))) {
     if (!args.filter || key.startsWith(args.filter)) {
@@ -538,12 +587,112 @@ async function cmdInspect(args: Args): Promise<number> {
   return 0
 }
 
+type Finding = { level: 'ok' | 'warn' | 'fail'; text: string }
+
+/**
+ * `mxenv doctor` — one-shot health check over the whole local surface:
+ * config naming, Infisical env pinning, source health, short-value redaction
+ * collisions, plaintext units, legacy global dir. Unlike run/inspect it never
+ * stops at the first composition error — every finding is reported at once,
+ * because a stale config plus one fail-closed source is exactly the state
+ * where single-error output hides the rest. Value-free throughout. Exit 1
+ * when any finding is `fail`.
+ */
+async function cmdDoctor(args: Args): Promise<number> {
+  const findings: Finding[] = []
+  const add = (level: Finding['level'], text: string): void => {
+    findings.push({ level, text })
+  }
+  const cwd = process.cwd()
+  const layers = configLayers()
+
+  console.log(`mxenv doctor — @morphixai/mxenv ${VERSION}`)
+
+  // ── 配置发现与命名 ────────────────────────────────────────
+  const legacyConfigPath = join(cwd, 'mx-env.config.json')
+  const legacyConfigExists = existsSync(legacyConfigPath)
+  if (legacyConfigExists && layers.project.exists) {
+    add('fail', `旧名配置 mx-env.config.json 与 mxenv.config.json 并存：旧文件不再读取，请删除（其声明来源不会加载）`)
+  } else if (legacyConfigExists) {
+    add('fail', `旧名配置 mx-env.config.json：0.13.x 起不再读取，请改名为 mxenv.config.json（其声明来源当前不会加载）`)
+  } else if (layers.project.exists) {
+    add('ok', `项目配置 ${CONFIG_FILE}`)
+  } else {
+    add('ok', '无项目配置（legacy .env.local / 全局基线发现路径）')
+  }
+
+  // ── Infisical env 钉定 ────────────────────────────────────
+  const pins = infisicalEnvPins(layers.project.config, { envName: args.env })
+  if (!pins.length) {
+    add('ok', 'Infisical env 钉定: 无 Infisical 源')
+  }
+  for (const pin of pins) {
+    if (pin.pinned) {
+      add('ok', `Infisical env 钉定: "${pin.name}" → ${pin.env}（配置声明）`)
+    } else if (pin.resolvedVia) {
+      add('warn', `Infisical env 未钉定: "${pin.name}" 本次经 ${pin.resolvedVia === 'cli-env' ? '--env/-e' : pin.resolvedVia} 解析为 "${pin.env}"——换台机器/换个 shell 可能不再解析，建议声明 "env" 或统一走显式 --env/-e`)
+    } else {
+      add('warn', `Infisical env 未钉定: "${pin.name}" 且无 --env/INFISICAL_ENV/DEPLOY_ENV——裸 run 将 fail-closed 拒绝（0.15.0+ 设计预期；显式传 --env/-e 或声明 "env" 均可）`)
+    }
+  }
+
+  // ── 组合健康（source 状态 / 短值碰撞） ─────────────────────
+  let composition: EnvironmentComposition | null = null
+  try {
+    composition = await resolveComposition(args)
+  } catch (error) {
+    add('fail', `组合失败: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (composition) {
+    for (const source of composition.sourceStatuses) {
+      const detail = source.detail ? ` (${source.detail})` : ''
+      if (source.availability === 'loaded') {
+        const plaintext = source.provider === 'local' && source.keyCount > 0
+        add(plaintext ? 'warn' : 'ok',
+          `source "${source.name}" (${source.provider}) — loaded, ${source.keyCount} keys${detail}${plaintext ? ' [plaintext, dev-only] — 跑 mxenv migrate 迁入加密存储' : ''}`)
+      } else if (source.availability === 'missing-optional') {
+        add('ok', `source "${source.name}" (${source.provider}) — missing-optional${detail}（可选文件缺失，正常）`)
+      } else if (source.availability === 'skipped' && source.detail === 'disabled by --no-infisical') {
+        add('ok', `source "${source.name}" (${source.provider}) — skipped (--no-infisical)`)
+      } else {
+        add('fail', `source "${source.name}" (${source.provider}) — ${source.availability}${detail || ' (无原因)'}：其 key 不在组合环境中`)
+      }
+    }
+    const collisions = highCollisionValueKeys(composition.environment, composition.provenance)
+    if (collisions.length) {
+      add('warn', `短值高碰撞 key: ${collisions.join(', ')} — ≤2 字符值不脱敏、3–4 字符脱敏高碰撞；配置类值应迁出 secret 源`)
+    } else {
+      add('ok', '短值脱敏碰撞: 无')
+    }
+  }
+
+  // ── 旧全局目录 ────────────────────────────────────────────
+  if (args.noGlobal) {
+    add('ok', '全局基线: 已被 --no-global 排除，跳过检查')
+  } else if (existsSync(join(homedir(), '.mx-env'))) {
+    add('warn', '~/.mx-env 旧全局目录仍存在 — 跑 mxenv migrate --home 完成迁移（含值级等价验证）')
+  } else {
+    add('ok', '全局基线: ~/.mxenv 就绪，无旧目录残留')
+  }
+
+  // ── 汇总 ──────────────────────────────────────────────────
+  const counts = { ok: 0, warn: 0, fail: 0 }
+  for (const finding of findings) {
+    counts[finding.level]++
+    const label = finding.level === 'ok' ? '[ok]' : finding.level === 'warn' ? '[warn]' : '[fail]'
+    console.log(`${label} ${finding.text}`)
+  }
+  console.log(`summary: ${counts.ok} ok, ${counts.warn} warn, ${counts.fail} fail`)
+  return counts.fail > 0 ? 1 : 0
+}
+
 async function cmdExport(args: Args): Promise<number> {
   const startedAt = Date.now()
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
   warnSkippedSources(composition, Boolean(args.noInfisical))
   warnHighCollisionValues(composition)
+  warnUnpinnedInfisicalEnv(composition, args)
   const keys = Object.keys(composition.provenance).sort()
   if (args.dryRun) {
     for (const key of keys) console.log(key)
@@ -587,6 +736,7 @@ async function cmdRender(args: Args): Promise<number> {
   warnPlaintextSources(composition, args)
   warnSkippedSources(composition, Boolean(args.noInfisical))
   warnHighCollisionValues(composition)
+  warnUnpinnedInfisicalEnv(composition, args)
   const names = findTemplateVariables(template)
   const missing = names.filter((name) => composition.environment[name] === undefined || composition.environment[name] === null)
 
@@ -912,6 +1062,7 @@ Usage:
   mxenv inject <template> <output>       Resolve mxenv:// references into a file (mode 0600)
   mxenv generate [options]               Generate public __env.js
   mxenv inspect [options]                Print key names, sources, and status only
+  mxenv doctor [options]                 One-shot health check: naming, env pins, sources, short values
   mxenv migrate [--to dotenvx|keychain]  Move plaintext local sources into encrypted storage
   mxenv migrate --home                  Move the global directory ~/.mx-env → ~/.mxenv (verified, timestamped backup)
   mxenv doc [options]                    Generate a value-free project Skill
@@ -970,6 +1121,7 @@ async function main(): Promise<number> {
     case 'generate':
     case 'gen': return cmdGenerate(args)
     case 'inspect': return cmdInspect(args)
+    case 'doctor': return cmdDoctor(args)
     case 'migrate': return cmdMigrate(args)
     case 'audit': return cmdAudit(args)
     case 'edit': return cmdEdit(args)

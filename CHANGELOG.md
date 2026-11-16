@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.16.0
+
+### Added
+
+- **`mxenv doctor` — one-shot health check.** Reports every local-surface finding at once instead of dying at the first composition error (the exact state where single-error output hides the rest): config naming (old-name `mx-env.config.json` coexisting or unread), Infisical env pinning per source, source health (loaded / missing-optional / skipped, with fail for sources whose keys are absent), short-value redaction collisions, plaintext local units, and the legacy `~/.mx-env` global dir. Value-free throughout; exit 1 when any finding is `fail`, so it is CI-usable.
+
+### Changed
+
+- **`inspect` shows Infisical env resolution state per source line** — `[env: dev (pinned)]` vs `[env: dev (via --env, unpinned)]` — making a missing `env` pin visible before the fail-closed error bites.
+- **Composed commands warn on unpinned Infisical env.** `run`/`export`/`render`/`inject`/`generate`/`inspect` warn once on stderr when an active Infisical source has no `env` pin but this run was saved by `--env`/`INFISICAL_ENV`/`DEPLOY_ENV`: later invocations without them fail closed (0.15.0+). Unlike skipped-source warnings this fires even under `--no-infisical` — it is config fragility, not run completeness.
+
 ## 0.15.0
 
 ### Changed

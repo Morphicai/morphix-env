@@ -366,7 +366,7 @@ function cmdReserved(command: string): number {
 /** L2 项目命令名：本 CLI 收到时给"去项目里跑"的直达指引（P10），而不是裸 Unknown command。 */
 const PROJECT_COMMANDS = new Set([
   'run', 'fetch', 'export', 'render', 'inject', 'generate', 'gen',
-  'inspect', 'migrate', 'audit', 'edit', 'doc', 'skill',
+  'inspect', 'doctor', 'migrate', 'audit', 'edit', 'doc', 'skill',
 ])
 
 async function main(): Promise<number> {
