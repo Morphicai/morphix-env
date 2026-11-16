@@ -237,6 +237,28 @@ function warnPlaintextSources(composition: EnvironmentComposition, args: Args): 
   console.warn(`[mxenv] Plaintext local source(s) in use: ${loaded.map((source) => source.name).join(', ')} — local plaintext files are dev-only; run \`mxenv migrate\` to move them into encrypted storage.`)
 }
 
+/**
+ * A skipped source means the composed environment is silently incomplete:
+ * the child runs with keys missing (issue: legacy Infisical sources could
+ * vanish without any trace in run/inspect output). Always loud — unlike the
+ * plaintext warning this is a correctness problem, not hygiene. Once per
+ * process; `--no-infisical` skips are the user's own explicit choice.
+ */
+let skipWarned = false
+
+function warnSkippedSources(composition: EnvironmentComposition, noInfisical: boolean): void {
+  if (skipWarned) return
+  skipWarned = true
+  const skipped = composition.sourceStatuses.filter(
+    (source) => source.availability === 'skipped'
+      && !(noInfisical && source.detail === 'disabled by --no-infisical'),
+  )
+  for (const source of skipped) {
+    const reason = source.detail ? ` — ${source.detail}` : ''
+    console.warn(`[mxenv] Warning: source "${source.name}" (${source.provider}) was skipped${reason}; its keys are NOT in this environment.`)
+  }
+}
+
 function generatedOptions(args: Args): { outFile: string; filter: string | null } {
   const config = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() }).project.config
   return {
@@ -373,9 +395,10 @@ async function cmdRun(args: Args): Promise<number> {
   const startedAt = Date.now()
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
+  warnSkippedSources(composition, Boolean(args.noInfisical))
   if (args.verbose) {
     for (const source of composition.sourceStatuses) {
-      console.log(`[mxenv] ${source.name}: ${source.availability} (${source.keyCount} keys)`)
+      console.log(`[mxenv] ${source.name}: ${source.availability}${source.detail ? ` (${source.detail})` : ''} (${source.keyCount} keys)`)
     }
   }
   if (args.dryRun) {
@@ -459,6 +482,7 @@ async function cmdFetch(args: Args): Promise<number> {
 async function cmdGenerate(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
+  warnSkippedSources(composition, Boolean(args.noInfisical))
   // Resolve mxenv:// references first: a generated client env must contain
   // the same values a run child would receive, not literal reference strings.
   await resolveEnvironmentReferences(composition, args)
@@ -473,10 +497,12 @@ async function cmdGenerate(args: Args): Promise<number> {
 async function cmdInspect(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
   console.log(`profile: ${composition.profileName}`)
+  warnSkippedSources(composition, Boolean(args.noInfisical))
   for (const source of composition.sourceStatuses) {
     // local 明文源钉死"仅开发用"定位（issue #7）；dotenvx 加密文件不在此列。
     const plaintextMark = source.provider === 'local' ? ' [plaintext, dev-only]' : ''
-    console.log(`source: ${source.name} (${source.provider}) — ${source.availability}, ${source.keyCount} keys${plaintextMark}`)
+    const detailMark = source.detail ? ` (${source.detail})` : ''
+    console.log(`source: ${source.name} (${source.provider}) — ${source.availability}${detailMark}, ${source.keyCount} keys${plaintextMark}`)
   }
   for (const [key, provenance] of Object.entries(composition.provenance).sort(([a], [b]) => a.localeCompare(b))) {
     if (!args.filter || key.startsWith(args.filter)) {
@@ -491,6 +517,7 @@ async function cmdExport(args: Args): Promise<number> {
   const startedAt = Date.now()
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
+  warnSkippedSources(composition, Boolean(args.noInfisical))
   const keys = Object.keys(composition.provenance).sort()
   if (args.dryRun) {
     for (const key of keys) console.log(key)
@@ -532,6 +559,7 @@ async function cmdRender(args: Args): Promise<number> {
   const template = readFileSync(templatePath, 'utf8')
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
+  warnSkippedSources(composition, Boolean(args.noInfisical))
   const names = findTemplateVariables(template)
   const missing = names.filter((name) => composition.environment[name] === undefined || composition.environment[name] === null)
 

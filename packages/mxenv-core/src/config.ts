@@ -59,17 +59,38 @@ function safeParseConfig(path: string): MxEnvConfig {
  */
 const LEGACY_CONFIG_FILE = 'mx-env.config.json'
 
+/**
+ * Value-free summary of what the unread legacy config declares, so the
+ * warning states the real consequence (e.g. an Infisical source silently
+ * not being wired) instead of a generic rename hint.
+ */
+function legacyConfigConsequence(path: string): string {
+  try {
+    const config = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    const ignored: string[] = []
+    if (config.infisical) ignored.push('infisical')
+    if (config.envFiles) ignored.push('envFiles')
+    if (config.sources) ignored.push('sources')
+    if (config.profiles) ignored.push('profiles')
+    if (!ignored.length) return ''
+    return `；其中声明的 ${ignored.join(' / ')} 来源当前不会加载`
+  } catch {
+    return ''
+  }
+}
+
 function loadProjectConfig(cwd: string): LoadedConfig {
   const primary = loadConfigAt(resolve(cwd, CONFIG_FILE))
-  const legacyExists = existsSync(resolve(cwd, LEGACY_CONFIG_FILE))
+  const legacyPath = resolve(cwd, LEGACY_CONFIG_FILE)
+  const legacyExists = existsSync(legacyPath)
   if (primary.exists) {
     if (legacyExists) {
-      console.warn(`[mxenv] 同时存在 ${CONFIG_FILE} 与旧名 ${LEGACY_CONFIG_FILE}：旧文件已不再读取，请删除`)
+      console.warn(`[mxenv] 同时存在 ${CONFIG_FILE} 与旧名 ${LEGACY_CONFIG_FILE}：旧文件已不再读取，请删除${legacyConfigConsequence(legacyPath)}`)
     }
     return primary
   }
   if (legacyExists) {
-    console.warn(`[mxenv] 发现旧名配置 ${LEGACY_CONFIG_FILE}：0.13.x 起不再读取，请手工改名为 ${CONFIG_FILE}（\`migrate --home\` 只管 ~/.mx-env/ 全局目录迁移）`)
+    console.warn(`[mxenv] 发现旧名配置 ${LEGACY_CONFIG_FILE}：0.13.x 起不再读取，请手工改名为 ${CONFIG_FILE}（\`migrate --home\` 只管 ~/.mx-env/ 全局目录迁移）${legacyConfigConsequence(legacyPath)}`)
   }
   return primary
 }

@@ -74,6 +74,7 @@ function legacyEntries(project: LoadedConfig, envFilesOverride?: string[]): Sour
       override: true,
       ...(infisical.projectId ? { projectId: infisical.projectId } : {}),
       ...(infisical.siteUrl ? { siteUrl: infisical.siteUrl } : {}),
+      ...(infisical.env ? { env: infisical.env } : {}),
       ...(infisical.envPrefix ? { envPrefix: infisical.envPrefix } : {}),
     }
     entries.push({
@@ -196,6 +197,7 @@ export async function composeEnvironment(layers: ConfigLayers, options: ComposeO
       provider: loaded.provider,
       availability: loaded.availability,
       keyCount: Object.keys(loaded.values).length,
+      ...(loaded.detail ? { detail: loaded.detail } : {}),
     })
 
     for (const [key, value] of Object.entries(loaded.values)) {
