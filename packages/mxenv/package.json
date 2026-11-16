@@ -1,6 +1,6 @@
 {
   "name": "@morphixai/mxenv",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "L2 run face for mxenv — run/export/inspect, source management, edit, migrate, skills.",
   "license": "MIT",
   "author": "MorphixAI <dev@morphixai.com>",
