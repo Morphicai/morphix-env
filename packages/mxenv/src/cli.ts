@@ -11,7 +11,10 @@ import {
   extractPublicVars,
   findMxEnvReferences,
   hasMxEnvReference,
+  highCollisionValueKeys,
   isPublicKey,
+  isRedactableValue,
+  SHORT_VALUE_WARN_LENGTH,
   auditDir,
   loadConfigLayers,
   ReferenceResolver,
@@ -259,6 +262,23 @@ function warnSkippedSources(composition: EnvironmentComposition, noInfisical: bo
   }
 }
 
+/**
+ * Short composed values (≤SHORT_VALUE_WARN_LENGTH) either skip redaction
+ * entirely (≤2 chars — no meaningful entropy) or redact with extreme
+ * collision risk (3–4). Both shapes are config-like, not credentials; the
+ * durable fix is admission control (keep config values out of secret
+ * sources — issue #31). Once per process; names only, never values.
+ */
+let collisionWarned = false
+
+function warnHighCollisionValues(composition: EnvironmentComposition): void {
+  if (collisionWarned) return
+  collisionWarned = true
+  const keys = highCollisionValueKeys(composition.environment, composition.provenance)
+  if (!keys.length) return
+  console.warn(`[mxenv] Warning: key(s) ${keys.join(', ')} have very short values (≤${SHORT_VALUE_WARN_LENGTH} chars) — values ≤2 chars are not redacted and 3–4 char values redact with high collision risk; move config-like values out of secret sources or rotate them.`)
+}
+
 function generatedOptions(args: Args): { outFile: string; filter: string | null } {
   const config = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() }).project.config
   return {
@@ -377,9 +397,11 @@ async function resolveEnvironmentReferences(composition: EnvironmentComposition,
     // Every resolved value joins the redaction set — including browser-public
     // keys: the exemption exists for deliberately public literals, but a
     // referenced value may be a real secret regardless of the key's prefix.
+    // Length floor applies to resolved references too (issue #31): a 1–2
+    // char referenced value cannot be a secret and must not join the set.
     const extra = changed
       .map((key) => composition.environment[key])
-      .filter((value): value is string => Boolean(value))
+      .filter(isRedactableValue)
     composition.redactionValues = [...new Set([
       ...collectRedactionValues(composition.environment, composition.provenance),
       ...extra,
@@ -396,6 +418,7 @@ async function cmdRun(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
   warnSkippedSources(composition, Boolean(args.noInfisical))
+  warnHighCollisionValues(composition)
   if (args.verbose) {
     for (const source of composition.sourceStatuses) {
       console.log(`[mxenv] ${source.name}: ${source.availability}${source.detail ? ` (${source.detail})` : ''} (${source.keyCount} keys)`)
@@ -483,6 +506,7 @@ async function cmdGenerate(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
   warnSkippedSources(composition, Boolean(args.noInfisical))
+  warnHighCollisionValues(composition)
   // Resolve mxenv:// references first: a generated client env must contain
   // the same values a run child would receive, not literal reference strings.
   await resolveEnvironmentReferences(composition, args)
@@ -498,6 +522,7 @@ async function cmdInspect(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
   console.log(`profile: ${composition.profileName}`)
   warnSkippedSources(composition, Boolean(args.noInfisical))
+  warnHighCollisionValues(composition)
   for (const source of composition.sourceStatuses) {
     // local 明文源钉死"仅开发用"定位（issue #7）；dotenvx 加密文件不在此列。
     const plaintextMark = source.provider === 'local' ? ' [plaintext, dev-only]' : ''
@@ -518,6 +543,7 @@ async function cmdExport(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
   warnSkippedSources(composition, Boolean(args.noInfisical))
+  warnHighCollisionValues(composition)
   const keys = Object.keys(composition.provenance).sort()
   if (args.dryRun) {
     for (const key of keys) console.log(key)
@@ -560,6 +586,7 @@ async function cmdRender(args: Args): Promise<number> {
   const composition = await resolveComposition(args)
   warnPlaintextSources(composition, args)
   warnSkippedSources(composition, Boolean(args.noInfisical))
+  warnHighCollisionValues(composition)
   const names = findTemplateVariables(template)
   const missing = names.filter((name) => composition.environment[name] === undefined || composition.environment[name] === null)
 
