@@ -90,6 +90,8 @@ describe('mxenv-core/contracts 入口', () => {
       'StreamingRedactor',
       'isRedactableValue',
       'highCollisionValueKeys',
+      'infisicalEnvPins',
+      'LEGACY_INFISICAL_SOURCE',
       'MIN_REDACTABLE_VALUE_LENGTH',
       'SHORT_VALUE_WARN_LENGTH',
     ]) {
@@ -107,11 +109,13 @@ describe('mxenv-core/contracts 入口', () => {
       'GLOBAL_CONFIG_DIR',
       'GLOBAL_CONFIG_FILE',
       'GLOBAL_ENV_FILE',
+      'LEGACY_INFISICAL_SOURCE',
       'StreamingRedactor',
       'collectRedactionValues',
       'findMxEnvReferences',
       'hasMxEnvReference',
       'highCollisionValueKeys',
+      'infisicalEnvPins',
       'isPublicKey',
       'isRedactableValue',
       'MIN_REDACTABLE_VALUE_LENGTH',
@@ -171,5 +175,48 @@ describe('redaction value policy (issue #31)', () => {
 
   it('highCollisionValueKeys 只点名 1–4 字符的非公开 key；空值与公开前缀不含', () => {
     expect(highCollisionValueKeys(environment, provenance)).toEqual(['SHORT_ONE', 'SHORT_THREE', 'SHORT_TWO'])
+  })
+})
+
+// ─── Infisical env 钉定分析（doctor / inspect 预警） ─────────
+
+import { infisicalEnvPins, LEGACY_INFISICAL_SOURCE, type MxEnvConfig } from '../src/contracts'
+
+describe('infisicalEnvPins', () => {
+  const config: MxEnvConfig = {
+    infisical: { paths: ['/ai'] },
+    sources: {
+      named: { provider: 'infisical', paths: ['/team'], env: 'staging' },
+      local: { provider: 'local', files: ['.env.local'], optional: true },
+    },
+  }
+
+  it('报告 legacy 块与命名 source，忽略非 infisical source', () => {
+    const pins = infisicalEnvPins(config, { processEnv: {} })
+    expect(pins.map((p) => p.name)).toEqual([LEGACY_INFISICAL_SOURCE, 'named'])
+  })
+
+  it('配置钉定 env：pinned，优先级高于一切运行时来源', () => {
+    const [legacy, named] = infisicalEnvPins(config, { envName: 'dev', processEnv: { DEPLOY_ENV: 'prod' } })
+    expect(named).toEqual({ name: 'named', pinned: true, env: 'staging', resolvedVia: 'pinned' })
+    expect(legacy.pinned).toBe(false)
+  })
+
+  it('未钉定时按 --env → DEPLOY_ENV → INFISICAL_ENV 顺序解析', () => {
+    const viaCli = infisicalEnvPins(config, { envName: 'dev', processEnv: {} })[0]
+    expect(viaCli).toMatchObject({ pinned: false, env: 'dev', resolvedVia: 'cli-env' })
+    const viaDeploy = infisicalEnvPins(config, { processEnv: { DEPLOY_ENV: 'prod', INFISICAL_ENV: 'other' } })[0]
+    expect(viaDeploy).toMatchObject({ env: 'prod', resolvedVia: 'deploy-env' })
+    const viaInfisical = infisicalEnvPins(config, { processEnv: { INFISICAL_ENV: 'dev' } })[0]
+    expect(viaInfisical).toMatchObject({ env: 'dev', resolvedVia: 'infisical-env' })
+  })
+
+  it('全部来源缺失时 fail-closed：env 为 null', () => {
+    const [legacy] = infisicalEnvPins(config, { processEnv: {} })
+    expect(legacy).toEqual({ name: LEGACY_INFISICAL_SOURCE, pinned: false, env: null, resolvedVia: null })
+  })
+
+  it('空配置返回空数组', () => {
+    expect(infisicalEnvPins({}, { processEnv: {} })).toEqual([])
   })
 })

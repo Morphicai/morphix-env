@@ -22,7 +22,7 @@ import { LEGACY_GLOBAL_CONFIG_DIR } from './global-home'
  */
 export const RESERVED_SHIM_NAMES = [
   'run', 'fetch', 'export', 'render', 'inject', 'generate', 'gen',
-  'inspect', 'migrate', 'audit', 'edit', 'doc', 'skill', 'shell-init', 'help',
+  'inspect', 'doctor', 'migrate', 'audit', 'edit', 'doc', 'skill', 'shell-init', 'help',
   'mxenv', 'mx-env', 'morphix-env', '__mx_editor',
   // Wave B placeholders reserved by mxenv-cli (dispatch labels exist, not implemented).
   'gui', 'global', 'host',

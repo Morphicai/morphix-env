@@ -135,6 +135,56 @@ export function normalizeProfile(input: ProfileInput): ProfileDefinition {
 }
 
 /**
+ * Synthesized source name for a legacy flat `infisical` block. Composition
+ * displays this name and `doctor`/`inspect` report against it, so the two
+ * must never drift apart.
+ */
+export const LEGACY_INFISICAL_SOURCE = '__mx_legacy_infisical'
+
+/** Where a run's Infisical environment resolution came from. */
+export type InfisicalEnvResolution = 'pinned' | 'cli-env' | 'deploy-env' | 'infisical-env' | null
+
+export interface InfisicalEnvPin {
+  /** Source name as composition displays it. */
+  name: string
+  /** True when the source itself declares `env` — the durable pin. */
+  pinned: boolean
+  /** Resolved environment name, or null when nothing resolves (run fails closed). */
+  env: string | null
+  /** Where the resolution came from; null when fail-closed. */
+  resolvedVia: InfisicalEnvResolution
+}
+
+/**
+ * Static env-pin analysis for every Infisical source a config declares
+ * (legacy flat `infisical` block and named `sources` entries). Mirrors the
+ * resolver precedence in sources.ts (`source.env || --env || DEPLOY_ENV ||
+ * INFISICAL_ENV`) — keep the two in sync when changing either. Pure: names
+ * and environment labels only, never values.
+ */
+export function infisicalEnvPins(
+  config: MxEnvConfig,
+  options: { envName?: string | null; processEnv?: NodeJS.ProcessEnv } = {},
+): InfisicalEnvPin[] {
+  const processEnv = options.processEnv ?? process.env
+  const candidates: { name: string; env?: string }[] = []
+  if (config.infisical) candidates.push({ name: LEGACY_INFISICAL_SOURCE, env: config.infisical.env })
+  for (const [name, source] of Object.entries(config.sources || {})) {
+    if (source.provider === 'infisical') candidates.push({ name, env: source.env })
+  }
+  return candidates.map(({ name, env }) => {
+    if (env) return { name, pinned: true, env, resolvedVia: 'pinned' }
+    const cliEnv = options.envName || null
+    if (cliEnv) return { name, pinned: false, env: cliEnv, resolvedVia: 'cli-env' }
+    const deployEnv = processEnv.DEPLOY_ENV || null
+    if (deployEnv) return { name, pinned: false, env: deployEnv, resolvedVia: 'deploy-env' }
+    const infisicalEnv = processEnv.INFISICAL_ENV || null
+    if (infisicalEnv) return { name, pinned: false, env: infisicalEnv, resolvedVia: 'infisical-env' }
+    return { name, pinned: false, env: null, resolvedVia: null }
+  })
+}
+
+/**
  * Returns human-readable validation problems without echoing provider values.
  * Provider credentials deliberately have no place in the declared schema.
  */

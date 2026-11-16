@@ -19,12 +19,16 @@ export {
   GLOBAL_CONFIG_DIR,
   GLOBAL_CONFIG_FILE,
   GLOBAL_ENV_FILE,
+  infisicalEnvPins,
+  LEGACY_INFISICAL_SOURCE,
   normalizeProfile,
   validateConfig,
 } from './contracts'
 export type {
   ConfigLayers,
   DotenvxSource,
+  InfisicalEnvPin,
+  InfisicalEnvResolution,
   InfisicalSource,
   KeychainSource,
   LoadConfigOptions,

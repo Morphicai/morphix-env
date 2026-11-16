@@ -7,6 +7,7 @@ import {
   type EnvironmentComposition,
   type InfisicalSource,
   type KeyProvenance,
+  LEGACY_INFISICAL_SOURCE,
   type LoadedConfig,
   normalizeProfile,
   type ProfileInput,
@@ -18,7 +19,6 @@ import { loadSource, type SourceEntry } from './sources'
 
 const DEFAULT_ENV_FILE = '.env.local'
 export const GLOBAL_DOTENV_SOURCE = '__mx_global_dotenv'
-const LEGACY_INFISICAL_SOURCE = '__mx_legacy_infisical'
 const LEGACY_LOCAL_SOURCE = '__mx_legacy_local'
 
 // 组合/审计类型与 redaction 收集规则已抽至 ./contracts（L0）；re-export 保持

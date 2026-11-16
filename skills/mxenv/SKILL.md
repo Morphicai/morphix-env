@@ -84,7 +84,8 @@ mxenv export [--profile dev]            # 输出可 eval 的 export KEY='value' 
 mxenv render <tpl> <out>                # 把 ${VAR} 渲染进不支持插值的配置文件（0600，缺变量先告警）
 mxenv inject <tpl> <out>                # 解析 mxenv://profile/KEY 引用（0600，MCP 配置入仓不落值）
 mxenv generate --out public/__env.js    # 生成浏览器公开变量（NEXT_PUBLIC_/VITE_/EXPO_PUBLIC_ 属公开配置例外）
-mxenv inspect [--profile dev]           # key 名 + source 归属 + 状态（无值）
+mxenv inspect [--profile dev]           # key 名 + source 归属 + 状态（无值；infisical 源带 env 解析标注）
+mxenv doctor [options]                  # 一次性体检：旧名配置/env 钉定/source 健康/短值碰撞/明文源/旧全局目录（有 fail 则 exit 1）
 mxenv edit [--profile dev | --source X] # 可视化编辑器（loopback + 15 分钟 TTL；查看/回显/增改删/切源，显式结束会话）
 mxenv doc                               # 生成本项目的 key→source 工作流 Skill（.agents/skills/mxenv/）
 mxenv audit [tail]                      # 值无关的本地审计事件

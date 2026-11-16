@@ -29,7 +29,7 @@ mkdirSync(TMP, { recursive: true })
 
 afterEach(() => {
   // 清理临时文件
-  for (const f of ['.env.local', '.env.staging', 'editable.env', 'workflow-skill.md', 'mxenv.config.json']) {
+  for (const f of ['.env.local', '.env.staging', 'editable.env', 'workflow-skill.md', 'mxenv.config.json', 'mx-env.config.json']) {
     const p = join(TMP, f)
     if (existsSync(p)) unlinkSync(p)
   }
@@ -541,5 +541,106 @@ describe('mxenv audit', () => {
     const tail = run(['audit', 'tail'])
     expect(tail).toContain('"outcome"')
     expect(tail).not.toContain(auditValue)
+  })
+})
+
+// ─── mxenv doctor 与 inspect env 钉定标注（doctor 体检 / 预警） ───
+
+describe('mxenv doctor', () => {
+  // doctor 组合环境，测试一律 --no-infisical 保持无外部依赖（静态钉定分析不受影响）。
+  function runCapture(args: string[]) {
+    const { MXENV_SHIM, MXENV_ENDPOINT, MXENV_TOKEN, MXENV_WARN_PLAINTEXT, DOTENV_KEY, INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET, INFISICAL_ENV, DEPLOY_ENV, ...base } = process.env
+    return spawnSync('node', [CLI, ...args], {
+      encoding: 'utf8',
+      env: { ...base, HOME: join(TMP, 'home') },
+      cwd: TMP,
+    })
+  }
+
+  it('无配置干净目录：全 ok，exit 0', () => {
+    const res = runCapture(['doctor', '--no-infisical'])
+    expect(res.status).toBe(0)
+    expect(res.stdout).toContain('[ok] 无项目配置')
+    expect(res.stdout).toContain('0 fail')
+  })
+
+  it('旧名配置：fail + exit 1，指明声明来源不会加载', () => {
+    writeFileSync(join(TMP, 'mx-env.config.json'), JSON.stringify({ infisical: { paths: ['/ai'] } }))
+    const res = runCapture(['doctor', '--no-infisical'])
+    expect(res.status).toBe(1)
+    expect(res.stdout).toContain('[fail] 旧名配置 mx-env.config.json')
+    expect(res.stdout).toContain('来源当前不会加载')
+  })
+
+  it('env 未钉定且无任何运行时来源：fail，指明 run 将 fail-closed', () => {
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({ infisical: { paths: ['/ai'] } }))
+    const res = runCapture(['doctor', '--no-infisical'])
+    expect(res.status).toBe(1)
+    expect(res.stdout).toContain('[fail] Infisical env 未钉定')
+    expect(res.stdout).toContain('fail-closed')
+  })
+
+  it('env 未钉定但本次经 --env 解析：warn 不阻断', () => {
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({ infisical: { paths: ['/ai'] } }))
+    const res = runCapture(['doctor', '--no-infisical', '--env', 'dev'])
+    expect(res.status).toBe(0)
+    expect(res.stdout).toContain('[warn] Infisical env 未钉定')
+    expect(res.stdout).toContain('"dev"')
+  })
+
+  it('env 已钉定：ok 且给出解析结果', () => {
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({ infisical: { paths: ['/ai'], env: 'dev' } }))
+    const res = runCapture(['doctor', '--no-infisical'])
+    expect(res.status).toBe(0)
+    expect(res.stdout).toContain('[ok] Infisical env 钉定: "__mx_legacy_infisical" → dev')
+  })
+
+  it('短值高碰撞 key 点名但不回显值', () => {
+    const secret = testValue('doctor-short')
+    writeFileSync(join(TMP, '.env.local'), `MXTEST_SHORT=1\nMXTEST_LONG=${secret}\n`)
+    const res = runCapture(['doctor', '--no-infisical'])
+    expect(res.status).toBe(0)
+    expect(res.stdout).toContain('短值高碰撞 key: MXTEST_SHORT')
+    expect(res.stdout).not.toContain(secret)
+  })
+
+  it('skipped source（--no-infisical 之外的原因）判 fail', () => {
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({
+      sources: { plug: { provider: 'plugin', plugin: 'definitely-missing', keys: ['MISSING_KEY'] } },
+      profiles: { main: ['plug'] },
+      defaultProfile: 'main',
+    }))
+    const res = runCapture(['doctor', '--no-infisical'])
+    expect(res.status).toBe(1)
+    // 硬缺失 provider 使组合直接抛错；doctor 不中断，把组合失败记为 fail 发现。
+    expect(res.stdout).toContain('[fail] 组合失败')
+    expect(res.stdout).toContain('plug')
+  })
+})
+
+describe('inspect env 钉定标注与告警', () => {
+  function runCapture(args: string[]) {
+    const { MXENV_SHIM, MXENV_ENDPOINT, MXENV_TOKEN, MXENV_WARN_PLAINTEXT, DOTENV_KEY, INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET, INFISICAL_ENV, DEPLOY_ENV, ...base } = process.env
+    return spawnSync('node', [CLI, ...args], {
+      encoding: 'utf8',
+      env: { ...base, HOME: join(TMP, 'home') },
+      cwd: TMP,
+    })
+  }
+
+  it('infisical source 行标注 env 解析状态', () => {
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({ infisical: { paths: ['/ai'], env: 'dev' } }))
+    const pinned = runCapture(['inspect', '--no-infisical'])
+    expect(pinned.stdout).toContain('[env: dev (pinned)]')
+    expect(pinned.stderr).not.toContain('no pinned env')
+  })
+
+  it('未钉定：行内标注 unpinned + stderr 告警指明 fail closed', () => {
+    writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({ infisical: { paths: ['/ai'] } }))
+    const res = runCapture(['inspect', '--no-infisical', '--env', 'dev'])
+    expect(res.stdout).toContain('[env: dev (via --env, unpinned)]')
+    expect(res.stderr).toContain('no pinned env')
+    expect(res.stderr).toContain('fail closed')
+    expect(res.stderr).toContain('__mx_legacy_infisical')
   })
 })
