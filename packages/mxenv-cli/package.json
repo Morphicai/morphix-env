@@ -51,6 +51,6 @@
     "mxenv-cli": "./dist/cli.js"
   },
   "dependencies": {
-    "@morphixai/mxenv-core": "^0.14.0"
+    "@morphixai/mxenv-core": "^0.15.0"
   }
 }
