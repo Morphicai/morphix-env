@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **BREAKING — Infisical sources no longer default to the `prod` environment.** An Infisical source with no environment specified now fails closed with an actionable error instead of silently composing prod secrets (`resolveInfisical` previously fell back to `'prod'`). Specify the environment explicitly via `-e/--env`, `INFISICAL_ENV`, `DEPLOY_ENV`, or by declaring `env` on the source (the legacy `infisical` config block now accepts `env` too, so a project can pin its environment in `mxenv.config.json`).
+- **Skipped sources are now visible everywhere.** A source that composes as `skipped` (legacy Infisical source with the CLI missing, not logged in, or export failing) previously disappeared without a trace — `mxenv run` proceeded with an incomplete key set and `mxenv inspect` showed nothing. `run`/`export`/`render`/`inject`/`generate` now warn on stderr with a value-free reason, and `inspect`/`run --verbose` show it inline. Skips caused by an explicit `--no-infisical` stay silent.
+- **Old-name config warnings state the consequence.** When `mx-env.config.json` is found and declares `infisical` / `envFiles` / `sources` / `profiles`, the rename hint now says explicitly that those sources are not being loaded, instead of a generic rename note.
+
 ## 0.14.0
 
 ### Added

@@ -80,6 +80,8 @@ export interface MxEnvConfig {
     projectId?: string
     paths: string[]
     siteUrl?: string
+    /** Pin the Infisical environment so runs don't need --env/-e. */
+    env?: string
     /** Automatically add a prefix (such as VITE_) to loaded keys. */
     envPrefix?: string
   }
@@ -216,6 +218,8 @@ export interface LoadedSource {
   provider: SecretSource['provider']
   values: Record<string, string>
   availability: SourceAvailability
+  /** Value-free human-readable reason when availability is not 'loaded'. */
+  detail?: string
 }
 
 /** Public (client-exposed) key-name rule shared by redaction and source loading. */
@@ -249,6 +253,8 @@ export interface SourceStatus {
   provider: SecretSource['provider']
   availability: LoadedSource['availability']
   keyCount: number
+  /** Value-free skip reason; present when availability is 'skipped'. */
+  detail?: string
 }
 
 export interface EnvironmentComposition {

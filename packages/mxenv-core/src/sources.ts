@@ -82,10 +82,19 @@ function resolveLocal(entry: SourceEntry, source: LocalSource, context: SourceCo
 
 async function resolveInfisical(entry: SourceEntry, source: InfisicalSource, context: SourceContext): Promise<LoadedSource> {
   if (context.noInfisical) {
-    return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped' }
+    return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped', detail: 'disabled by --no-infisical' }
   }
 
-  const environment = source.env || context.envName || process.env.DEPLOY_ENV || process.env.INFISICAL_ENV || 'prod'
+  // Fail closed: an implicit environment default is how dev worktrees ended up
+  // silently composing prod secrets. Every channel below is an explicit choice.
+  const environment = source.env || context.envName || process.env.DEPLOY_ENV || process.env.INFISICAL_ENV || ''
+  if (!environment) {
+    throw new SourceError(
+      entry.name,
+      source.provider,
+      `[mxenv] Infisical source "${entry.name}" has no environment specified; refusing to default to "prod". Pass --env/-e <name>, set INFISICAL_ENV or DEPLOY_ENV, or declare "env" on the source.`,
+    )
+  }
   const projectId = source.projectId || process.env.INFISICAL_PROJECT_ID || readInfisicalJson().workspaceId || ''
   const clientId = process.env.INFISICAL_CLIENT_ID || ''
   const clientSecret = process.env.INFISICAL_CLIENT_SECRET || ''
@@ -107,19 +116,19 @@ async function resolveInfisical(entry: SourceEntry, source: InfisicalSource, con
   }
 
   if (!hasInfisicalCLI()) {
-    if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped' }
+    if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped', detail: 'infisical CLI not installed' }
     throw new SourceError(entry.name, source.provider, `[mxenv] Infisical source "${entry.name}" needs Machine Identity credentials or an installed Infisical CLI.`)
   }
 
   if (!isInfisicalLoggedIn()) {
-    if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped' }
+    if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped', detail: 'infisical CLI not logged in (run: infisical login)' }
     throw new SourceError(entry.name, source.provider, `[mxenv] Infisical source "${entry.name}" is not logged in; run infisical login.`)
   }
 
   const result = fetchSecretsViaCLI(environment, source.paths, source.envPrefix)
   const firstError = result.errors[0]
   if (firstError) {
-    if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped' }
+    if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped', detail: `infisical export failed (${firstError.kind})` }
     throw new SourceError(entry.name, source.provider, `[mxenv] Infisical source "${entry.name}" could not load (${firstError.kind}).`)
   }
 

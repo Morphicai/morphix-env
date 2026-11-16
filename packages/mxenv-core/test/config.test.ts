@@ -71,6 +71,30 @@ describe('项目配置只读新名（naming-migration 垫片移除与到期公�
     warn.mockRestore()
   })
 
+  it('旧名配置声明 infisical/envFiles 时警告点明来源不会加载（静默断线可见化）', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    writeFileSync(LEGACY_CONFIG_PATH, JSON.stringify({ infisical: { paths: ['/ai'] }, envFiles: ['.env.local'] }))
+
+    expect(loadConfig()).toEqual({})
+    const message = warn.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(message).toContain('mx-env.config.json')
+    expect(message).toContain('infisical')
+    expect(message).toContain('envFiles')
+    expect(message).toContain('不会加载')
+    warn.mockRestore()
+  })
+
+  it('旧名配置无来源声明时警告不带来源后果（不虚报）', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    writeFileSync(LEGACY_CONFIG_PATH, JSON.stringify({ defaultProfile: 'x' }))
+
+    expect(loadConfig()).toEqual({})
+    const message = warn.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(message).toContain('mx-env.config.json')
+    expect(message).not.toContain('不会加载')
+    warn.mockRestore()
+  })
+
   it('双配置并存新名优先，忽略旧文件并提示清理', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     writeFileSync(LEGACY_CONFIG_PATH, JSON.stringify({ envFiles: ['.env.old'] }))

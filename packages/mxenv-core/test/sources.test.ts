@@ -80,7 +80,7 @@ describe('provider source adapters', () => {
     process.env.INFISICAL_CLIENT_SECRET = value('client-secret')
     process.env.INFISICAL_PROJECT_ID = value('project-id')
 
-    const loaded = await loadSource(entry('team', { provider: 'infisical', paths: ['/team'] }), context())
+    const loaded = await loadSource(entry('team', { provider: 'infisical', paths: ['/team'] }), { ...context(), envName: 'dev' })
 
     expect(loaded.values.MXTEST_INFISICAL).toBe(sentinel)
     expect(mocks.resolveInfisicalSecrets).toHaveBeenCalledOnce()
@@ -102,8 +102,9 @@ describe('provider source adapters', () => {
     process.env.INFISICAL_CLIENT_SECRET = value('client-secret')
     process.env.INFISICAL_PROJECT_ID = value('project-id')
     try {
-      await expect(loadSource(entry('team', { provider: 'infisical', paths: ['/team'] }), context())).rejects.toThrow('could not authenticate or load')
-      await expect(loadSource(entry('team', { provider: 'infisical', paths: ['/team'] }), context())).rejects.not.toThrow(providerOnlyValue)
+      const withEnv = { ...context(), envName: 'dev' } as const
+      await expect(loadSource(entry('team', { provider: 'infisical', paths: ['/team'] }), withEnv)).rejects.toThrow('could not authenticate or load')
+      await expect(loadSource(entry('team', { provider: 'infisical', paths: ['/team'] }), withEnv)).rejects.not.toThrow(providerOnlyValue)
     } finally {
       if (previous.id === undefined) delete process.env.INFISICAL_CLIENT_ID
       else process.env.INFISICAL_CLIENT_ID = previous.id
@@ -112,6 +113,87 @@ describe('provider source adapters', () => {
       if (previous.project === undefined) delete process.env.INFISICAL_PROJECT_ID
       else process.env.INFISICAL_PROJECT_ID = previous.project
     }
+  })
+
+  it('refuses to compose an Infisical source with no environment (no implicit prod default)', async () => {
+    const previousDeploy = process.env.DEPLOY_ENV
+    const previousInfisicalEnv = process.env.INFISICAL_ENV
+    delete process.env.DEPLOY_ENV
+    delete process.env.INFISICAL_ENV
+    try {
+      await expect(
+        loadSource(entry('team', { provider: 'infisical', paths: ['/team'] }), context()),
+      ).rejects.toThrow('refusing to default to "prod"')
+    } finally {
+      if (previousDeploy === undefined) delete process.env.DEPLOY_ENV
+      else process.env.DEPLOY_ENV = previousDeploy
+      if (previousInfisicalEnv === undefined) delete process.env.INFISICAL_ENV
+      else process.env.INFISICAL_ENV = previousInfisicalEnv
+    }
+  })
+
+  it('accepts an environment pinned on the source itself', async () => {
+    const sentinel = value('infisical-pinned')
+    mocks.resolveInfisicalSecrets.mockResolvedValue({ values: { MXTEST_INFISICAL: sentinel }, count: 1 })
+    const previousId = process.env.INFISICAL_CLIENT_ID
+    const previousSecret = process.env.INFISICAL_CLIENT_SECRET
+    const previousProject = process.env.INFISICAL_PROJECT_ID
+    process.env.INFISICAL_CLIENT_ID = value('client-id')
+    process.env.INFISICAL_CLIENT_SECRET = value('client-secret')
+    process.env.INFISICAL_PROJECT_ID = value('project-id')
+    try {
+      const loaded = await loadSource(
+        entry('team', { provider: 'infisical', paths: ['/team'], env: 'prod' }),
+        context(),
+      )
+      expect(loaded.values.MXTEST_INFISICAL).toBe(sentinel)
+      expect(mocks.resolveInfisicalSecrets).toHaveBeenCalledOnce()
+    } finally {
+      if (previousId === undefined) delete process.env.INFISICAL_CLIENT_ID
+      else process.env.INFISICAL_CLIENT_ID = previousId
+      if (previousSecret === undefined) delete process.env.INFISICAL_CLIENT_SECRET
+      else process.env.INFISICAL_CLIENT_SECRET = previousSecret
+      if (previousProject === undefined) delete process.env.INFISICAL_PROJECT_ID
+      else process.env.INFISICAL_PROJECT_ID = previousProject
+    }
+  })
+
+  it('legacy skip paths carry a value-free reason in detail', async () => {
+    const legacyEntry = (name = '__mx_legacy_infisical'): SourceEntry => ({
+      name,
+      source: { provider: 'infisical', paths: ['/ai'] },
+      baseDir: ROOT,
+      legacy: true,
+    })
+
+    const ctx = { ...context(), envName: 'dev' }
+    mocks.readInfisicalJson.mockReturnValue({})
+
+    mocks.hasInfisicalCLI.mockReturnValue(false)
+    let loaded = await loadSource(legacyEntry(), ctx)
+    expect(loaded.availability).toBe('skipped')
+    expect(loaded.detail).toBe('infisical CLI not installed')
+
+    mocks.hasInfisicalCLI.mockReturnValue(true)
+    mocks.isInfisicalLoggedIn.mockReturnValue(false)
+    loaded = await loadSource(legacyEntry(), ctx)
+    expect(loaded.availability).toBe('skipped')
+    expect(loaded.detail).toBe('infisical CLI not logged in (run: infisical login)')
+
+    mocks.isInfisicalLoggedIn.mockReturnValue(true)
+    mocks.fetchSecretsViaCLI.mockReturnValue({ values: {}, count: 0, errors: [{ kind: 'no-project', path: '/ai', stderr: 'x' }] })
+    loaded = await loadSource(legacyEntry(), ctx)
+    expect(loaded.availability).toBe('skipped')
+    expect(loaded.detail).toBe('infisical export failed (no-project)')
+  })
+
+  it('--no-infisical marks the skip as an explicit choice', async () => {
+    const loaded = await loadSource(
+      entry('team', { provider: 'infisical', paths: ['/team'] }),
+      { ...context(), noInfisical: true },
+    )
+    expect(loaded.availability).toBe('skipped')
+    expect(loaded.detail).toBe('disabled by --no-infisical')
   })
 
   it('uses dotenvx in-memory output without creating a plaintext file', async () => {
