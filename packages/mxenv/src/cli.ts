@@ -630,9 +630,9 @@ async function cmdDoctor(args: Args): Promise<number> {
     if (pin.pinned) {
       add('ok', `Infisical env 钉定: "${pin.name}" → ${pin.env}（配置声明）`)
     } else if (pin.resolvedVia) {
-      add('warn', `Infisical env 未钉定: "${pin.name}" 本次经 ${pin.resolvedVia === 'cli-env' ? '--env/-e' : pin.resolvedVia} 解析为 "${pin.env}"——无该来源的运行会 fail-closed，建议声明 "env"`)
+      add('warn', `Infisical env 未钉定: "${pin.name}" 本次经 ${pin.resolvedVia === 'cli-env' ? '--env/-e' : pin.resolvedVia} 解析为 "${pin.env}"——换台机器/换个 shell 可能不再解析，建议声明 "env" 或统一走显式 --env/-e`)
     } else {
-      add('fail', `Infisical env 未钉定: "${pin.name}" 且无 --env/INFISICAL_ENV/DEPLOY_ENV——run 将 fail-closed 拒绝运行`)
+      add('warn', `Infisical env 未钉定: "${pin.name}" 且无 --env/INFISICAL_ENV/DEPLOY_ENV——裸 run 将 fail-closed 拒绝（0.15.0+ 设计预期；显式传 --env/-e 或声明 "env" 均可）`)
     }
   }
 

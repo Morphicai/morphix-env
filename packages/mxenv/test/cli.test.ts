@@ -572,11 +572,11 @@ describe('mxenv doctor', () => {
     expect(res.stdout).toContain('来源当前不会加载')
   })
 
-  it('env 未钉定且无任何运行时来源：fail，指明 run 将 fail-closed', () => {
+  it('env 未钉定且无任何运行时来源：warn 说明 fail-closed 设计预期', () => {
     writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({ infisical: { paths: ['/ai'] } }))
     const res = runCapture(['doctor', '--no-infisical'])
-    expect(res.status).toBe(1)
-    expect(res.stdout).toContain('[fail] Infisical env 未钉定')
+    expect(res.status).toBe(0)
+    expect(res.stdout).toContain('[warn] Infisical env 未钉定')
     expect(res.stdout).toContain('fail-closed')
   })
 
