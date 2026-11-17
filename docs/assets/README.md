@@ -11,13 +11,14 @@ The README visuals are lightweight, editable SVGs with no external images, fonts
 
 The symbol deliberately avoids a generic vault, padlock, shield, or keyhole: mxenv is a composition layer, not a secret store.
 
-## Provider marks (`brand/`)
+## Provider & consumer marks (`brand/`)
 
 Third-party marks used by the README comparison table and the posters, kept monochrome and value-free:
 
 - `infisical.svg` (+ `-dark`) — official wordmark's icon glyph, cropped from Infisical's own docs logo. Light fill `#111827`, dark fill `#E6EDF3`.
 - `dotenv.svg` / `onepassword.svg` / `vault.svg` (+ `-dark`) — official paths from the simple-icons collection.
-- `doppler.svg` / `dotenvx.svg` — placeholder monograms pending official marks; replacing these files in place swaps every reference.
+- `openai.svg` / `claude.svg` / `node.svg` (+ `-dark`) — consumer-side marks (Codex ships the OpenAI mark), same simple-icons source.
+- `doppler.svg` / `dotenvx.svg` / `hermes.svg` — placeholder monograms pending official marks (bubble marks are theme-independent); `terminal.svg` (+ `-dark`) is a generic prompt-cursor glyph. Replacing these files in place swaps every reference.
 - `mxenv.svg` — our own tile mark, theme-independent (single file, no dark variant needed).
 
 ## Posters
