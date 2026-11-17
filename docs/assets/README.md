@@ -11,6 +11,15 @@ The README visuals are lightweight, editable SVGs with no external images, fonts
 
 The symbol deliberately avoids a generic vault, padlock, shield, or keyhole: mxenv is a composition layer, not a secret store.
 
+## Provider marks (`brand/`)
+
+Third-party marks used by the README comparison table and the posters, kept monochrome and value-free:
+
+- `infisical.svg` (+ `-dark`) — official wordmark's icon glyph, cropped from Infisical's own docs logo. Light fill `#111827`, dark fill `#E6EDF3`.
+- `dotenv.svg` / `onepassword.svg` / `vault.svg` (+ `-dark`) — official paths from the simple-icons collection.
+- `doppler.svg` / `dotenvx.svg` — placeholder monograms pending official marks; replacing these files in place swaps every reference.
+- `mxenv.svg` — our own tile mark, theme-independent (single file, no dark variant needed).
+
 ## Posters
 
 - `secret-flow.svg` — provider ownership, composition, controlled consumption, and the model-context boundary.
@@ -27,4 +36,4 @@ The symbol deliberately avoids a generic vault, padlock, shield, or keyhole: mxe
 | Secondary text | `#5B6472` |
 | Canvas | `#F7F9FC` |
 
-Use system sans-serif for prose and system monospace for commands. Do not add gradients, real provider logos, real secret values, or rasterized copies to the source assets. Keep diagrams truthful to the current CLI contract when commands or boundaries change.
+Use system sans-serif for prose and system monospace for commands. Do not add gradients, real secret values, or rasterized copies to the source assets. Third-party provider marks stay monochrome and come from `brand/` only. Keep diagrams truthful to the current CLI contract when commands or boundaries change.

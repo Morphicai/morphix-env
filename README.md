@@ -57,12 +57,13 @@ npx mxenv run -- pnpm dev      # compose the project profile and run
 
 ## Compared
 
-| | dotenv / direnv | dotenvx | Infisical / Doppler CLI | 1Password CLI / Vault | mxenv |
-|---|---|---|---|---|---|
-| Values live in | plaintext files | encrypted files | provider cloud | the vault | **nowhere new** |
-| Composes multiple sources | ✗ | ✗ | own product only | own product only | ✓ any mix + global baseline |
-| Same-key collision | silently shadowed | silently shadowed | n/a | n/a | hard error unless `override: true` |
-| Agent context hygiene | `cat .env` leaks | partial | `--plain` leaks | `op read` leaks | value-free surfaces; `run` redacts output |
+| | Values live in | Composes multiple sources | Same-key collision | Agent context hygiene |
+|---|---|---|---|---|
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/dotenv-dark.svg" /><img src="docs/assets/brand/dotenv.svg" height="18" alt="dotenv" /></picture> dotenv / direnv | plaintext files | ✗ | silently shadowed | `cat .env` leaks |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/dotenvx.svg" /><img src="docs/assets/brand/dotenvx.svg" height="18" alt="dotenvx" /></picture> dotenvx | encrypted files | ✗ | silently shadowed | partial |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/infisical-dark.svg" /><img src="docs/assets/brand/infisical.svg" height="18" alt="Infisical" /></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/doppler.svg" /><img src="docs/assets/brand/doppler.svg" height="18" alt="Doppler" /></picture> Infisical / Doppler CLI | provider cloud | own product only | n/a | `--plain` leaks |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/onepassword-dark.svg" /><img src="docs/assets/brand/onepassword.svg" height="18" alt="1Password" /></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/vault-dark.svg" /><img src="docs/assets/brand/vault.svg" height="18" alt="Vault" /></picture> 1Password CLI / Vault | the vault | own product only | n/a | `op read` leaks |
+| <img src="docs/assets/brand/mxenv.svg" height="18" alt="mxenv" /> **mxenv** | **nowhere new** | ✓ any mix + global baseline | hard error unless `override: true` | value-free surfaces; `run` redacts output |
 
 ## Documentation
 
