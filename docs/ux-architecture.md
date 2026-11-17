@@ -11,8 +11,8 @@
 1. **没有统一入口，且"必须启动才能看"**。想看任何密钥状态都要从终端起一次性编辑会话（15 分钟 TTL、随机 token、开浏览器），看完即废。来源散在 dotenvx / macOS Keychain / Infisical / Doppler / local 四五处，没有上帝视角。
 2. **命名不好**：`mx-env` 带连字符，命令敲起来别扭、品牌不响；`morphix-env` / `mx-env` / `~/.mx-env/` / `mx-env.config.json` 多个名字并存。决定统一为 **`mxenv`**。
 3. **管理面体验弱**：想管理"上游"（provider 登录态、来源编排、profiles）和编辑键值，只有 CLI + 一次性编辑器，没有面板级的总览、健康检查和连续操作。
-4. **开源门面缺 icon**：现 logo 是通用无限环渐变图（无 `mx` 识别、无密钥/组合语义，仅 PNG 无 SVG 源）。
-5. **开源文档不完整**：仓库已 PUBLIC、npm 挂 MIT，但缺 LICENSE 文件、SECURITY.md（密钥工具必须有漏洞披露渠道）、CONTRIBUTING 与 issue/PR 模板。
+4. ~~**开源门面缺 icon**~~（已解决 2026-11-17）：现 logo 为 `docs/logo.svg` 矢量源（m 拱门 + mint 角点，三代迭代定稿），lockup 明暗双版见 `docs/assets/`。
+5. **开源文档不完整**（部分解决）：LICENSE、SECURITY.md 已补齐；CONTRIBUTING 与 issue/PR 模板仍缺（开源就绪 gap 清单挂账）。
 
 随之而来的**架构问题**：要做到"随时可看"就必须有常驻服务，而常驻进程意味着长驻攻击面——这和现有"短命会话"的刻意安全设计相冲突。如何常驻、如何守住"值不出机器"是本次升级的核心设计题。
 
@@ -136,9 +136,9 @@ flowchart TB
 
 | 波次 | 内容 | 备注 |
 |---|---|---|
-| **A 命名与品牌基础** | 改名全切（含 `mxenv://`，同步 Trellis W2 change 文案）+ 三包拆分（`mxenv` / `mxenv-cli` / `mxenv-core`）+ LICENSE/SECURITY | 实施 change：`mxenv-package-split` + `mxenv-naming-cutover` + `mxenv-home-migration`（2026-11-06 立项，替代原 `mxenv-rebrand-layering`）；借 BREAKING 窗口一次迁完；W2 实施前完成 scheme 定案 |
-| **B 常驻 host + 面板** | daemon、面板、审计 `configPath`、reveal API、注册视图 | 单独立 OpenSpec change |
-| **C 开源收尾 + 1.0** | 新 icon（SVG 源 + favicon + 单色版）、README 重排、gitleaks 历史扫描、blog 收编 | 依赖 A/B |
+| **A 命名与品牌基础** ✅ 已完成 | 改名全切（含 `mxenv://`，同步 Trellis W2 change 文案）+ 三包拆分（`mxenv` / `mxenv-cli` / `mxenv-core`）+ LICENSE/SECURITY | 三个 change 已归档，0.13.x–0.15.0 发布 |
+| **B 常驻 host + 面板** 🟡 首片已发 | daemon、面板、审计 `configPath`、reveal API、注册视图 | `mxenv-panel-host` 已归档（0.14.0：会话式面板 + revealSingle）；launchd 常驻化与注册视图后置 |
+| **C 开源收尾 + 1.0** 🟡 大半完成 | 新 icon（SVG 源 + favicon + 单色版）、README 重排、gitleaks 历史扫描、blog 收编 | icon/README/blog 宣传正文已完成（2026-11-17）；gitleaks 历史扫描与 CONTRIBUTING/issue 模板挂账 |
 
 ## 五、决策记录
 
@@ -151,7 +151,7 @@ flowchart TB
 | **分层架构 L0–L3**：上层只依赖下层、通用能力下沉（第二使用方出现即下沉）；包 = `mxenv-core`(L0+L1) / `mxenv`(L2) / 全局 CLI(L3)，产品包零依赖 | 已定（2026-11-06，用户定调分层纪律） |
 | **CLI 带 GUI 能力**：GUI 不独立发包，随全局 CLI 分发（`mxenv gui` 一条命令进入） | 已定（2026-11-06） |
 | 三条产品要求即验收口径：项目装可用+定制上游+全局变量∪env.local / 全局 CLI=增强 / CLI 带 GUI | 已定（2026-11-06） |
-| 全局 CLI 包名（暂名 `mxenv-cli`，发布前最终确认）；统一命令入口的可选模块发现实现推迟 Wave B（design D6） | 待定（Wave B 前定案） |
+| 全局 CLI 包名 `mxenv-cli`（`@morphixai/mxenv-cli`，已随三包拆分发布）；统一命令入口的可选模块发现实现推迟 Wave B（design D6） | 已定（随 `mxenv-package-split` 发布） |
 | 值能力唯一实现在 L1（core，compose/revealSingle 窄暴露），L2/L3 与外部 SDK 只是调用方，GUI 不直连 | 随分层定（2026-11-06） |
 | `mxenv-core` 内部分 L0 契约（`/contracts` 独立入口）与 L1 能力两层；`mxenv` 占默认包名 | 随分层定（2026-11-06） |
 | 命名全切 `mxenv`（包/bin/scheme/目录），旧名垫片一周期；`mxenv://` 无垫片直切（零存量消费者已实证） | 已定（2026-11-06，随 `mxenv-naming-cutover` 立项） |
