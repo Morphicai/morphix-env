@@ -87,6 +87,8 @@ An Infisical source with no environment specified **fails closed** with an actio
 3. `DEPLOY_ENV` environment variable
 4. `"env": "dev"` on the source declaration (pins it in config)
 
+Unpinned-but-saved runs are visible, not silent: composed commands (`run`/`export`/`render`/`inject`/`generate`) warn once on stderr when a source had no `env` pin but this run was saved by a flag or variable — later invocations without it fail closed. `inspect` annotates each Infisical source line with its resolution state (`[env: dev (pinned)]` vs `[env: dev (via --env, unpinned)]`), and `mxenv doctor` surfaces pinning as findings.
+
 ## Legacy configuration
 
 Projects configured before named profiles — a top-level `infisical` block and `envFiles` — keep working unchanged and can also pin `"env"` on the legacy block. Migrate to `sources` / `profiles` when a project needs named profiles, multiple providers, or unified editing.

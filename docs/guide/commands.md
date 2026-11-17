@@ -45,7 +45,11 @@ Generate a browser runtime config from browser-public keys (`NEXT_PUBLIC_`, `VIT
 
 ### `mxenv inspect [--profile <name>] [-v]`
 
-Key names, source provenance, availability status — **never values**. The Agent-facing state surface. Skipped sources are shown with a value-free reason.
+Key names, source provenance, availability status — **never values**. The Agent-facing state surface. Skipped sources are shown with a value-free reason. Infisical sources carry an inline env-resolution mark: `[env: dev (pinned)]` when the environment is declared in config, `[env: dev (via --env, unpinned)]` when this run was only saved by a flag or variable.
+
+### `mxenv doctor`
+
+One-shot health check over the whole local surface — CI-usable (`exit 1` when any finding is `fail`). Unlike `run`/`inspect` it never stops at the first composition error: every finding is reported at once, because a stale config plus one fail-closed source is exactly the state where single-error output hides the rest. Checks config naming (old-name `mx-env.config.json` coexisting or unread), Infisical env pinning per source, source health (loaded / missing-optional / skipped, `fail` for sources whose keys are absent from the composition), short-value redaction collisions, plaintext local units (with a `migrate` hint), and the legacy `~/.mx-env` global dir. Findings print as `[ok]` / `[warn]` / `[fail]` plus a summary line. Value-free throughout. Accepts the standard composition flags (`--profile`, `--env`, `--no-global`, `--no-infisical`) to check a specific composition.
 
 ### `mxenv audit [tail]`
 

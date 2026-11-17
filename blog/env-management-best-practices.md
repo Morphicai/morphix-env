@@ -117,6 +117,7 @@ npx skills add Morphicai/morphix-env
 ```bash
 npm install -D @morphixai/mxenv
 npx mxenv inspect              # 键名 + 来源 + 状态，没有值
+npx mxenv doctor               # 一次性体检（命名 / env 钉定 / 来源健康）
 npx mxenv run -- pnpm dev      # 组合项目 profile 并运行
 ```
 
@@ -150,12 +151,13 @@ mxenv 做的是**泄露最小化，不是密码学边界**：
 
 以下清单是本文对外承诺的全部范围，也是后续功能工作的验收基准。**本文承诺的，清单里有；清单外的，本文不提。**
 
-**已交付（截至 0.15.0）**
+**已交付（截至 0.16.0）**
 
 - [x] 五 provider 组合 + plugin 协议（`mxenv-provider-<name>` 任意可执行文件即 provider）
 - [x] `run` 输出实时脱敏（含流式 chunk、≤2 字符值豁免规则）
 - [x] `run --serve` 按需取值 + 一次性令牌 + 随子进程销毁
-- [x] `inspect` / `audit` / `doc` 全程无值
+- [x] `inspect` / `audit` / `doc` 全程无值；Infisical env 钉定状态直接标注在 inspect 源行上
+- [x] `doctor` 一次性体检：命名、env 钉定、来源健康、短值碰撞、明文残留、旧全局目录——全部发现一次报出，exit 1 即 CI 可用（0.16.0）
 - [x] 会话式浏览器编辑器（`edit`）与逐键揭示（`revealSingle` 唯一实现）
 - [x] `migrate`：0600 备份 + 值级等价验证 + 失败自动还原（dotenvx / keychain 双目标）
 - [x] 终端 shim（`shell-init`，`via: shim` 审计区分）
@@ -167,7 +169,6 @@ mxenv 做的是**泄露最小化，不是密码学边界**：
 
 - [ ] **跨平台 keychain**：os-keychain 目前 macOS-only；补 Windows Credential Manager 与 Linux Secret Service 路径
 - [ ] **keytar 替代**：上游已归档，评估 `@napi-rs/keyring` 或维护 fork，消除安装期告警
-- [ ] **`doctor` 健康自检**：provider 登录态、配置可用性、备份残留一键体检
 - [ ] **面板常驻化**：`gui` 会话已有，launchd 托管 + 稳定端点消费者随真实需求落地（契约零变更）
 - [ ] **remote source 真编辑**：Infisical / Doppler 的键值编辑目前跳转 provider 自己的 UI，改为经 provider API 就地编辑
 

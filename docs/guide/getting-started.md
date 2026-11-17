@@ -58,6 +58,7 @@ Profile sources stack low → high. The same key from two sources fails closed u
 
 ```bash
 npx mxenv inspect              # what is configured, what is missing — no values
+npx mxenv doctor               # one-shot health check (naming, env pins, sources)
 npx mxenv run -- pnpm dev      # compose the project profile and run
 ```
 
