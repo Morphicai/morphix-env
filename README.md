@@ -4,7 +4,7 @@
     <img src="docs/assets/mxenv-lockup.svg" width="460" alt="mxenv — secret composition for processes and agents" />
   </picture>
 
-### Not another secret manager. Yours, composed.
+### Your secret managers, composed.
 
 **mxenv** adopts the secret managers you already use — Infisical, Doppler, macOS Keychain, dotenvx — composes them per profile, and keeps values out of every prompt.
 
