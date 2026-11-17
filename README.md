@@ -55,16 +55,6 @@ npx mxenv run -- pnpm dev      # compose the project profile and run
 
 **Untrusted consumers:** keep values out of every process environment and fetch them one at a time — `npx mxenv run --serve -- pnpm dev`, then `npx mxenv fetch KEY` inside the child. See the [security model](docs/guide/security.md).
 
-## Packages
-
-| Package | Role | Install |
-|---|---|---|
-| [`@morphixai/mxenv`](https://www.npmjs.com/package/@morphixai/mxenv) | run face: compose, run, inspect, edit, migrate | project devDependency |
-| [`@morphixai/mxenv-cli`](https://www.npmjs.com/package/@morphixai/mxenv-cli) | machine face: shims, panel session | global |
-| [`@morphixai/mxenv-core`](https://www.npmjs.com/package/@morphixai/mxenv-core) | L0+L1 engine and contracts for SDK consumers | dependency |
-
-npm does not allow the unscoped `mxenv` name (similarity policy), so releases use the `@morphixai/*` scope; binaries (`mxenv`, `mxenv-cli`) and the `mxenv://` scheme are unchanged.
-
 ## Compared
 
 | | dotenv / direnv | dotenvx | Infisical / Doppler CLI | 1Password CLI / Vault | mxenv |
@@ -74,33 +64,18 @@ npm does not allow the unscoped `mxenv` name (similarity policy), so releases us
 | Same-key collision | silently shadowed | silently shadowed | n/a | n/a | hard error unless `override: true` |
 | Agent context hygiene | `cat .env` leaks | partial | `--plain` leaks | `op read` leaks | value-free surfaces; `run` redacts output |
 
-## Commands
-
-```bash
-mxenv run --profile dev -- <command>   # compose and run (the only injection path)
-mxenv run --serve -- <command>         # values served over loopback, fetched on demand
-mxenv fetch <KEY>                      # read one value inside a run --serve child
-mxenv inspect                          # key names + provenance, no values
-mxenv doctor                           # one-shot health check (CI-usable)
-mxenv edit                             # session-based local visual editor
-mxenv migrate --to dotenvx             # plaintext → encrypted storage (backup + verify)
-mxenv export | render | inject | generate | doc | audit tail | skill
-mxenv-cli shell-init                   # PATH shims for declared commands
-mxenv gui                              # machine-level panel (names-only for agents)
-```
-
 ## Documentation
 
 | | |
 |---|---|
-| [Getting started](docs/guide/getting-started.md) | install paths, first composed run, the editor |
+| [Getting started](docs/guide/getting-started.md) | install paths, first composed run, the editor, shims, packages |
 | [Configuration reference](docs/guide/configuration.md) | sources, profiles, precedence, legacy compatibility |
 | [Providers](docs/guide/providers.md) | Infisical, Doppler, dotenvx, Keychain, local, plugin protocol |
 | [Command reference](docs/guide/commands.md) | every command and flag |
 | [Security model](docs/guide/security.md) | redaction rules, `run --serve`, value reveal, honest boundaries |
 | [Recipes](docs/guide/recipes.md) | CI, Docker/PaaS, monorepo, agents, MCP injection, rotation |
 
-This is leakage minimization, not a cryptographic boundary — the [security model](docs/guide/security.md#honest-boundaries) states the limits plainly. Security reports: [SECURITY.md](./SECURITY.md).
+Embedding or scripting on top of the engine? `npm i @morphixai/mxenv-core` — pure contracts at `@morphixai/mxenv-core/contracts`. This is leakage minimization, not a cryptographic boundary — the [security model](docs/guide/security.md#honest-boundaries) states the limits plainly.
 
 ## Upgrading from `morphix-env` / `mx-env`
 
