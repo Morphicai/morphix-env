@@ -6,9 +6,9 @@ This guide gets you from zero to a composed run. For the full schema see [Config
 
 ## How it fits together
 
-Providers keep owning their values. A profile selects sources; mxenv composes them on your machine; processes and agent runtimes consume through controlled paths — and the model context only ever sees key names.
+Providers keep owning their values. A profile selects sources; mxenv composes them on your machine; agents, processes, and code consume through controlled paths.
 
-![Secret flow: providers retain ownership, mxenv composes a profile on your machine, processes and agent runtimes consume through controlled paths, model context receives names only](../assets/secret-flow.svg)
+![Secret flow: providers retain ownership, mxenv composes a profile on your machine, and agents, processes and code consume through controlled paths](../assets/secret-flow.svg)
 
 ## Install
 

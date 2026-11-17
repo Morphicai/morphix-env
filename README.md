@@ -4,9 +4,9 @@
     <img src="docs/assets/mxenv-lockup.svg" width="460" alt="mxenv — secret composition for processes and agents" />
   </picture>
 
-### Compose secrets. Keep them out of the prompt.
+### Not another secret manager. Yours, composed.
 
-**mxenv** composes the secret sources you already use into a short-lived environment for your process — or serves values to an agent runtime on demand. Infisical, Doppler, macOS Keychain, dotenvx, and local files keep owning their values. **The composition layer, not another vault.**
+**mxenv** adopts the secret managers you already use — Infisical, Doppler, macOS Keychain, dotenvx — composes them per profile, and keeps values out of every prompt.
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Security model](docs/guide/security.md) · [Full guide](docs/guide/getting-started.md)
 
@@ -20,7 +20,7 @@
 
 A profile selects sources low → high. mxenv loads them only when needed, fails closed on undeclared key collisions, and gives each consumer the narrowest useful surface.
 
-<img src="docs/assets/secret-flow.svg" alt="Secret flow: providers retain ownership, mxenv selects and composes a profile on your machine, processes and agent runtimes consume values through controlled paths, and model context receives names only." width="100%" />
+<img src="docs/assets/secret-flow.svg" alt="Secret flow: providers retain ownership, mxenv composes a profile on your machine, and agents, processes and code consume values through controlled paths." width="100%" />
 
 ```text
 inherited process.env

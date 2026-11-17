@@ -28,7 +28,7 @@ The three posters embedded across the guide tell the product story in one image 
 
 | Poster | Used in | Story |
 |---|---|---|
-| [`secret-flow`](./assets/secret-flow.svg) | [Getting started](./guide/getting-started.md) | provider ownership → composition → controlled consumption → names-only model context |
+| [`secret-flow`](./assets/secret-flow.svg) | [Getting started](./guide/getting-started.md) | provider ownership → composition → consumption by agents, processes and code |
 | [`agent-boundary`](./assets/agent-boundary.svg) | [Security model](./guide/security.md) | `run --serve` capability flow: endpoint + token to the child, one value at a time |
 | [`migration`](./assets/migration.svg) | [Recipes](./guide/recipes.md) | verified plaintext retirement: backup → encrypt → verify → switch |
 
