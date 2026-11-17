@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 620" width="1600" height="620" role="img" aria-labelledby="title desc">
+  <title id="title">Move beyond plaintext with verified migration</title>
+  <desc id="desc">Discover, back up, encrypt, verify value equivalence, then switch; any failure restores from backup.</desc>
+  <defs><style>.sans{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif}.mono{font-family:ui-monospace,'SF Mono','Cascadia Code','JetBrains Mono',Menlo,Consolas,'Liberation Mono',monospace}.ink{fill:#111827}.muted{fill:#5B6472}.num{font-size:15px;font-weight:700}.name{font-size:22px;font-weight:700}.detail{font-size:16px}</style><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#8A94A6"/></marker></defs>
+  <rect width="1600" height="620" fill="#F7F9FC"/>
+  <g class="sans">
+    <text x="64" y="64" fill="#3157D5" font-size="15" font-weight="700" letter-spacing="2">VERIFIED MIGRATION</text>
+    <text x="64" y="130" class="ink" font-size="52" font-weight="700" letter-spacing="-1.8">Move beyond plaintext. Prove every value.</text>
+
+    <path d="M154 330h1292" stroke="#C8D2E4" stroke-width="2"/>
+    <g text-anchor="middle">
+      <circle cx="176" cy="330" r="30" fill="#3157D5"/><text x="176" y="336" fill="#FFFFFF" class="num">01</text>
+      <circle cx="488" cy="330" r="30" fill="#3157D5"/><text x="488" y="336" fill="#FFFFFF" class="num">02</text>
+      <circle cx="800" cy="330" r="30" fill="#3157D5"/><text x="800" y="336" fill="#FFFFFF" class="num">03</text>
+      <circle cx="1112" cy="330" r="30" fill="#198865"/><text x="1112" y="336" fill="#FFFFFF" class="num">04</text>
+      <circle cx="1424" cy="330" r="30" fill="#198865"/><path d="m1411 330 9 9 19-21" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <g text-anchor="middle">
+      <rect x="74" y="228" width="204" height="60" rx="12" fill="#FFFFFF" stroke="#D7DDE8" stroke-width="1.25"/><text x="176" y="264" class="name ink">Discover</text>
+      <rect x="386" y="228" width="204" height="60" rx="12" fill="#FFFFFF" stroke="#D7DDE8" stroke-width="1.25"/><text x="488" y="264" class="name ink">Back up</text>
+      <rect x="698" y="228" width="204" height="60" rx="12" fill="#FFFFFF" stroke="#D7DDE8" stroke-width="1.25"/><text x="800" y="264" class="name ink">Encrypt</text>
+      <rect x="1010" y="228" width="204" height="60" rx="12" fill="#EDF9F5" stroke="#B9E5D7" stroke-width="1.25"/><text x="1112" y="264" class="name ink">Verify</text>
+      <rect x="1322" y="228" width="204" height="60" rx="12" fill="#EDF9F5" stroke="#B9E5D7" stroke-width="1.25"/><text x="1424" y="264" class="name ink">Switch</text>
+    </g>
+    <g text-anchor="middle" class="detail muted">
+      <text x="176" y="396">plan, never values</text>
+      <text x="488" y="396">0600 copies first</text>
+      <text x="800" y="396" fill="#3157D5">dotenvx · keychain</text>
+      <text x="1112" y="396" fill="#397365">value equivalence</text>
+      <text x="1424" y="396" fill="#397365">only after proof</text>
+    </g>
+
+    <path d="M800 408v36H488v-40" fill="none" stroke="#8A94A6" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#a)"/>
+    <rect x="630" y="428" width="340" height="44" rx="22" fill="#FFFFFF" stroke="#C7CEDA" stroke-width="1.25"/>
+    <text x="800" y="457" text-anchor="middle" class="detail muted">Any failure → restore from backup</text>
+
+    <rect x="64" y="510" width="1472" height="62" rx="14" fill="#111827"/>
+    <text x="96" y="549" class="mono" font-size="19" fill="#FFFFFF">mxenv migrate --to dotenvx</text>
+    <text x="1504" y="548" text-anchor="end" fill="#B8C1CF" font-size="17">dry-run · value-free audit</text>
+  </g>
+</svg>

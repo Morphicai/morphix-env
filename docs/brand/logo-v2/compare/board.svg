@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1250" role="img" aria-label="mxenv logo comparison board, solid constructions">
+  <rect width="1600" height="1250" fill="#0B1020"/>
+  <g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="64" y="68" fill="#6685FF" font-size="15" font-weight="700" letter-spacing="2">MXENV / LOGO COMPARISON · ROUND 2</text>
+    <text x="64" y="132" fill="#F7F9FC" font-size="52" font-weight="760" letter-spacing="-1.5">Solid constructions, not thin strokes.</text>
+    <text x="64" y="174" fill="#AAB5C5" font-size="20">Five different directions — compare at 96 / 32 / 16 px.</text>
+
+  <g transform="translate(64 210)">
+    <rect width="704" height="310" rx="24" fill="#131C2E" stroke="#2C3950"/>
+    <text x="36" y="46" fill="#6685FF" font-size="15" font-weight="700" letter-spacing="2">N1 / SOLID M TILE</text>
+    <g transform="translate(36 68) scale(1.5)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#3157D5"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" d="M19.5 41.5V30c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25v11.5m0-11.5c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25V41.5"/></g>
+    <text x="156" y="138" fill="#F7F9FC" font-size="50" font-weight="760" letter-spacing="-2">mxenv</text>
+    <text x="36" y="208" fill="#AAB5C5" font-size="17">Filled-weight m fills the tile. No thin strokes anywhere.</text>
+    <g transform="translate(36 234) scale(0.5)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#3157D5"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" d="M19.5 41.5V30c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25v11.5m0-11.5c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25V41.5"/></g>
+    <g transform="translate(88 250) scale(0.25)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#3157D5"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" d="M19.5 41.5V30c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25v11.5m0-11.5c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25V41.5"/></g>
+  </g>
+
+  <g transform="translate(832 210)">
+    <rect width="704" height="310" rx="24" fill="#131C2E" stroke="#2C3950"/>
+    <text x="36" y="46" fill="#6685FF" font-size="15" font-weight="700" letter-spacing="2">N2 / BOLD BRACES</text>
+    <g transform="translate(36 68) scale(1.5)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#3157D5"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 13h-3a6 6 0 0 0-6 6v6a6 6 0 0 1-6 6 6 6 0 0 1 6 6v6a6 6 0 0 0 6 6h3"/>
+    <path d="M40 13h3a6 6 0 0 1 6 6v6a6 6 0 0 0 6 6 6 6 0 0 0-6 6v6a6 6 0 0 1-6 6h-3"/>
+  </g>
+  <path fill="none" stroke="#79E2C3" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" d="M24.5 39v-8c0-2.1 1.7-3.75 3.75-3.75s3.75 1.65 3.75 3.75v8m0-8c0-2.1 1.7-3.75 3.75-3.75s3.75 1.65 3.75 3.75v8"/></g>
+    <text x="156" y="138" fill="#F7F9FC" font-size="50" font-weight="760" letter-spacing="-2">mxenv</text>
+    <text x="36" y="208" fill="#AAB5C5" font-size="17">Braces stay, everything at 6.5 weight. One solid cluster.</text>
+    <g transform="translate(36 234) scale(0.5)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#3157D5"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 13h-3a6 6 0 0 0-6 6v6a6 6 0 0 1-6 6 6 6 0 0 1 6 6v6a6 6 0 0 0 6 6h3"/>
+    <path d="M40 13h3a6 6 0 0 1 6 6v6a6 6 0 0 0 6 6 6 6 0 0 0-6 6v6a6 6 0 0 1-6 6h-3"/>
+  </g>
+  <path fill="none" stroke="#79E2C3" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" d="M24.5 39v-8c0-2.1 1.7-3.75 3.75-3.75s3.75 1.65 3.75 3.75v8m0-8c0-2.1 1.7-3.75 3.75-3.75s3.75 1.65 3.75 3.75v8"/></g>
+    <g transform="translate(88 250) scale(0.25)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#3157D5"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 13h-3a6 6 0 0 0-6 6v6a6 6 0 0 1-6 6 6 6 0 0 1 6 6v6a6 6 0 0 0 6 6h3"/>
+    <path d="M40 13h3a6 6 0 0 1 6 6v6a6 6 0 0 0 6 6 6 6 0 0 0-6 6v6a6 6 0 0 1-6 6h-3"/>
+  </g>
+  <path fill="none" stroke="#79E2C3" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" d="M24.5 39v-8c0-2.1 1.7-3.75 3.75-3.75s3.75 1.65 3.75 3.75v8m0-8c0-2.1 1.7-3.75 3.75-3.75s3.75 1.65 3.75 3.75v8"/></g>
+  </g>
+
+  <g transform="translate(64 545)">
+    <rect width="704" height="310" rx="24" fill="#131C2E" stroke="#2C3950"/>
+    <text x="36" y="46" fill="#6685FF" font-size="15" font-weight="700" letter-spacing="2">N3 / ENV LINES</text>
+    <g transform="translate(36 68) scale(1.5)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#3157D5"/>
+  <rect x="14" y="17.5" width="36" height="7" rx="3.5" fill="#79E2C3"/>
+  <rect x="14" y="28.5" width="27" height="7" rx="3.5" fill="#FFFFFF"/>
+  <rect x="14" y="39.5" width="36" height="7" rx="3.5" fill="#FFFFFF"/></g>
+    <text x="156" y="138" fill="#F7F9FC" font-size="50" font-weight="760" letter-spacing="-2">mxenv</text>
+    <text x="36" y="208" fill="#AAB5C5" font-size="17">No braces, no letter. Three env-file lines, the key is mint.</text>
+    <g transform="translate(36 234) scale(0.5)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#3157D5"/>
+  <rect x="14" y="17.5" width="36" height="7" rx="3.5" fill="#79E2C3"/>
+  <rect x="14" y="28.5" width="27" height="7" rx="3.5" fill="#FFFFFF"/>
+  <rect x="14" y="39.5" width="36" height="7" rx="3.5" fill="#FFFFFF"/></g>
+    <g transform="translate(88 250) scale(0.25)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#3157D5"/>
+  <rect x="14" y="17.5" width="36" height="7" rx="3.5" fill="#79E2C3"/>
+  <rect x="14" y="28.5" width="27" height="7" rx="3.5" fill="#FFFFFF"/>
+  <rect x="14" y="39.5" width="36" height="7" rx="3.5" fill="#FFFFFF"/></g>
+  </g>
+
+  <g transform="translate(832 545)">
+    <rect width="704" height="310" rx="24" fill="#131C2E" stroke="#2C3950"/>
+    <text x="36" y="46" fill="#6685FF" font-size="15" font-weight="700" letter-spacing="2">N4 / BARE GLYPH</text>
+    <g transform="translate(36 68) scale(1.5)"><path fill="none" stroke="#3157D5" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" d="M17 44V31.5c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5V44m0-12.5c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5V44"/>
+  <circle cx="52" cy="14" r="5" fill="#79E2C3"/></g>
+    <text x="156" y="138" fill="#F7F9FC" font-size="50" font-weight="760" letter-spacing="-2">mxenv</text>
+    <text x="36" y="208" fill="#AAB5C5" font-size="17">Tile-free m + value dot. Sits on any background.</text>
+    <g transform="translate(36 234) scale(0.5)"><path fill="none" stroke="#3157D5" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" d="M17 44V31.5c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5V44m0-12.5c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5V44"/>
+  <circle cx="52" cy="14" r="5" fill="#79E2C3"/></g>
+    <g transform="translate(88 250) scale(0.25)"><path fill="none" stroke="#3157D5" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" d="M17 44V31.5c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5V44m0-12.5c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5V44"/>
+  <circle cx="52" cy="14" r="5" fill="#79E2C3"/></g>
+  </g>
+
+  <g transform="translate(64 880)">
+    <rect width="704" height="310" rx="24" fill="#131C2E" stroke="#2C3950"/>
+    <text x="36" y="46" fill="#6685FF" font-size="15" font-weight="700" letter-spacing="2">N5 / DARK TILE</text>
+    <g transform="translate(36 68) scale(1.5)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#111827"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" d="M19.5 41.5V30c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25v11.5m0-11.5c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25V41.5"/>
+  <circle cx="47" cy="17" r="4" fill="#79E2C3"/></g>
+    <text x="156" y="138" fill="#F7F9FC" font-size="50" font-weight="760" letter-spacing="-2">mxenv</text>
+    <text x="36" y="208" fill="#AAB5C5" font-size="17">N1 on near-black, mint value dot.</text>
+    <g transform="translate(36 234) scale(0.5)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#111827"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" d="M19.5 41.5V30c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25v11.5m0-11.5c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25V41.5"/>
+  <circle cx="47" cy="17" r="4" fill="#79E2C3"/></g>
+    <g transform="translate(88 250) scale(0.25)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#111827"/>
+  <path fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" d="M19.5 41.5V30c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25v11.5m0-11.5c0-3.45 2.8-6.25 6.25-6.25s6.25 2.8 6.25 6.25V41.5"/>
+  <circle cx="47" cy="17" r="4" fill="#79E2C3"/></g>
+  </g>
+  </g>
+</svg>

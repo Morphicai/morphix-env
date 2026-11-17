@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">mxenv concept D — Profile Stack</title>
+  <desc id="desc">Three profile layers resolve into one run surface.</desc>
+  <defs><style>:root{--tile:#111827;--glyph:#FFFFFF;--output:#79E2C3}</style></defs>
+  <rect x="2" y="2" width="60" height="60" rx="17" fill="var(--tile)"/>
+  <g fill="var(--glyph)">
+    <rect x="11" y="14" width="29" height="9" rx="4.5"/>
+    <rect x="11" y="27.5" width="24" height="9" rx="4.5"/>
+    <rect x="11" y="41" width="29" height="9" rx="4.5"/>
+  </g>
+  <path d="M40 27.5h7v9h-7Zm0-14 12 7-12 7Zm0 30 12-7-12-7Z" fill="var(--output)"/>
+</svg>

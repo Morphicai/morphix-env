@@ -1,323 +1,188 @@
-# 多项目架构下，环境变量管理的最佳实践
+# 从 .env 满天飞，到 Agent 上下文零密钥 —— mxenv 的密钥组合之道
 
-> 从 `.env` 文件满天飞，到一个命令统一管理 —— 我在 MorphixAI 开发中踩过的坑和最终方案
-
----
-
-## 背景
-
-先交代一下上下文。
-
-我在做一个叫 MorphixAI 的项目 —— 一个 AI 驱动的个人工作台。它的核心思路是把你散落在 GitHub、Jira、Notion、邮件、日历等平台的工作数据聚合起来，让 AI 帮你理解上下文、管理任务、执行操作。
-
-这个项目的技术栈比较多样：
-
-| 子项目 | 技术栈 | 用途 |
-|--------|--------|------|
-| morphicai-api | Express + TypeScript | 后端 API |
-| morphicai-web | Next.js 15 + React 19 | Web 前端 |
-| morphicai-app-shell | Vite + Ionic + Capacitor | 跨平台 App Shell |
-| morphicai-native | React Native + Expo | iOS/Android 客户端 |
-| openclaw-morphixai | Node.js | MCP Server（开源） |
-| morphixai-code | Node.js | CLI 工具（开源） |
-
-6 个子项目，3 种前端框架，部署在 Zeabur 上。项目推进节奏比较快，如果在环境变量这种「基础设施」问题上反复踩坑，那真的太浪费时间了。
-
-这篇文章想分享的就是：在这种多项目架构下，我是怎么一步步理顺环境变量管理的，以及最终沉淀出的方案和工具。
-
-![MorphixAI 整体架构图](https://gw-tk.tanka.ai/npc/v2/file/89ed129b-69e7-44c2-9b63-241de08c4f9c)
+> 状态：宣传正文 v1（2026-11-17）· 本文是对外发布的叙事基准，第九节的承诺清单同时是功能收敛的验收依据
+> 配图：[密钥流向](../docs/assets/secret-flow.svg) · [Agent 边界](../docs/assets/agent-boundary.svg) · [可验证迁移](../docs/assets/migration.svg)
+> 仓库：<https://github.com/Morphicai/morphix-env> · npm：`@morphixai/mxenv`
 
 ---
 
-## 阶段一：`.env` 文件管理
+## 一、老问题：.env 满天飞
 
-最早的做法和大多数项目一样 —— 每个项目根目录放一个 `.env` 文件，里面写满各种密钥和配置。
+每个用过微服务或多端项目的人都熟悉这个剧本：
 
+- 六个子项目共用同一批 `SUPABASE_URL` / `OPENAI_API_KEY`，六个目录各放一份 `.env`，轮换一次密钥要挨个改六处，漏一处就是线上事故；
+- 关联费用的密钥躺在明文文件里，`.gitignore` 挡得住 git，挡不住同机任何一个进程；
+- 引入 Infisical / Doppler 之后，**single source of truth 有了**，但新问题跟着来：注入方式绑定单一 provider，本地临时覆盖没有优雅出口，CI 里"先 export 再 build"把密钥烘焙进 Docker 镜像。
+
+这一阶段的结论只有一条：**密钥必须有一个所有权清晰的地方**。Infisical 也好、Doppler 也好、macOS 钥匙串也好，值放在谁那里就该由谁管——权限、审计、轮换都是它的职责。
+
+## 二、新问题：Agent 改变了泄露面
+
+Agent 进来之后，剧本又变了。它需要：
+
+1. **跑命令**——`pnpm dev`、测试、构建，都需要带着密钥的环境；
+2. **看状态**——这个项目有哪些 key、缺哪个、来自哪个 provider；
+3. **改配置**——轮换 token、补一条 key。
+
+传统方案只有两条路，都是坏路：
+
+- **把值贴进对话**：密钥从此躺在聊天记录、模型上下文、可能的日志里；
+- **把整个 env 给 Agent**：`cat .env` 或全量注入，授权范围远超任务需要。
+
+**Agent 应该能干活，但密钥永远不必进入对话。**这就是 mxenv 的出发点，也是它和所有"另一个密钥管理工具"的分界线。
+
+## 三、mxenv 是什么：组合层，不是第五个保险库
+
+mxenv 一句话：**secret composition CLI**——把你在用的密钥来源按 profile 组合成一个短命的子进程环境，并且保证 inspect / audit / Agent 上下文里只有键名、没有值。
+
+![密钥流向：provider 持有值，mxenv 在本机组合，消费方走受控路径，模型上下文只有键名](../docs/assets/secret-flow.svg)
+
+三条理念，全部写在产品行为里而不是口号里：
+
+**1. 值的所有权不转移。** Infisical、Doppler、macOS Keychain、dotenvx、本地文件——mxenv 一个都不取代，只是按 profile 把它们组合起来。仓库配置（`mxenv.config.json`）里只有接线：provider、路径、顺序，**没有一个值**。
+
+**2. 冲突 fail-closed。** 同一个 key 从两个来源出现，默认直接报错；靠后的来源必须显式声明 `"override": true` 才能覆盖。两个环境的同名凭据静默错选，是密钥管理里最贵的事故。
+
+**3. 每个消费方只拿到最窄的有用面。** 进程拿组合环境或按需单键；Agent 上下文只拿键名与来源；人要看的值走逐键揭示、即用即毁。没有"给我全部"这个选项。
+
+## 四、工作原理
+
+### 组合顺序
+
+```text
+继承的 process.env
+→ ~/.mxenv/.env          （个人全局基线，可选）
+→ 全局默认 profile        （可选）
+→ 项目 profile            （或 legacy Infisical 配置）
+→ -f 覆盖文件             （显式指定）
 ```
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_KEY=eyJhbGciOi...
-OPENAI_API_KEY=sk-...
-```
 
-`.env` 加到 `.gitignore` 里，然后写一个 `.env.example` 提交到 git。
+profile 里 source 从低到高排列，`extends` 可以复用别的 profile，`optional: true` 容忍缺席。组合结果只服务这一次运行，进程退出即消失。
 
-![多项目 .env 文件散落问题](https://gw-tk.tanka.ai/npc/v2/file/6f070e6a-92ad-4eb9-bf11-eb4c4b69f6dc)
+### `run` 是唯一注入路径
 
-项目早期是够用的。但随着子项目越来越多，问题集中暴露了：
+`mxenv run -- pnpm dev` 组合环境、启动子进程，并**把注入值从子进程输出里实时脱敏**（`[REDACTED]`）——包括跨流式 chunk 的拆分匹配。浏览器公开前缀（`NEXT_PUBLIC_` / `VITE_` / `EXPO_PUBLIC_`）刻意豁免，构建工具需要内联它们。
 
-**多项目重复配置**。比如 `SUPABASE_URL`、`SUPABASE_KEY`，6 个项目都要用，值完全一样。但每个项目各自维护一份 `.env`，改一个值得跑到 6 个目录里挨个改，漏一个就是线上问题。
+### `run --serve`：值不进环境
 
-**密钥安全无法保障**。项目里有 OpenAI API Key、Supabase Service Key 这些直接关联费用的密钥。OpenAI 的 key 是实打实按 token 计费的，泄露了就是真金白银的损失。`.env` 文件虽然加了 `.gitignore`，但它就是一个明文文件，躺在本地磁盘上。如果项目需要和其他开发者协作，你没办法做到精细的权限控制。
+高风险场景下，注入环境本身就是暴露面。`mxenv run --serve -- <command>` 换一种给法：
 
----
+![Agent 边界：子进程只拿端点与随机令牌，按需取单键，模型上下文始终只有键名](../docs/assets/agent-boundary.svg)
 
-## 阶段二：引入 Infisical
+- 组合后的非公开值**不进入任何进程环境**——子进程、孙进程、`/proc/<pid>/environ` 里都没有；
+- 子进程只拿到 `MXENV_ENDPOINT` 和一次性随机 `MXENV_TOKEN`，需要哪个值就 `mxenv fetch <KEY>` 取哪个，一次一个；
+- 服务器只监听 127.0.0.1，令牌不出机器，请求与值零日志，子进程退出服务器即销毁。
 
-意识到 `.env` 文件管理不住之后，我们引入了 Infisical。
+这个模式对标 aws-vault 的 `--ecs-server`：**交付能力，而不是交付值**。
 
-### Infisical 是什么
+### `migrate`：明文退场，但每一步都可证明
 
-**Infisical 是一个开源的密钥管理平台**，你可以理解为专门给开发者设计的密钥保险箱 —— 一个地方存所有密钥，所有环境、所有项目从这里统一拉取。
+明文 `.env` 是开发便利，不是存储终态——文件权限防不住同 uid 的 Agent 进程。`mxenv migrate` 把明文搬进 dotenvx 加密文件或 macOS 钥匙串：
 
-<!-- 建议配图：Infisical Dashboard 截图，展示多环境、多 folder 的管理界面 -->
+![可验证迁移：发现 → 0600 备份 → 加密 → 值级等价验证 → 才切换配置；失败自动还原](../docs/assets/migration.svg)
 
-核心能力：
+每一步先做 0600 备份；加密后**解密回读、与迁移前快照逐值比对**，等价验证通过才改写配置、才删明文；任何一步失败自动还原并在错误信息里如实报告还原结果。全程输出只有键名，没有值。`--dry-run` 出完整执行计划，不落一笔写。
 
-| 能力 | 说明 |
-|------|------|
-| 多环境管理 | dev / staging / prod 各一套，互不干扰 |
-| 项目 + Folder 隔离 | 一个项目下可以按 `/ai`、`/frontend` 等路径分组 |
-| 两种认证方式 | 本地用 CLI 登录（`infisical login`），CI/Docker 用 Machine Identity |
-| SDK 集成 | Node.js / Python / Go SDK，代码里直接拉取 |
-| CLI 工具 | `infisical run -- npm start` 一行搞定注入 |
-| 权限控制 | 按人、按角色、按环境控制访问 |
+### 需要看值的时候：逐键揭示
 
-市面上做密钥管理的工具不少，比如 HashiCorp Vault。但 Vault 是企业级方案，部署和维护成本都高。Infisical 卡在一个很好的位置 —— 比 `.env` 文件规范，比 Vault 轻量，有开源版可以自部署，也有云服务直接用。
+人总有要看值的时候（排查、核对）。mxenv 的纪律是：一次一-key、单值驻留（看新的旧的即毁）、审计只记键名。浏览器编辑器（`mxenv edit`）和全局面板（`mxenv gui`）都走同一条 `revealSingle` 能力——**整个工具链只有这一处值揭示实现**，没有旁路。
 
-### 我们怎么用的
+### 接线可以入仓：`mxenv://profile/KEY`
 
-本地开发通过 Infisical CLI 拉取密钥：
+MCP 配置、dotenv 模板里写引用而不是值，`mxenv inject` 在文件级解析成 0600 输出。配置入仓、值留原地，`op://` 的同款思路。
+
+## 五、Agent 工作流
+
+这是 mxenv 区别于上一代工具的地方。安装打包好的 Agent Skill：
 
 ```bash
-infisical login          # 一次性登录
-infisical run --env=dev --path=/ai -- next dev   # 拉取密钥并启动
+npx skills add Morphicai/morphix-env
 ```
 
-生产部署走 GitHub Actions。在 CI 构建阶段，先通过 Infisical CLI 动态拉取密钥，生成 `.env` 文件，再执行 Docker 构建：
+然后告诉 Agent："帮我给这个项目配好环境"。Skill 里带着安全红线、五种 provider 的完整 schema、onboarding 流程和排障表——Agent 依此驱动 `inspect`（键名与来源）、`edit`（人在浏览器里操作值）、`run`（带环境执行），**全程没有任何值经过对话**。
 
-```yaml
-# GitHub Actions 构建流程
-steps:
-  - name: 从 Infisical 拉取密钥
-    run: infisical export --env=prod --path=/ai --format=dotenv > .env
-  - name: 构建 Docker 镜像
-    run: docker build .
-```
+人机边界也是显式的：`mxenv gui` 起的本地面板默认锁定，只展示键名与状态；Agent 和脚本永远被限制在 names-only 面，`reveal` / `unlock` 端点只接受人操作的浏览器会话，越权调用会被拒绝并进审计。审计事件本身也是 value-free 的——键名、来源、结果、退出码，仅此而已。
 
-<!-- 配图：GitHub Actions 构建日志截图，展示 infisical export 和 docker build 的步骤 -->
+## 六、快速上手
 
-这解决了两个核心问题：密钥有了统一的来源（single source of truth），以及密钥的访问可以通过权限控制来管理。
-
-关于协作安全，这里说一下实际情况。Infisical 的权限控制是管理层面的 —— 你可以控制谁能在 Infisical 管理界面上看到哪些密钥。但只要项目跑起来了，环境变量已经注入到 `process.env` 里，技术上是可以读取的。所以 Infisical 的价值不是「绝对防泄露」，而是**降低密钥暴露面** —— 密钥不再以明文文件的形式存在，不需要在聊天工具里传来传去，访问权限可以集中管控和审计，需要的时候随时收回。
-
-### 还有什么不够顺畅
-
-- **`.env` 文件构建到 Docker 镜像中有安全隐患**。CI 里先 `infisical export` 生成 `.env`，再 `docker build`，密钥就被烘焙进了镜像。任何能拉到这个镜像的人都能看到里面的密钥
-- **Docker 镜像里装 Infisical CLI 麻烦**。Alpine 镜像装 CLI 有二进制依赖问题，镜像体积也会增大
-- **本地覆盖不方便**。`infisical run` 注入远程密钥后，想把某个 URL 临时指向 `localhost` 调试，没有优雅的覆盖方式
-
----
-
-## 阶段三：迁移到 Zeabur，催生 morphix-env
-
-转折点是把部署从 GitHub Actions 迁移到了 Zeabur。
-
-**Zeabur** 是一个国内团队做的 PaaS 部署平台，类似 Vercel / Railway。它提供了一个很方便的功能 —— 自动识别项目中的 Dockerfile，从 GitHub 仓库拉代码直接构建和部署。不需要自己写 CI 流程，推代码就自动部署。
-
-<!-- 配图：Zeabur 部署界面截图，展示自动识别 Dockerfile 构建的流程 -->
-
-但这也意味着，我们没有办法在 Docker 构建之前插入额外的步骤了。之前在 GitHub Actions 里「先 `infisical export` 拉密钥生成 `.env`，再 `docker build`」的方式，在 Zeabur 上行不通 —— 它直接构建你的 Dockerfile，没有地方执行预处理脚本。
-
-而且回过头想，之前的方式其实也有问题：**先拉取密钥生成 `.env` 文件，再构建到 Docker 镜像里，这本身就不安全**。密钥被烘焙进了镜像，任何能拉到镜像的人都能看到。
-
-这里需要区分两类环境变量：
-
-- **前端公开变量**（如 `SUPABASE_URL`、`SUPABASE_ANON_KEY`）—— 这些本来就会出现在浏览器端的 JS bundle 里，编译进产物没有安全问题
-- **服务端密钥**（如 `OPENAI_API_KEY`、`SUPABASE_SERVICE_KEY`）—— 这些绝对不能固化到镜像里，只应该在运行时使用
-
-所以我们真正需要的是：
-
-1. **不依赖特定的 CI/CD 平台** —— 不管是 GitHub Actions 还是 Zeabur，都能用
-2. **密钥按需动态拉取** —— 构建时需要就在构建时拉，运行时需要就在运行时拉，但不提前生成 `.env` 文件、不固化到镜像里
-3. **不需要在 Docker 镜像里装 Infisical CLI** —— 用轻量的 Node.js SDK 就行
-4. **本地开发能方便地覆盖** —— `.env.local` 优先
-
-于是就有了 morphix-env。
-
----
-
-## morphix-env：最终方案（0.12.0 起产品更名 mxenv）
-
-### 核心设计
+**带 Agent（推荐）：**
 
 ```bash
-morphix-env run -- next dev
+npx skills add Morphicai/morphix-env
+# 然后对 Agent 说：帮我用 mxenv 配置这个项目的环境
 ```
 
-这一行命令背后做了五件事：
-
-```
-1. 读取配置文件 mx-env.config.json
-2. 从 Infisical 按需拉取密钥（自动选择 SDK 或 CLI）
-3. 如果配置了 envPrefix，自动给变量加前缀
-4. 加载 .env.local 覆盖（本地开发自定义）
-5. 启动子命令，继承完整的 process.env
-```
-
-不管是 `npm run dev`（本地开发）、`npm run build`（Docker 构建阶段）、还是 `npm start`（生产运行），都走同一个命令。密钥在命令执行的那一刻从 Infisical 拉取，不需要提前准备任何文件。
-
-![morphix-env 工作流程](https://gw-tk.tanka.ai/npc/v2/file/06731782-d850-4a43-b167-abaf1640f437)
-
-### 设计决策一：变量优先级
-
-```
-┌──────────────────────────────────────────┐
-│  .env.local                   ← 最高优先  │
-│  开发者的本地覆盖，永远优先               │
-├──────────────────────────────────────────┤
-│  Infisical secrets             ← 中优先   │
-│  远程拉取，不覆盖已有值                   │
-├──────────────────────────────────────────┤
-│  process.env                   ← 最低优先  │
-│  Docker ENV、CI 变量、shell exports       │
-└──────────────────────────────────────────┘
-```
-
-这意味着：
-- 远程密钥管理是底座，保证所有项目用同一套配置
-- 本地想改个 API 地址调试？改 `.env.local` 就行，不影响远程配置
-- Docker/CI 中已有的 process.env 作为最后兜底
-
-### 设计决策二：自动识别认证方式
-
-```
-有 INFISICAL_CLIENT_ID 环境变量？
-  → 用 SDK（Machine Identity）—— Docker / 部署平台场景
-没有？
-  → 本地装了 infisical CLI？
-    → 用 CLI（用户登录态）—— 本地开发
-  → 也没有？
-    → 跳过 Infisical，只用本地文件
-```
-
-开发者不需要关心当前是用 SDK 还是 CLI —— 工具自动判断。本地开发跑一次 `infisical login`，之后 `pnpm dev` 就自动拉取。Docker 里设几个环境变量就行，不需要装 CLI 二进制。
-
-### 设计决策三：envPrefix
-
-Infisical 里存的是通用的变量名（如 `SUPABASE_URL`），但不同前端框架要求不同前缀。在配置中声明 `envPrefix`，拉取时自动转换：
-
-```json
-{
-  "infisical": {
-    "paths": ["/frontend"],
-    "envPrefix": "VITE_"
-  }
-}
-```
-
-Infisical 里只维护一份变量，不同项目按需配置前缀：
-
-| 项目 | envPrefix | SUPABASE_URL 变为 |
-|------|-----------|-------------------|
-| morphicai-api | 不配置 | `SUPABASE_URL`（原样） |
-| morphicai-web | `NEXT_PUBLIC_` | `NEXT_PUBLIC_SUPABASE_URL` |
-| morphicai-app-shell | `VITE_` | `VITE_SUPABASE_URL` |
-
----
-
-## 实际使用
-
-### 配置文件
-
-```json
-// mx-env.config.json（提交到 git，不含密钥）
-{
-  "infisical": {
-    "paths": ["/frontend"],
-    "envPrefix": "VITE_"
-  },
-  "envFiles": [".env.local"]
-}
-```
-
-### package.json
-
-```json
-{
-  "scripts": {
-    "dev": "morphix-env run --env dev -- vite",
-    "build": "morphix-env run -- vite build",
-    "start": "morphix-env run -- node server/index.js"
-  }
-}
-```
-
-### Dockerfile
-
-```dockerfile
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm install
-
-COPY . .
-RUN npm run build
-
-# 运行阶段
-FROM node:20-alpine AS runner
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server ./server
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/package-lock.json ./
-RUN npm ci --omit=dev
-CMD ["npm", "start"]
-```
-
-有一点需要说明：morphix-env 要连接 Infisical 拉取密钥，本身还是需要几个认证信息。这几个变量需要在部署平台（如 Zeabur）上配置为环境变量：
-
-| 变量 | 说明 |
-|------|------|
-| `INFISICAL_CLIENT_ID` | Machine Identity 的 ID |
-| `INFISICAL_CLIENT_SECRET` | Machine Identity 的密钥 |
-| `INFISICAL_PROJECT_ID` | Infisical 项目 ID |
-| `DEPLOY_ENV` | 环境标识（dev / prod） |
-
-这些是「拉取密钥的钥匙」，数量很少且固定，只需要在平台上配一次，永久生效。剩下的几十上百个业务密钥全部从 Infisical 动态拉取，不需要在部署平台上逐个配置。后续新增环境变量，只需要去 Infisical 管理平台上加一条，所有项目下次启动时自动生效，不需要改任何代码或部署配置。
-
-<!-- 配图：Zeabur 环境变量配置界面截图，只有 INFISICAL_CLIENT_ID 等 4 个变量 -->
-
-注意 `morphix-env` 必须在 `dependencies`（不是 `devDependencies`），因为 `start` 脚本在运行阶段也需要它。
-
----
-
-## 适用场景
-
-什么时候你该考虑类似的方案？
-
-- 项目有 **2 个以上环境**（dev/staging/prod）
-- 项目中有**关联费用的密钥**（OpenAI Key、云服务 Key 等），需要管控访问
-- 在用 **Docker 部署**或 **PaaS 平台**（环境变量传递链路变长）
-- 有 **多个子项目**共享同一批密钥
-- 前后端项目需要**不同的变量前缀**
-
-如果以上中了 3 个，值得花半天时间理一理。
-
----
-
-## 总结
-
-环境变量管理不是什么高深的技术问题，但它确实是一个「不解决就一直烦你」的工程问题。
-
-我的经验是：
-
-1. **密钥必须有一个 single source of truth** —— 我们选了 Infisical，你也可以选其他方案，关键是「一处修改，处处生效」
-2. **本地开发必须能覆盖** —— 远程配置是底座，但开发者需要灵活性
-3. **密钥按需拉取，而不是提前生成文件** —— 减少中间环节，降低泄露面
-4. **工具能跑在所有环境** —— 本地、CI、Docker、PaaS，一套配置搞定
-
-morphix-env 就是按这些原则写的，目前在 MorphixAI 的 6 个子项目中都在用。核心代码 300 行左右，但确实帮我省了不少时间。
-
-开源在 npm 上：
+**不带 Agent：**
 
 ```bash
-npm install morphix-env
+npm install -D @morphixai/mxenv
+npx mxenv inspect              # 键名 + 来源 + 状态，没有值
+npx mxenv run -- pnpm dev      # 组合项目 profile 并运行
 ```
 
-GitHub: [github.com/Morphicai/morphix-env](https://github.com/Morphicai/morphix-env)
+**CI / 部署**：机器身份走 provider 侧（如 Infisical Machine Identity），mxenv 在运行时拉取组合，不提前生成 `.env`、不烘焙进镜像。可选 `~/.mxenv/.env`（0600）作为个人全局基线，`--no-global` 一键排除。
 
-如果你也在多项目架构下被环境变量折磨过，欢迎试试。有问题可以直接提 issue。
+**终端常客**：`mxenv-cli shell-init` 为声明过的命令生成 PATH shim，之后裸敲 `pnpm dev` 就是 `mxenv run -- pnpm dev`，audit 里 `via: "shim"` 可与 CLI 区分。
 
----
+## 七、和其他方案比
 
-*如果觉得有帮助，点个赞或者收藏一下。后续我会继续分享 MorphixAI 开发过程中的工程实践，包括多端 SDK 通信、AI Agent 架构设计等内容。*
+| | dotenv / direnv | dotenvx | Infisical / Doppler CLI | 1Password CLI / Vault | **mxenv** |
+|---|---|---|---|---|---|
+| 值存放在 | 明文本地文件 | 加密本地文件 | provider 云端 | 保险库 | **不新增存放地**——以上全部保持值所有者身份 |
+| 多来源组合 | ✗ | ✗ | 仅自家产品 | 仅自家产品 | ✓ 一个 profile 混编任意来源 + 全局基线 |
+| 同 key 冲突 | 静默遮蔽 | 静默遮蔽 | n/a | n/a | 硬报错，除非显式 `override: true` |
+| Agent 上下文卫生 | `cat .env` 泄露 | 部分 | `secrets --plain` 泄露 | `op read` 泄露 | inspect / audit / 编辑器全程无值；`run` 转发输出实时脱敏 |
+| provider 自带的身份 / 审计 / 轮换 | — | — | ✓ | ✓ | ✓ 保留原样，mxenv 不接管 |
+
+选 Infisical 还是 Doppler 依然是你要做的决定——身份、权限、审计、价格都在 provider 那边。mxenv 只是把"用哪个"从代码里解耦出来，放进一份可入仓的接线配置。
+
+## 八、诚实的边界
+
+mxenv 做的是**泄露最小化，不是密码学边界**：
+
+- 拿到值的进程仍然可以故意外传它；高风险 Agent 能力应该用 provider 侧的 proxy/broker 单独设计，而不是硬塞进 `run`；
+- `--serve` 的能力令牌经由环境传递，Linux 上同 uid 进程可通过子进程 `/proc` 读到它——这与 aws-vault `--ecs-server` 的固有属性相同；值本身不出现在任何进程环境里；
+- `mxenv://` 引用解析没有转义：组合值里恰好出现该模式的文本也会被当作引用，需要字面量时请改写存储值。
+
+把边界写清楚，比假装完美更值得信任。
+
+## 九、路线图与承诺（功能收敛依据）
+
+以下清单是本文对外承诺的全部范围，也是后续功能工作的验收基准。**本文承诺的，清单里有；清单外的，本文不提。**
+
+**已交付（截至 0.15.0）**
+
+- [x] 五 provider 组合 + plugin 协议（`mxenv-provider-<name>` 任意可执行文件即 provider）
+- [x] `run` 输出实时脱敏（含流式 chunk、≤2 字符值豁免规则）
+- [x] `run --serve` 按需取值 + 一次性令牌 + 随子进程销毁
+- [x] `inspect` / `audit` / `doc` 全程无值
+- [x] 会话式浏览器编辑器（`edit`）与逐键揭示（`revealSingle` 唯一实现）
+- [x] `migrate`：0600 备份 + 值级等价验证 + 失败自动还原（dotenvx / keychain 双目标）
+- [x] 终端 shim（`shell-init`，`via: shim` 审计区分）
+- [x] 会话式本地面板（`mxenv gui`：默认锁定、人机边界、4h 会话）
+- [x] Agent Skill 分发（`npx skills add` + npm 包内同版 SKILL.md）
+- [x] 三包分层：`@morphixai/mxenv`（运行面）/ `mxenv-cli`（全局管理面）/ `mxenv-core`（L0+L1 SDK）
+
+**承诺中（按优先级）**
+
+- [ ] **跨平台 keychain**：os-keychain 目前 macOS-only；补 Windows Credential Manager 与 Linux Secret Service 路径
+- [ ] **keytar 替代**：上游已归档，评估 `@napi-rs/keyring` 或维护 fork，消除安装期告警
+- [ ] **`doctor` 健康自检**：provider 登录态、配置可用性、备份残留一键体检
+- [ ] **面板常驻化**：`gui` 会话已有，launchd 托管 + 稳定端点消费者随真实需求落地（契约零变更）
+- [ ] **remote source 真编辑**：Infisical / Doppler 的键值编辑目前跳转 provider 自己的 UI，改为经 provider API 就地编辑
+
+**明确不做**
+
+- 不做新的密钥存储/托管（这是定位，不是缺陷）
+- 不做值的浏览器同步或云端面板（值不出机器是红线；云侧只允许无值拓扑）
+- 不在 0.x 阶段承诺跨 minor 无破坏升级（破坏性变更会在 CHANGELOG 醒目标注）
+
+## 十、结语
+
+环境变量管理不是一个高深问题，但它"不解决就一直烦你"。每一代工具都在回答同一个问题：**值放在哪、谁能拿到、拿的时候留下什么痕迹**。
+
+上一代的答案是"放进云保险库"。Agent 时代的答案应该是：值留在原处，进程按需取用，**对话里永远只有键名**。
+
+- 仓库：<https://github.com/Morphicai/morphix-env>（MIT）
+- npm：[`@morphixai/mxenv`](https://www.npmjs.com/package/@morphixai/mxenv)
+- 上手：`npx skills add Morphicai/morphix-env`，然后对 Agent 说——"帮我用 mxenv 配置这个项目。"

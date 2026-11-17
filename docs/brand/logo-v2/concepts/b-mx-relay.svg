@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">mxenv concept B — MX Relay</title>
+  <desc id="desc">A geometric M and X form a compact relay monogram.</desc>
+  <defs><style>:root{--tile:#111827;--glyph:#FFFFFF;--relay:#79E2C3}</style></defs>
+  <rect x="2" y="2" width="60" height="60" rx="17" fill="var(--tile)"/>
+  <path d="M12 45V19l12 16 12-16v26" fill="none" stroke="var(--glyph)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M42 22l11 22m0-22L42 44" fill="none" stroke="var(--relay)" stroke-width="6" stroke-linecap="round"/>
+</svg>

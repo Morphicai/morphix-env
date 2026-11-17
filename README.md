@@ -1,12 +1,60 @@
-<p align="center">
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/mxenv-lockup-dark.svg" />
+    <img src="docs/assets/mxenv-lockup.svg" width="560" alt="mxenv — secret composition for processes and agents" />
+  </picture>
 
-[本仓文档入口](./docs/README.md) · [本地工程约定](./docs/engineering.md)
-  <img src="docs/logo.svg" width="96" alt="mxenv" />
-</p>
+### Compose secrets. Keep them out of the prompt.
 
-# mxenv
+**mxenv** composes the secret sources you already use into a short-lived environment for your process — or serves values to an agent runtime on demand, without putting them in the conversation.
 
-A secret composition CLI for local development, CI, and agent-assisted workflows. It is not another vault: Infisical, Doppler, macOS Keychain, dotenvx, and local files keep owning their values — `mxenv` composes the sources a profile selects into one short-lived child-process environment and keeps inspection, audit, and editor output free of secret values.
+Infisical, Doppler, macOS Keychain, dotenvx, and local files keep owning their values. **mxenv is the composition layer, not another vault.**
+
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Agent safety](#on-demand-secrets-with-run---serve) · [Documentation](./docs/README.md)
+
+[![CI](https://github.com/Morphicai/morphix-env/actions/workflows/ci.yml/badge.svg)](https://github.com/Morphicai/morphix-env/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/%40morphixai%2Fmxenv?label=npm)](https://www.npmjs.com/package/@morphixai/mxenv)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+
+</div>
+
+## How it works
+
+A profile selects sources from low to high precedence. mxenv loads them only when needed, fails closed on undeclared key collisions, and gives each consumer the narrowest useful surface: a composed child environment, an on-demand loopback fetch, or value-free inspection.
+
+<img src="docs/assets/secret-flow.svg" alt="Secret flow: providers retain ownership, mxenv selects and composes a profile on your machine, processes and agent runtimes consume values through controlled paths, and model context receives names only." width="100%" />
+
+- **No fifth vault:** providers remain the source of truth; repository configuration contains wiring, never values.
+- **No silent shadowing:** the same key from two sources is a hard error unless the later source declares `"override": true`.
+- **No secrets in the prompt:** inspection, skills, and audit expose key names and provenance; `run` redacts injected values from forwarded child output.
+
+## Quick start
+
+**With an Agent (recommended):** install the packaged skill and let the agent do the rest. The skill carries the safety rules, configuration schema, onboarding steps, and troubleshooting.
+
+```bash
+npx skills add Morphicai/morphix-env
+```
+
+Then tell your agent: **“Set up this project’s environment with mxenv.”** It can inspect and configure the project without anyone pasting a secret value into chat.
+
+**Without an Agent:**
+
+```bash
+npm install -D @morphixai/mxenv
+npx mxenv inspect              # key names, sources, status — never values
+npx mxenv run -- pnpm dev      # compose the project profile and run
+```
+
+For higher-risk agent workflows, keep composed non-public values out of the child environment and fetch them one at a time:
+
+```bash
+npx mxenv run --serve -- pnpm dev
+# inside that child process, when a value is needed:
+npx mxenv fetch OPENAI_API_KEY
+```
+
+Optionally create `~/.mxenv/.env` (chmod 600) for personal machine-wide defaults; they join every run at low precedence unless `--no-global`.
 
 ## Packages
 
@@ -16,36 +64,13 @@ The tool ships as three packages with strict layering (dependencies only point d
 |---|---|---|---|
 | `@morphixai/mxenv` | L2 run face | `run`/`export`/`inspect`/`render`/`inject`/`generate`, source management (custom upstreams), `edit`, `migrate`, skills | `npm i -D @morphixai/mxenv` in a project (or `npm i -g @morphixai/mxenv`) |
 | `@morphixai/mxenv-cli` | L3 management face | machine-level extras: terminal shims (`shell-init`) and the panel-host session (`mxenv gui` — keys view & safe reveal, values never leave the machine; Agent/automation consumes names-only only) | `npm i -g @morphixai/mxenv-cli` |
-| `@morphixai/mxenv-core` | L0/L1 shared layer | composition engine + pure contracts (`@morphixai/mxenv-core/contracts`) for SDK consumers (e.g. Trellis MCP) | `npm i @morphixai/mxenv-core` |
+| `@morphixai/mxenv-core` | L0/L1 shared layer | composition engine + pure contracts (`@morphixai/mxenv-core/contracts`) for SDK consumers | `npm i @morphixai/mxenv-core` |
 
-> 2026-11-07 注：npm 的名称相似度政策拒绝 unscoped `mxenv`（与 exenv/osenv 过近），包名走 `@morphixai/*` scope；目录名（`packages/mxenv*`）、bin 命令（`mxenv`/`mxenv-cli`）、配置与 scheme 命名均不变（旧 bin 名 `mx-env`/`morphix-env` 随 0.13.x 垫片移除退役）。
+> npm does not allow the unscoped `mxenv` package name because of similarity to existing packages, so releases use the `@morphixai/*` scope. Directory names (`packages/mxenv*`), binaries (`mxenv`/`mxenv-cli`), configuration, and the `mxenv://` scheme are unchanged.
 
 A project-only install is fully functional; installing the global CLI only adds capabilities — it never changes project commands.
 
-## Quick start
-
-**With an Agent (recommended):** install the packaged skill and let the agent do the rest. The skill carries the safety rules, the full configuration schema, onboarding steps, and troubleshooting — so this README does not have to:
-
-```bash
-npx skills add Morphicai/morphix-env     # preferred: installs the skill into every detected agent
-```
-
-The same skill is also installable from the npm package when you want a committed project copy or a specific target (`npx @morphixai/mxenv@latest skill install --target project|global|trellis|hermes`).
-
-Then tell your agent something like "set up this project's environment with mxenv". The agent reads the skill and drives configuration, validation, and editing; nobody pastes a secret value into chat.
-
-**Without an Agent:**
-
-```bash
-npm install -g @morphixai/mxenv
-mxenv run -- pnpm dev      # compose the project profile and run
-mxenv inspect              # key names, sources, status — never values
-```
-
-Optionally create `~/.mxenv/.env` (chmod 600) for personal machine-wide defaults; they join every run at low precedence unless `--no-global`.
-
-## How it works
-
+## Composition order
 A profile lists sources from low to high; the composed environment follows a fixed baseline:
 
 ```text
@@ -99,6 +124,8 @@ There is no escaping in reference resolution: any `mxenv://<profile>/<KEY>` text
 
 ## On-demand secrets with `run --serve`
 
+<img src="docs/assets/agent-boundary.svg" alt="Agent boundary: run serve gives the child a loopback endpoint and random token; the runtime fetches one value on demand while model context remains names-only." width="100%" />
+
 `mxenv run --serve -- <command>` (modeled on aws-vault's `--ecs-server`) starts a loopback HTTP server on 127.0.0.1 at a random port that shares the child's lifetime:
 
 - Composed non-public values never enter the child environment — not the direct child, its descendants, `/proc/<pid>/environ`, or core dumps. The child receives only `MXENV_ENDPOINT` and a random `MXENV_TOKEN`, and the token is redacted from child output like any injected value. Honest caveat on token visibility: an environment-delivered capability token is readable by same-uid processes on Linux via the child's `/proc/<pid>/environ` — the same inherent property as aws-vault's `--ecs-server`; the *values* themselves still appear in no process environment anywhere.
@@ -135,6 +162,8 @@ After the PATH line is active, typing `pnpm dev` is exactly `mxenv run -- pnpm d
 **Boundary.** Shims buy convenience, not concealment: injected values live in the child's environment and are visible to same-uid processes. When the consumer is an agent you do not trust with the values, use `run --serve` instead. macOS/Linux only; Windows keeps the explicit `run` form. Do not place files in `~/.mxenv/shims` by hand.
 
 ## Retiring plaintext: `mxenv migrate`
+
+<img src="docs/assets/migration.svg" alt="Verified migration: discover, back up, encrypt, verify value equivalence, then switch configuration; failures restore from backup." width="100%" />
 
 Plaintext dotenv files are a development convenience, not a storage end-state — file permissions do not protect them from a same-uid agent process. `mxenv migrate` moves them into encrypted storage (dotenvx encrypted files, or the macOS Keychain) with a backup and a value-level equivalence check at every step:
 
