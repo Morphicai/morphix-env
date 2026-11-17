@@ -77,10 +77,6 @@ npx mxenv run -- pnpm dev      # compose the project profile and run
 
 Embedding or scripting on top of the engine? `npm i @morphixai/mxenv-core` — pure contracts at `@morphixai/mxenv-core/contracts`. This is leakage minimization, not a cryptographic boundary — the [security model](docs/guide/security.md#honest-boundaries) states the limits plainly.
 
-## Upgrading from `morphix-env` / `mx-env`
-
-0.12.x renamed everything to the mxenv family; the 0.13.x window removed the compatibility shims. Old bin names no longer run, `mx-env.config.json` is not read (a rename hint is printed), `mx-env://` references are rejected, and `~/.mx-env/` reads until you run `mxenv migrate --home`. The full mapping and step-by-step upgrade live in the [configuration guide](docs/guide/configuration.md#old-name-compatibility-012x--now).
-
 ## Known issues
 
 - `npm install` currently reports high-severity advisories in transitive dependencies of `@infisical/sdk` (e.g. `zod`, `axios`); no fixed upstream release exists yet. They affect the provider client, not the composition engine's value handling.
