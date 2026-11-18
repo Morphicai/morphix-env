@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.18.0
+
+### Added
+
+- **React management panel (resident host).** The resident daemon (`mxenv gui install`, launchd/systemd) now serves a full React panel over the existing host API: multi-scope browsing (global + every registered project), per-source key tables (names-only, provider + source + order), provider status cards with one-source `doctor`, set/delete for local-writable keys inside an unlock window, wiring editor (`/wiring`) with preview diff + fingerprint + second confirmation, and a legacy-config migration wizard. Agents and scripts stay confined to names-only regardless of token possession (human-panel header boundary unchanged).
+- **External provider keys in the panel.** Infisical/Doppler/plugin sources now enumerate in `GET /keys` (names-only) and reveal per-key via `POST /reveal` under the same unlock + no-store + audit rules; provider and `inherited` (implicit global baseline) are exposed per row. Remote set/delete against network providers stays rejected.
+- **`mxenv gui request KEY [--scope …] [--reason …]` — agent input requests.** An agent that lacks a value can hand the human a panel URL (key name + short reason only, never a value); the panel opens a prefilled editor for that key after unlock and clears the request from the URL once consumed.
+- **`--expose` — direct remote access to the same panel.** Remote machines are not special: install the same resident daemon with `gui install --expose` (binds all interfaces instead of loopback) and open `http://<host-ip>:<port>/<token>/` from a browser anywhere — a human accessing remotely, while every agent on that machine still sees a purely local mxenv. Install output and `gui status` carry explicit cleartext/trust warnings; transient (non-daemon) sessions stay loopback-only. No relays, no aggregation, no remotes registry.
+- **Panel wiring edit (L1 `config-actions`).** `prepareConfigAction`/`applyConfigAction` implement add/update/remove/legacy-migrate with atomic write (0600 temp + rename), 0600 backup, rollback on post-write validation failure, and value-free before/after audit (`AuditEvent.wiring`). `mxenv edit [path]` now deep-links into the panel at the right scope/profile; `--print-editor-url` for automation.
+- **Project registry.** `~/.mxenv/projects.json` (0600) records projects seen by `run`/`edit` (idempotent, `MXENV_NO_PROJECT_REGISTRY=1` bypass) — the panel's scope list and `gui edit` resolution build on it.
+
+### Changed
+
+- **Panel latency: single-pass snapshots + query caching.** `GET /snapshot` loads every source of a scope once (bounded concurrency, async dotenvx) instead of `/keys` and `/wiring` each loading everything; dotenvx child processes no longer block the event loop. First paint on a 3-source project drops from ~23s to ~7s; repeat navigation within 60s is served from an in-memory TanStack Query cache (values are never cached — reveal stays a per-key, no-store round-trip).
+- **Reveal UI shows the value inline** in its key row (90s auto-hide, manual hide, copy) instead of a top banner.
+- **Cross-platform keychain via `@napi-rs/keyring`** (keytar replacement): macOS Keychain / Linux Secret Service (default) or keyutils (explicit, session-only) / Windows Credential Manager, with `platform` pinning and per-key declaration (`keys:`) — no service-level discovery assumptions.
+- **Daemon environment portability.** Unit files pin resolved binary paths and the installer's PATH (via `MXENV_*_BIN`), refuse npx/cache/tmp entrypoints, and never depend on the installing shell's environment.
+- Facade and packages publish in lockstep; `morphix-env` facade dependency is a registry-resolvable range (`^0.18.0`) so the prepublish guard can verify it.
+
 ## 0.16.0
 
 ### Added
