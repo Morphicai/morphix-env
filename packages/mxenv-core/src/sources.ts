@@ -25,6 +25,12 @@ import {
   readInfisicalJson,
   resolveInfisicalSecrets,
 } from './infisical'
+import {
+  keychainPlatform,
+  keychainUnavailableHint,
+  loadKeyring,
+  readKeychainValue,
+} from './keyring'
 
 // 结构类型与 isPublicKey 规则已抽至 ./contracts（L0）；re-export 保持原导出面。
 export { isPublicKey } from './contracts'
@@ -231,66 +237,49 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
   }
 }
 
-type KeytarModule = typeof import('keytar')
-let keytarModule: KeytarModule | null | undefined
-let keytarLoaderOverride: (() => Promise<KeytarModule | null>) | null = null
-
-/** 测试专用注入点（非能力 API）：覆写 keytar 加载器；传 null 恢复默认并清缓存。 */
-export function __setKeytarLoaderForTests(loader: (() => Promise<KeytarModule | null>) | null): void {
-  keytarLoaderOverride = loader
-  keytarModule = undefined
-}
-
-/**
- * keytar is an optional native module. Load it lazily so machines where the
- * native build is unavailable keep a fully working CLI for every non-keychain
- * source; only an actual os-keychain source reports the missing module.
- */
-export async function loadKeytar(): Promise<KeytarModule | null> {
-  if (keytarLoaderOverride) return keytarLoaderOverride()
-  if (keytarModule !== undefined) return keytarModule
-  try {
-    const imported = await import('keytar')
-    keytarModule = (imported as unknown as { default?: KeytarModule }).default ?? imported
-  } catch {
-    keytarModule = null
-  }
-  return keytarModule
-}
-
 async function resolveKeychain(entry: SourceEntry, source: KeychainSource): Promise<LoadedSource> {
-  // 测试替身（__setKeytarLoaderForTests 非 null loader）已接管 keychain 通道时
-  // 跳过平台守卫：守卫针对真 keytar/真 macOS keychain，替身存取是平台无关的。
-  // 真实调用方不设置 override——此跳过只存在于测试注入面（非能力 API）。
-  if (!keytarLoaderOverride) {
-    if (source.platform === 'macos' && process.platform !== 'darwin') {
-      throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" is only available on macOS.`)
-    }
-    if (process.platform !== 'darwin') {
-      throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" is currently supported on macOS only.`)
-    }
-  }
-
-  const keytar = await loadKeytar()
-  if (!keytar) {
+  const current = keychainPlatform()
+  if (source.platform && source.platform !== current) {
     throw new SourceError(
       entry.name,
       source.provider,
-      `[mxenv] os-keychain source "${entry.name}" needs the optional native module "keytar", which is not usable on this machine. Reinstall @morphixai/mxenv to rebuild it, or remove this source from the profile.`,
+      `[mxenv] os-keychain source "${entry.name}" is pinned to ${source.platform}; this machine is ${current}.`,
     )
   }
 
-  try {
-    const credentials = await keytar.findCredentials(source.service)
-    return {
-      name: entry.name,
-      provider: source.provider,
-      values: Object.fromEntries(credentials.map(({ account, password }) => [account, password])),
-      availability: 'loaded',
-    }
-  } catch {
-    throw new SourceError(entry.name, source.provider, `[mxenv] os-keychain source "${entry.name}" could not be accessed.`)
+  const keys = source.keys ?? []
+  if (keys.length === 0) {
+    throw new SourceError(
+      entry.name,
+      source.provider,
+      `[mxenv] os-keychain source "${entry.name}" declares no keys. Declare the accounts to read (keys: ["API_TOKEN", …]) — service-wide discovery ended with the keytar removal; declared keys are what make this provider cross-platform.`,
+    )
   }
+
+  const keyring = await loadKeyring()
+  if (!keyring) {
+    throw new SourceError(
+      entry.name,
+      source.provider,
+      `[mxenv] os-keychain source "${entry.name}" needs the optional native module "@napi-rs/keyring", which is not usable on this machine. Reinstall @morphixai/mxenv, or remove this source from the profile.`,
+    )
+  }
+
+  const values: Record<string, string> = {}
+  for (const account of keys) {
+    let password: string | null
+    try {
+      password = readKeychainValue(keyring, source, account)
+    } catch {
+      throw new SourceError(
+        entry.name,
+        source.provider,
+        `[mxenv] os-keychain source "${entry.name}" could not be accessed.${keychainUnavailableHint()}`,
+      )
+    }
+    if (password !== null) values[account] = password
+  }
+  return { name: entry.name, provider: source.provider, values, availability: 'loaded' }
 }
 
 function resolveDoppler(entry: SourceEntry, source: DopplerSource, context: SourceContext): LoadedSource {

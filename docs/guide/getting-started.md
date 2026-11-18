@@ -1,6 +1,6 @@
 # Getting started
 
-mxenv composes the secret sources you already use into a short-lived environment for processes — or serves values to agent runtimes on demand. Providers (Infisical, Doppler, macOS Keychain, dotenvx, local files) keep owning their values; repository configuration contains wiring, never values.
+mxenv composes the secret sources you already use into a short-lived environment for processes — or serves values to agent runtimes on demand. Providers (Infisical, Doppler, the OS keychain, dotenvx, local files) keep owning their values; repository configuration contains wiring, never values.
 
 This guide gets you from zero to a composed run. For the full schema see [Configuration reference](./configuration.md); for per-provider auth see [Providers](./providers.md).
 

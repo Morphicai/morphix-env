@@ -164,11 +164,11 @@ mxenv 做的是**泄露最小化，不是密码学边界**：
 - [x] 会话式本地面板（`mxenv gui`：默认锁定、人机边界、4h 会话）
 - [x] Agent Skill 分发（`npx skills add` + npm 包内同版 SKILL.md）
 - [x] 三包分层：`@morphixai/mxenv`（运行面）/ `mxenv-cli`（全局管理面）/ `mxenv-core`（L0+L1 SDK）
+- [x] **跨平台 keychain**：`@napi-rs/keyring` 替代已归档的 keytar；os-keychain 覆盖 macOS Keychain / Linux Secret Service（默认）与 keyutils（显式）/ Windows Credential Manager，声明键模型（`keys:`）取代服务级发现（0.17.0）
+- [x] **keytar 替代**：见上——安装期告警消除，预编译二进制无本地编译（0.17.0）
 
 **承诺中（按优先级）**
 
-- [ ] **跨平台 keychain**：os-keychain 目前 macOS-only；补 Windows Credential Manager 与 Linux Secret Service 路径
-- [ ] **keytar 替代**：上游已归档，评估 `@napi-rs/keyring` 或维护 fork，消除安装期告警
 - [ ] **面板常驻化**：`gui` 会话已有，launchd 托管 + 稳定端点消费者随真实需求落地（契约零变更）
 - [ ] **remote source 真编辑**：Infisical / Doppler 的键值编辑目前跳转 provider 自己的 UI，改为经 provider API 就地编辑
 

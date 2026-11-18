@@ -39,10 +39,29 @@ export interface DotenvxSource extends SourceBase {
   files: string[]
 }
 
+/** os-keychain 依赖的原生钥匙串平台面（process.platform 的抽象）。 */
+export type KeychainPlatform = 'macos' | 'linux' | 'windows'
+
+/**
+ * Linux 凭据存储后端：secret-service（gnome-keyring/KWallet/keepassxc，持
+ * 久化，默认）或 keyutils（内核态、重启即失，必须显式声明）。macOS/Win
+ * 忽略此选项。
+ */
+export type LinuxKeyringStore = 'secret-service' | 'keyutils'
+
 export interface KeychainSource extends SourceBase {
   provider: 'os-keychain'
   service: string
-  platform?: 'macos'
+  /**
+   * 要读取的账号（钥匙串里的 entry 名）。跨平台原生桥没有服务级发现
+   * （keytar 的 findCredentials 无等价物），显式声明键集才是可移植读模
+   * 型；未声明或键缺失的条目按缺省处理（不报错、组合结果不含它）。
+   */
+  keys?: string[]
+  /** 声明此源只存在于哪个平台；与当前机器不符时 fail-closed（防把 mac 的
+   * 源静默空读进 Linux 组合）。 */
+  platform?: KeychainPlatform
+  linuxStore?: LinuxKeyringStore
 }
 
 export interface DopplerSource extends SourceBase {

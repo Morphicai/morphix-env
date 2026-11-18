@@ -6,14 +6,16 @@ import { isAbsolute, dirname, join, resolve } from 'path'
 import { randomBytes } from 'crypto'
 import {
   resolveAuditConfigPath,
+  deleteKeychainValue,
   ensureCommand,
   expandHomePath,
   isDotenvxEncrypted,
-  loadKeytar,
+  loadKeyring,
   parseEnvFile,
   revealResidenceRelease,
   revealSingle,
   writeAudit,
+  writeKeychainValue,
   type EnvironmentComposition,
   type SourceEntry,
 } from '@morphixai/mxenv-core'
@@ -197,13 +199,13 @@ function localUiState(state: EditorState, entry: SourceEntry, fileIndex: number,
   return { ...uiBase(state), page: 'local', sourceName: entry.name, files: source.files, fileIndex, content }
 }
 
-async function requireKeytar() {
-  const keytar = await loadKeytar()
-  if (!keytar) throw new Error('[mxenv] Keychain editing needs the optional native module "keytar", which is not usable on this machine.')
-  return keytar
+async function requireKeyring() {
+  const keyring = await loadKeyring()
+  if (!keyring) throw new Error('[mxenv] Keychain editing needs the optional native module "@napi-rs/keyring", which is not usable on this machine.')
+  return keyring
 }
 
-function keychainPageState(state: EditorState, entry: SourceEntry, credentials: Array<{ account: string; password: string }>, revealed?: { key: string; value: string }): EditorUiState {
+function keychainPageState(state: EditorState, entry: SourceEntry, accounts: string[], revealed?: { key: string; value: string }): EditorUiState {
   const source = entry.source
   if (source.provider !== 'os-keychain') throw new Error('Not a Keychain source')
   return {
@@ -211,16 +213,17 @@ function keychainPageState(state: EditorState, entry: SourceEntry, credentials: 
     page: 'keychain',
     sourceName: entry.name,
     service: source.service,
-    accounts: credentials.map(({ account }) => account),
+    accounts,
     revealed,
   }
 }
 
-async function keychainUiState(state: EditorState, entry: SourceEntry, revealed?: { key: string; value: string }): Promise<EditorUiState> {
+function keychainUiState(state: EditorState, entry: SourceEntry, revealed?: { key: string; value: string }): EditorUiState {
   const source = entry.source
   if (source.provider !== 'os-keychain') throw new Error('Not a Keychain source')
-  const keytar = await requireKeytar()
-  return keychainPageState(state, entry, await keytar.findCredentials(source.service), revealed)
+  // 列表=配置里声明的账号名（keys）。跨平台桥没有服务级发现；名字本来就
+  // 在 config 里，无需原生调用。
+  return keychainPageState(state, entry, source.keys ?? [], revealed)
 }
 
 function providerUiState(state: EditorState, entry: SourceEntry): EditorUiState {
@@ -382,19 +385,19 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
           return respond(res, 400, renderEditorHtml('Invalid key', errorUiState(state, 400, 'Invalid account name', 'Account names must not be empty; no value was processed.')))
         }
         try {
-          const keytar = await requireKeytar()
+          const keyring = await requireKeyring()
           if (action === 'reveal') {
-            const credentials = await keytar.findCredentials(entry.source.service)
-            // 值揭示唯一实现（value-reveal spec）：取值走能力（含 not-found 语义），列表仅取 account 名。
+            // 值揭示唯一实现（value-reveal spec）：取值走能力（含 not-found 语义），
+            // 列表=声明键名（配置就在手里，不做原生读）。
             const revealed = await revealSingle({ key: account, entry, subject: 'editor', slotId: state.token, authorized: true, profileName: state.profileName, options: { homeDir: state.homeDir } })
-            return respond(res, 200, renderEditorHtml('Edit Keychain source', keychainPageState(state, entry, credentials, { key: account, value: revealed.value })))
+            return respond(res, 200, renderEditorHtml('Edit Keychain source', keychainPageState(state, entry, entry.source.keys ?? [], { key: account, value: revealed.value })))
           }
           if (action === 'delete') {
-            await keytar.deletePassword(entry.source.service, account)
+            deleteKeychainValue(keyring, entry.source, account)
             auditEditor(state, entry, 'delete', [account], 'success', started)
             return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, 'delete', account, 0)))
           }
-          await keytar.setPassword(entry.source.service, account, body.get('value') || '')
+          writeKeychainValue(keyring, entry.source, account, body.get('value') || '')
           auditEditor(state, entry, 'set', [account], 'success', started)
           return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, 'set', account, 0)))
         } catch (editorErr) {

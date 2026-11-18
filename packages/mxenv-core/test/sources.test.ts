@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto'
 
 const mocks = vi.hoisted(() => ({
   execFileSync: vi.fn(),
-  findCredentials: vi.fn(),
+  keyringStore: new Map<string, string>(),
   resolveInfisicalSecrets: vi.fn(),
   fetchSecretsViaCLI: vi.fn(),
   hasInfisicalCLI: vi.fn(),
@@ -17,7 +17,24 @@ vi.mock('child_process', async (importOriginal) => ({
   ...(await importOriginal<typeof import('child_process')>()),
   execFileSync: mocks.execFileSync,
 }))
-vi.mock('keytar', () => ({ default: { findCredentials: mocks.findCredentials } }))
+
+// keyring 替身：Entry 形状的内存 Map（服务名\0账号 → 值）。经
+// __setKeyringLoaderForTests 注入——vi.mock 够不到 dist 打包后的动态 import。
+function keyringDouble(store: Map<string, string>) {
+  return {
+    Entry: class {
+      constructor(
+        public service: string,
+        public account: string,
+      ) {}
+      private key() { return `${this.service}\u0000${this.account}` }
+      getPassword() { return store.get(this.key()) ?? null }
+      setPassword(password: string) { store.set(this.key(), password) }
+      deletePassword() { return store.delete(this.key()) }
+    },
+  }
+}
+
 vi.mock('../src/infisical', () => ({
   resolveInfisicalSecrets: mocks.resolveInfisicalSecrets,
   fetchSecretsViaCLI: mocks.fetchSecretsViaCLI,
@@ -27,6 +44,7 @@ vi.mock('../src/infisical', () => ({
 }))
 
 import { loadSource, type SourceEntry } from '../src/sources'
+import { __setKeyringLoaderForTests } from '../src/keyring'
 
 const ROOT = join('/tmp', `mxenv-sources-${randomUUID()}`)
 const context = () => ({ homeDir: ROOT, environment: { ...process.env } })
@@ -39,7 +57,7 @@ function entry(name: string, source: SourceEntry['source']): SourceEntry {
 beforeEach(() => {
   mkdirSync(ROOT, { recursive: true })
   mocks.execFileSync.mockReset()
-  mocks.findCredentials.mockReset()
+  mocks.keyringStore.clear()
   mocks.resolveInfisicalSecrets.mockReset()
   mocks.fetchSecretsViaCLI.mockReset()
   mocks.hasInfisicalCLI.mockReset()
@@ -48,6 +66,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  __setKeyringLoaderForTests(null)
   if (existsSync(ROOT)) rmSync(ROOT, { recursive: true, force: true })
 })
 
@@ -212,22 +231,35 @@ describe('provider source adapters', () => {
     expect(existsSync(join(ROOT, 'plaintext.env'))).toBe(false)
   })
 
-  it('reads a macOS Keychain service collection through the keytar adapter', async () => {
+  it('reads declared accounts through the keyring adapter (platform-agnostic)', async () => {
     const sentinel = value('keychain')
-    mocks.findCredentials.mockResolvedValue([{ account: 'MXTEST_KEYCHAIN', password: sentinel }])
+    mocks.keyringStore.set('com.example.mxenv\u0000MXTEST_KEYCHAIN', sentinel)
+    mocks.keyringStore.set('com.example.mxenv\u0000FOREIGN', 'not-declared')
+    __setKeyringLoaderForTests(async () => keyringDouble(mocks.keyringStore) as never)
 
-    // resolveKeychain guards on process.platform before touching keytar, so
-    // stub darwin to keep this covered on the linux CI matrix too.
-    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
-    Object.defineProperty(process, 'platform', { value: 'darwin' })
-    try {
-      const loaded = await loadSource(entry('machine', { provider: 'os-keychain', service: 'com.example.mxenv', platform: 'macos' }), context())
+    const loaded = await loadSource(
+      entry('machine', { provider: 'os-keychain', service: 'com.example.mxenv', keys: ['MXTEST_KEYCHAIN'] }),
+      context(),
+    )
 
-      expect(loaded.values.MXTEST_KEYCHAIN).toBe(sentinel)
-      expect(mocks.findCredentials).toHaveBeenCalledWith('com.example.mxenv')
-    } finally {
-      Object.defineProperty(process, 'platform', platform as PropertyDescriptor)
-    }
+    // 只见声明键：外来账号天然不可见（无服务级发现）。
+    expect(loaded.values.MXTEST_KEYCHAIN).toBe(sentinel)
+    expect(Object.keys(loaded.values)).toEqual(['MXTEST_KEYCHAIN'])
+  })
+
+  it('fails closed when an os-keychain source declares no keys', async () => {
+    __setKeyringLoaderForTests(async () => keyringDouble(mocks.keyringStore) as never)
+    await expect(
+      loadSource(entry('machine', { provider: 'os-keychain', service: 'com.example.mxenv' }), context()),
+    ).rejects.toThrow('declares no keys')
+  })
+
+  it('fails closed when a platform pin does not match this machine', async () => {
+    __setKeyringLoaderForTests(async () => keyringDouble(mocks.keyringStore) as never)
+    // pin=windows 在任何测试机上都构成不匹配（linux CI 与 macOS 本机皆非 windows）。
+    await expect(
+      loadSource(entry('machine', { provider: 'os-keychain', service: 'com.example.mxenv', keys: ['A'], platform: 'windows' }), context()),
+    ).rejects.toThrow('pinned to windows')
   })
 
   it('loads a Doppler project/config source without accepting a token in config', async () => {

@@ -90,7 +90,7 @@ Found plaintext sources (inspect marks them `[plaintext, dev-only]`)? Review the
 ```bash
 npx mxenv migrate                     # read-only plan: units, files, key names
 npx mxenv migrate --to dotenvx        # encrypted files, portable + CI-friendly
-npx mxenv migrate --to keychain       # macOS personal secrets
+npx mxenv migrate --to keychain       # OS keychain personal secrets
 ```
 
 Every unit gets a 0600 backup and a value-level equivalence check before any config rewrite; failures restore automatically. Distribution of the dotenvx `.env.keys` file is an out-of-band, provider-of-your-choice step (password manager, provisioning) — never chat, never the repository.

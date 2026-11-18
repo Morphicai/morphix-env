@@ -63,7 +63,7 @@ Session-based local visual editor. Loopback + random token in the URL path + 15-
 
 ### `mxenv migrate [--to dotenvx|keychain] [--source <name>] [--service <name>] [--dry-run]`
 
-Move plaintext `local` sources into encrypted storage. No `--to`: read-only plan (units, files, key names — never values). With `--to`: 0600 backup per file → encrypt → **value-level equivalence verification** → config rewrite → plaintext removal; any failure restores from backup. Scope: the global `~/.mxenv/.env` (dotenvx target only) plus every declared `local` source; legacy default files (`.env`, `.env.local`) and `envFiles` are reported as hints — declare them as sources first. Two sources sharing one file are refused. Keychain target is macOS-only and takes an optional `--service` override (requires `--source`).
+Move plaintext `local` sources into encrypted storage. No `--to`: read-only plan (units, files, key names — never values). With `--to`: 0600 backup per file → encrypt → **value-level equivalence verification** → config rewrite → plaintext removal; any failure restores from backup. Scope: the global `~/.mxenv/.env` (dotenvx target only) plus every declared `local` source; legacy default files (`.env`, `.env.local`) and `envFiles` are reported as hints — declare them as sources first. Two sources sharing one file are refused. Keychain target writes to the OS credential store (macOS Keychain / Linux Secret Service / Windows Credential Manager) and takes an optional `--service` override (requires `--source`); the migrated key set is written into the source `keys` declaration.
 
 ### `mxenv migrate --home`
 

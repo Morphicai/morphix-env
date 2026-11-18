@@ -57,12 +57,12 @@
 
 ### Requirement: keychain 目标迁移
 
-`mxenv migrate --to keychain` SHALL 仅作用于声明源（全局隐式文件不支持该目标，遇之则提示改用 dotenvx）：备份 → 逐 key `setPassword` 到 service（默认 `mxenv:<source名>`）→ keychain 读回验证（**键集子集比对**：迁移的每个 key 值与快照相等即通过；service 中的无关账户 SHALL 仅产生警告不阻断——默认 service 名跨项目可能撞车）→ 改写配置为 `{provider:'os-keychain', service}`（保留 `override`、丢弃 `optional`）→ 删除明文文件。覆盖同名既有账户时，失败回滚 SHALL 写回旧值而非仅删除（不静默丢失用户数据）。仅 macOS；keytar 不可用 SHALL 硬失败。`--service` 仅在与 `--source` 单选同用时合法。零 key 的单元 SHALL 报告 skipped 而非伪造迁移成功。
+`mxenv migrate --to keychain` SHALL 仅作用于声明源（全局隐式文件不支持该目标，遇之则提示改用 dotenvx）：备份 → 逐 key 写入 OS 凭据库 service（默认 `mxenv:<source名>`，经 @napi-rs/keyring：macOS Keychain / Linux Secret Service / Windows Credential Manager）→ 声明键集读回验证（**子集比对**：迁移的每个 key 值与快照相等即通过；无关账户在声明键读模型下天然不可见，不告警不阻断）→ 改写配置为 `{provider:'os-keychain', service, keys:[迁移键集]}`（保留 `override`、丢弃 `optional`）→ 删除明文文件。覆盖同名既有账户时，失败回滚 SHALL 写回旧值而非仅删除（不静默丢失用户数据）。@napi-rs/keyring 原生模块不可用 SHALL 硬失败。`--service` 仅在与 `--source` 单选同用时合法。零 key 的单元 SHALL 报告 skipped 而非伪造迁移成功。
 
 #### Scenario: keychain 迁移成功
 
-- **WHEN** macOS 上项目声明 local 源（名 `mysource`）含 key A/B，执行 `mxenv migrate --to keychain --source mysource`
-- **THEN** keychain service `mxenv:mysource` 含 A/B、配置改写为 os-keychain 源、明文文件已删除、组合值与迁移前一致
+- **WHEN** 项目声明 local 源（名 `mysource`）含 key A/B，执行 `mxenv migrate --to keychain --source mysource`
+- **THEN** 凭据库 service `mxenv:mysource` 含 A/B、配置改写为 os-keychain 源（含 `keys:["A","B"]`）、明文文件已删除、组合值与迁移前一致
 
 #### Scenario: 全局隐式文件拒绝 keychain 目标
 
@@ -71,12 +71,12 @@
 
 #### Scenario: 目标 service 已含无关账户
 
-- **WHEN** 目标 keychain service 中已有与迁移无关的账户
-- **THEN** 迁移成功（子集验证通过）且警告指出 service 含无关账户
+- **WHEN** 目标凭据库 service 中已有与迁移无关的账户
+- **THEN** 迁移成功（声明键子集验证通过）；无关账户不可见、不产生告警
 
 #### Scenario: 同名账户被覆盖后失败回滚
 
-- **WHEN** 目标 service 已有同名账户，setPassword 覆盖后迁移因故失败
+- **WHEN** 目标 service 已有同名账户，写入覆盖后迁移因故失败
 - **THEN** 回滚将旧值写回该账户（不是删除、不是保留新值）
 
 #### Scenario: 旧 service 名继续有效

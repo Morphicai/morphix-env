@@ -52,7 +52,7 @@ npm install -g @morphixai/mxenv-cli      # 可选：机器级管理面（shell-i
   "sources": {
     "local":     { "provider": "local", "files": [".env.local"], "optional": true, "override": true },
     "encrypted": { "provider": "dotenvx", "files": [".env.shared"] },
-    "keychain":  { "provider": "os-keychain", "platform": "macos", "service": "com.example/myproject" },
+    "keychain":  { "provider": "os-keychain", "service": "com.example/myproject", "keys": ["API_TOKEN"] },
     "infisical": { "provider": "infisical", "paths": ["/team/api"] },
     "doppler":   { "provider": "doppler", "project": "my-project", "config": "dev" },
     "plugin":    { "provider": "plugin", "plugin": "bitwarden", "keys": ["OPENAI_API_KEY"] }

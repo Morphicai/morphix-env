@@ -5,24 +5,30 @@ import { dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { createEditorServer, type RunningEditor } from '../src/editor'
-import { __setKeytarLoaderForTests } from '@morphixai/mxenv-core'
+import { __setKeyringLoaderForTests } from '@morphixai/mxenv-core'
 import { revealedValue, stateOnPage } from './support/editorPage'
 
-// Keychain editing is exercised against a keytar test double so the suite has
+// Keychain editing is exercised against a keyring test double so the suite has
 // no native-module dependency; dotenvx paths run against the real CLI.
 const keychainStore = vi.hoisted(() => ({ entries: new Map<string, string>() }))
 
-// keytar 经 core 的显式测试注入点提供（vi.mock 对 aliased 源码的 dynamic
-// import 不拦截，dist bundle 内部更是够不着）：编辑器与 value-reveal 揭示
-// 路径共用同一 mock，无需原生 keytar 依赖。
-function installKeytarMock(): void {
-  __setKeytarLoaderForTests(async () => ({
-    findCredentials: async () => [...keychainStore.entries].map(([account, password]) => ({ account, password })),
-    setPassword: async (_service: string, account: string, value: string) => { keychainStore.entries.set(account, value) },
-    deletePassword: async (_service: string, account: string) => { keychainStore.entries.delete(account); return true },
-  } as any))
+// keyring 经 core 的显式测试注入点提供（vi.mock 对 aliased 源码的 dynamic
+// import 不拦截，dist bundle 内部更是够不着）：Entry 形状的内存替身。
+function installKeyringMock(): void {
+  __setKeyringLoaderForTests(async () => ({
+    Entry: class {
+      constructor(
+        public service: string,
+        public account: string,
+      ) {}
+      private key() { return `${this.service}\u0000${this.account}` }
+      getPassword() { return keychainStore.entries.get(this.key()) ?? null }
+      setPassword(password: string) { keychainStore.entries.set(this.key(), password) }
+      deletePassword() { return keychainStore.entries.delete(this.key()) }
+    },
+  } as never))
 }
-installKeytarMock()
+installKeyringMock()
 
 const ROOT = join(tmpdir(), `mxenv-editor-${randomUUID()}`)
 const HOME = join(ROOT, 'home')
@@ -77,7 +83,7 @@ async function openEditor(overrides: StateOverrides = {}): Promise<RunningEditor
     provenance: {},
     sourceEntries: [
       { name: 'enc', source: { provider: 'dotenvx', files: ['enc.env'] }, baseDir: ROOT },
-      { name: 'kc', source: { provider: 'os-keychain', platform: 'macos', service: 'mxenv-editor-test' }, baseDir: ROOT },
+      { name: 'kc', source: { provider: 'os-keychain', service: 'mxenv-editor-test', keys: ['KC_A', 'KC_B', 'user@example.com'] }, baseDir: ROOT },
     ],
     homeDir: HOME,
   }
@@ -239,10 +245,10 @@ describe('visual editor', () => {
     expect(serialized).not.toContain('sentinel-aud-new')
     expect(serialized).not.toContain('sentinel-aud-old')
 
-    // MAJOR-1 回归钉：能力前置失败（keytar 不可用）也恰一条失败 reveal 事件
-    __setKeytarLoaderForTests(async () => null)
+    // MAJOR-1 回归钉：能力前置失败（keyring 不可用）也恰一条失败 reveal 事件
+    __setKeyringLoaderForTests(async () => null)
     await post(`${sourceRoot('kc')}/keychain`, { action: 'reveal', account: 'KC_GONE' })
-    installKeytarMock()
+    installKeyringMock()
     const after = auditEvents().filter((event) => event.via === 'editor' && event.action === 'reveal')
     expect(after.every((event) => typeof event.configPath === 'string')).toBe(true)
     expect(after.filter((event) => event.outcome === 'failure')).toHaveLength(1)
@@ -261,8 +267,8 @@ describe('visual editor', () => {
   }, 15_000)
 
   it('keychain page lists accounts and reveals one value at a time', async () => {
-    keychainStore.entries.set('KC_A', 'sentinel-kc-a')
-    keychainStore.entries.set('KC_B', 'sentinel-kc-b')
+    keychainStore.entries.set('mxenv-editor-test KC_A', 'sentinel-kc-a')
+    keychainStore.entries.set('mxenv-editor-test KC_B', 'sentinel-kc-b')
     await openEditor()
 
     const page = await get(`${sourceRoot('kc')}`)
@@ -282,7 +288,7 @@ describe('visual editor', () => {
   }, 15_000)
 
   it('manages keychain entries with arbitrary account names', async () => {
-    keychainStore.entries.set('user@example.com', 'sentinel-kc-email')
+    keychainStore.entries.set('mxenv-editor-test user@example.com', 'sentinel-kc-email')
     await openEditor()
 
     const reveal = await post(`${sourceRoot('kc')}/keychain`, { action: 'reveal', account: 'user@example.com' })
@@ -290,7 +296,7 @@ describe('visual editor', () => {
 
     const deleted = await post(`${sourceRoot('kc')}/keychain`, { action: 'delete', account: 'user@example.com' })
     expect(deleted).toContain('<title>Saved</title>')
-    expect(keychainStore.entries.has('user@example.com')).toBe(false)
+    expect(keychainStore.entries.has('mxenv-editor-test user@example.com')).toBe(false)
     keychainStore.entries.clear()
   }, 15_000)
 

@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, st
 import { dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
-import { composeEnvironment, loadConfigLayers, loadKeytar } from '@morphixai/mxenv-core'
+import { composeEnvironment, loadConfigLayers, loadKeyring } from '@morphixai/mxenv-core'
 import { discoverPlaintextUnits, executeUnit, legacyPlaintextHints } from '../src/migrate'
 
 const CLI = join(__dirname, '..', 'dist', 'cli.js')
@@ -27,6 +27,18 @@ const HOME = join(TMP, 'home')
 const secretValue = (label: string) => `mxenv_migrate_${label}_${randomUUID().replace(/-/g, '')}`
 // 失败注入用 macOS 独有的 chflags uchg——非 darwin 跳过而非假红（Linux/CI 可移植性）。
 const itDarwin = process.platform === 'darwin' ? it : it.skip
+
+// 真 keyring（macOS 本机钥匙串）测试工具：Entry 形状操作 + 按已知账号名清理
+// ——跨平台桥没有服务级发现，清理必须显式列出账号。
+type Keyring = NonNullable<Awaited<ReturnType<typeof loadKeyring>>>
+function keychainEntry(keyring: Keyring, service: string, account: string) {
+  return new keyring.Entry(service, account)
+}
+function cleanupKeychain(keyring: Keyring, service: string, accounts: string[]) {
+  for (const account of accounts) {
+    try { keychainEntry(keyring, service, account).deletePassword() } catch { /* best-effort */ }
+  }
+}
 
 function layers(cwd = TMP) {
   return loadConfigLayers({ cwd, homeDir: HOME })
@@ -315,10 +327,10 @@ describe('executeUnit -> keychain', () => {
     expect(outcome.detail).toContain('dotenvx')
   })
 
-  itDarwin('tolerates foreign accounts in the target service and warns', async () => {
-    const keytar = await loadKeytar()
-    if (!keytar) {
-      console.warn('[mxenv test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
+  itDarwin('tolerates foreign accounts in the target service (declared keys only)', async () => {
+    const keyring = await loadKeyring()
+    if (!keyring) {
+      console.warn('[mxenv test] keyring native module unavailable; keychain migration NOT exercised on this machine.')
       return
     }
     const service = `mxenv-test-${randomUUID()}`
@@ -331,25 +343,23 @@ describe('executeUnit -> keychain', () => {
     writeFileSync(join(TMP, '.env.local'), `FK_A=${value}\n`)
 
     try {
-      await keytar.setPassword(service, 'FOREIGN_ONE', 'not-mine')
+      // 服务里先有一条外来账号——声明键读模型下它根本不可见，不阻塞也不告警。
+      keychainEntry(keyring, service, 'FOREIGN_ONE').setPassword('not-mine')
       const [unit] = discoverPlaintextUnits(layers(), HOME)
       const outcome = await executeUnit(unit, 'keychain', { service }, HOME)
-      // Subset verification: foreign account must NOT fail the migration.
       expect(outcome.status).toBe('migrated')
-      expect(outcome.warnings.join('\n')).toContain('unrelated account')
+      expect(outcome.warnings).toEqual([])
       const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
       expect(composition.environment.FK_A).toBe(value)
     } finally {
-      for (const credential of await keytar.findCredentials(service)) {
-        await keytar.deletePassword(service, credential.account)
-      }
+      cleanupKeychain(keyring, service, ['FK_A', 'FOREIGN_ONE'])
     }
   }, 30_000)
 
   itDarwin('rollback restores overwritten same-named accounts (no silent data loss)', async () => {
-    const keytar = await loadKeytar()
-    if (!keytar) {
-      console.warn('[mxenv test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
+    const keyring = await loadKeyring()
+    if (!keyring) {
+      console.warn('[mxenv test] keyring native module unavailable; keychain migration NOT exercised on this machine.')
       return
     }
     const service = `mxenv-test-${randomUUID()}`
@@ -366,20 +376,18 @@ describe('executeUnit -> keychain', () => {
     chmodSync(join(TMP, 'mxenv.config.json'), 0o444)
 
     try {
-      await keytar.setPassword(service, 'KC_A', oldValue)
+      keychainEntry(keyring, service, 'KC_A').setPassword(oldValue)
       const [unit] = discoverPlaintextUnits(layers(), HOME)
       const outcome = await executeUnit(unit, 'keychain', { service }, HOME)
       expect(outcome.status).toBe('failed')
       // The pre-existing value must be written back — not deleted, not left
       // as the new value.
-      expect(await keytar.getPassword(service, 'KC_A')).toBe(oldValue)
+      expect(keychainEntry(keyring, service, 'KC_A').getPassword()).toBe(oldValue)
       // Plaintext restored.
       expect(readFileSync(join(TMP, '.env.local'), 'utf8')).toContain(newValue)
     } finally {
       chmodSync(join(TMP, 'mxenv.config.json'), 0o644)
-      for (const credential of await keytar.findCredentials(service)) {
-        await keytar.deletePassword(service, credential.account)
-      }
+      cleanupKeychain(keyring, service, ['KC_A'])
     }
   }, 30_000)
 
@@ -401,10 +409,10 @@ describe('executeUnit -> keychain', () => {
   })
 
   itDarwin('migrates a declared source into a keychain service and deletes plaintext', async () => {
-    const keytar = await loadKeytar()
-    if (!keytar) {
+    const keyring = await loadKeyring()
+    if (!keyring) {
       // Explicit, loud skip — never a silent green: the keychain path went untested here.
-      console.warn('[mxenv test] keytar native module unavailable; keychain migration NOT exercised on this machine.')
+      console.warn('[mxenv test] keyring native module unavailable; keychain migration NOT exercised on this machine.')
       return
     }
     const service = `mxenv-test-${randomUUID()}`
@@ -423,21 +431,19 @@ describe('executeUnit -> keychain', () => {
       expect(existsSync(join(TMP, '.env.local'))).toBe(false)
 
       const rewritten = JSON.parse(readFileSync(join(TMP, 'mxenv.config.json'), 'utf8'))
-      expect(rewritten.sources.plain).toEqual({ provider: 'os-keychain', service })
+      expect(rewritten.sources.plain).toEqual({ provider: 'os-keychain', service, keys: ['KC_A'] })
 
       const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
       expect(composition.environment.KC_A).toBe(value)
     } finally {
-      for (const credential of await keytar.findCredentials(service)) {
-        await keytar.deletePassword(service, credential.account)
-      }
+      cleanupKeychain(keyring, service, ['KC_A'])
     }
   }, 30_000)
 
   itDarwin('默认 keychain service 为 mxenv:<source名>；旧名 service 配置携带照读', async () => {
-    const keytar = await loadKeytar()
-    if (!keytar) {
-      console.warn('[mxenv test] keytar native module unavailable; default keychain service NOT exercised on this machine.')
+    const keyring = await loadKeyring()
+    if (!keyring) {
+      console.warn('[mxenv test] keyring native module unavailable; default keychain service NOT exercised on this machine.')
       return
     }
     const value = secretValue('kcdef')
@@ -454,24 +460,21 @@ describe('executeUnit -> keychain', () => {
       const outcome = await executeUnit(unit, 'keychain', {}, HOME)
       expect(outcome.status).toBe('migrated')
       const rewritten = JSON.parse(readFileSync(join(TMP, 'mxenv.config.json'), 'utf8'))
-      expect(rewritten.sources.plain).toEqual({ provider: 'os-keychain', service: defaultService })
+      expect(rewritten.sources.plain).toEqual({ provider: 'os-keychain', service: defaultService, keys: ['KC_DEF'] })
 
       // 命名切换前的迁移产物：配置已记录旧名 service，读取照常、不重迁移。
       const legacyValue = secretValue('kclegacy')
-      await keytar.setPassword(legacyService, 'KC_LEG', legacyValue)
+      keychainEntry(keyring, legacyService, 'KC_LEG').setPassword(legacyValue)
       writeProjectConfig({
-        sources: { legacy: { provider: 'os-keychain', service: legacyService } },
+        sources: { legacy: { provider: 'os-keychain', service: legacyService, keys: ['KC_LEG'] } },
         profiles: { dev: { sources: ['legacy'] } },
         defaultProfile: 'dev',
       })
       const composition = await composeEnvironment(layers(), { homeDir: HOME, noInfisical: true })
       expect(composition.environment.KC_LEG).toBe(legacyValue)
     } finally {
-      for (const service of [defaultService, legacyService]) {
-        for (const credential of await keytar.findCredentials(service)) {
-          await keytar.deletePassword(service, credential.account)
-        }
-      }
+      cleanupKeychain(keyring, defaultService, ['KC_DEF'])
+      cleanupKeychain(keyring, legacyService, ['KC_LEG'])
     }
   }, 30_000)
 })

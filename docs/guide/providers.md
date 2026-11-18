@@ -60,10 +60,10 @@ Bootstrap keys onto a new machine out-of-band (password manager, provisioning sc
 ## os-keychain
 
 ```jsonc
-{ "provider": "os-keychain", "service": "com.example/myproject" }
+{ "provider": "os-keychain", "service": "com.example/myproject", "keys": ["API_TOKEN"] }
 ```
 
-Values live under the named Keychain service (default namespace `mxenv:<source>`). macOS only. First access triggers a keychain authorization prompt; legacy services named `mx-env:<source>` keep working — the name is carried in config. Requires the optional `keytar` native module.
+Values live under the named credential service (default namespace `mxenv:<source>`) in the OS credential store: macOS Keychain, Linux Secret Service (gnome-keyring / KWallet / keepassxc over D-Bus), or Windows Credential Manager. `keys` declares which accounts to read — the native bridge has no service-wide listing, and declared keys are what keep the source portable across platforms; an account missing from the store is treated as absent (no error). First access may trigger a keychain authorization prompt; legacy services named `mx-env:<source>` keep working — the name is carried in config. Optional fields: `platform` (`macos` | `linux` | `windows`, fail-closed if it doesn't match this machine) and `linuxStore` (`secret-service` — the default — or `keyutils`, an in-memory kernel store that is lost on reboot and must be declared explicitly). Requires the optional `@napi-rs/keyring` native module (shipped as prebuilt platform binaries).
 
 ## local
 

@@ -27,7 +27,7 @@ Each entry maps a name to a provider declaration. The name is how profiles refer
 | `infisical` | `paths[]` (required) · `projectId?` · `siteUrl?` · `env?` · `envPrefix?` | auth comes from the Infisical side (see [Providers](./providers.md#infisical)) |
 | `doppler` | `project` · `config` · `envPrefix?` | auth via `doppler login` |
 | `dotenvx` | `files[]` | encrypted dotenv files; decryption keys via `.env.keys` |
-| `os-keychain` | `service` (default `mxenv:<source>`) | macOS only; values under the named keychain service |
+| `os-keychain` | `service` (default `mxenv:<source>`) · `keys[]` · `platform?` · `linuxStore?` | OS credential store (macOS Keychain / Linux Secret Service / Windows Credential Manager); declared keys only — no service-wide listing |
 | `local` | `files[]` | plaintext dotenv — **development only**; migrate to dotenvx/keychain for storage |
 | `plugin` | `plugin` · `keys[]` | external provider executable `mxenv-provider-<plugin>` |
 

@@ -12,15 +12,18 @@ import {
   GLOBAL_DOTENV_SOURCE,
   hasRcBlock,
   hasGlobalDataAt,
+  deleteKeychainValue,
   isDotenvxEncrypted,
   LEGACY_GLOBAL_CONFIG_DIR,
   loadConfigLayers,
-  loadKeytar,
+  loadKeyring,
   loadSource,
   parseEnvFile,
+  readKeychainValue,
   replaceRcBlocks,
   shimsDir,
   suppressLegacyHomeHint,
+  writeKeychainValue,
   type ConfigLayers,
   type LocalSource,
   type SecretSource,
@@ -383,49 +386,49 @@ function snapshotCovered(expected: Record<string, string>, actual: Record<string
 }
 
 async function migrateToKeychain(unit: MigrationUnit, service: string, stamp: string, homeDir: string, backups: string[]): Promise<{ warnings: string[] }> {
-  if (process.platform !== 'darwin') throw new Error('the os-keychain target is supported on macOS only; use --to dotenvx on this machine.')
-  const keytar = await loadKeytar()
-  if (!keytar) throw new Error('the os-keychain target needs the optional native module "keytar"; reinstall @morphixai/mxenv or use --to dotenvx.')
+  const keyring = await loadKeyring()
+  if (!keyring) throw new Error('the os-keychain target needs the optional native module "@napi-rs/keyring"; reinstall @morphixai/mxenv or use --to dotenvx.')
+  const target = { service }
 
   const snapshot = snapshotValues(unit)
   for (const file of unit.files) backups.push(backupFile(file, stamp))
   // Snapshot pre-existing VALUES, not just names: setPassword OVERWRITES
   // same-named accounts, and rollback must write the old values back — deleting
   // only "new" keys would silently lose overwritten user data (review H2).
-  const preExisting = new Map((await keytar.findCredentials(service)).map(({ account, password }) => [account, password]))
+  // 逐声明键读（跨平台桥没有服务级发现）；外来账号根本不可见，天然隔离。
+  const preExisting = new Map<string, string | null>()
+  for (const key of Object.keys(snapshot)) preExisting.set(key, readKeychainValue(keyring, target, key))
   try {
-    for (const [key, value] of Object.entries(snapshot)) await keytar.setPassword(service, key, value)
+    for (const [key, value] of Object.entries(snapshot)) writeKeychainValue(keyring, target, key, value)
     const newSource: SecretSource = {
       provider: 'os-keychain',
       service,
+      // 跨平台读模型：把迁移产生的账号集写进 keys 声明（reload/后续组合按名逐条读）。
+      keys: Object.keys(snapshot),
       ...(unit.source.override ? { override: true } : {}),
     }
     const values = await reloadViaKeychain(unit, newSource, homeDir)
     if (!snapshotCovered(snapshot, values)) {
       throw new Error('post-migration verification failed: keychain values differ from the plaintext snapshot.')
     }
-    const foreign = Object.keys(values).filter((key) => !(key in snapshot))
-    const warnings = foreign.length
-      ? [`[mxenv] Warning: keychain service "${service}" also holds ${foreign.length} unrelated account(s) (e.g. "${foreign[0]}"); verify the service is not shared unexpectedly.`]
-      : []
     rewriteDeclaredSource(unit, newSource, stamp, backups)
     // Verification passed against the new store; the plaintext copies go away
     // (0600 backups remain until the operator deletes them).
     for (const file of unit.files) rmSync(file)
-    return { warnings }
+    return { warnings: [] }
   } catch (error) {
     const failed = restoreBackups(backups)
-    for (const key of Object.keys(snapshot)) {
-      if (preExisting.has(key)) {
+    for (const [key, existing] of preExisting) {
+      if (existing !== null) {
         // Restore the overwritten old value — never leave the new value in place.
-        await keytar.setPassword(service, key, preExisting.get(key)!).catch(() => {})
+        try { writeKeychainValue(keyring, target, key, existing) } catch { /* best-effort */ }
       } else {
         // Best-effort: remove the entries this run created, so a failed
         // migration leaves no orphan credentials behind.
-        await keytar.deletePassword(service, key).catch(() => {})
+        try { deleteKeychainValue(keyring, target, key) } catch { /* best-effort */ }
       }
     }
-    const message = error instanceof Error ? error.message : 'unknown failure'
+    const message = error instanceof Error ? error.message : String(error)
     throw new Error(withRestoreOutcome(message, failed, backups))
   }
 }

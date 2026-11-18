@@ -9,7 +9,7 @@ import {
   revealSingle,
   RevealError,
   __residentSlotCountForTests,
-  __setKeytarLoaderForTests,
+  __setKeyringLoaderForTests,
   type SourceEntry,
 } from '../src/index'
 
@@ -277,13 +277,17 @@ describe('file scope and read-failure paths', () => {
   })
 })
 
-// ─── keychain 平台守卫 vs 测试替身（CI Linux 回归钉） ─────────────
-// PR #25 把编辑器 keychain 揭示收敛到 revealSingle 后，揭示首次经过
-// resolveKeychain 的"仅 macOS"守卫——Linux CI 上被拦（本地 macOS 看不见）。
-// 语义钉死：测试替身接管通道（非 null loader）时守卫放行；无替身时守卫照拦。
+// ─── keychain 平台钉定 vs 测试替身 ─────────────────────────────
+// keytar 时代这里是"仅 macOS"守卫；@napi-rs/keyring 后平台面=声明键逐条读，
+// 守卫变成 source.platform 钉定校验。语义钉：替身接管通道时正常揭示；无替
+// 身时（Linux CI 无 Secret Service 等）揭示照旧 fail-closed。
 
-describe('keychain platform guard vs test double', () => {
-  const kcEntry: SourceEntry = { name: 'kc', source: { provider: 'os-keychain', platform: 'macos', service: 'mxenv-test-svc' }, baseDir: ROOT }
+describe('keychain platform pin vs test double', () => {
+  const kcEntry: SourceEntry = {
+    name: 'kc',
+    source: { provider: 'os-keychain', service: 'mxenv-test-svc', keys: ['KC_GUARD'] },
+    baseDir: ROOT,
+  }
 
   async function revealUnderPlatform(platform: string): Promise<Error | { value: string }> {
     const real = Object.getOwnPropertyDescriptor(process, 'platform')
@@ -297,16 +301,24 @@ describe('keychain platform guard vs test double', () => {
   }
 
   afterEach(() => {
-    __setKeytarLoaderForTests(null)
+    __setKeyringLoaderForTests(null)
   })
 
-  it('lets a test double reveal through the guard on a non-darwin platform', async () => {
+  it('lets a test double reveal on a platform without a real keychain', async () => {
     const sentinel = value('kc-double')
-    __setKeytarLoaderForTests(async () => ({
-      findCredentials: async () => [{ account: 'KC_GUARD', password: sentinel }],
-      setPassword: async () => undefined,
-      deletePassword: async () => true,
-    } as never))
+    const store = new Map<string, string>([['mxenv-test-svc\u0000KC_GUARD', sentinel]])
+    __setKeyringLoaderForTests(async () => ({
+      Entry: class {
+        constructor(
+          public service: string,
+          public account: string,
+        ) {}
+        private key() { return `${this.service}\u0000${this.account}` }
+        getPassword() { return store.get(this.key()) ?? null }
+        setPassword(password: string) { store.set(this.key(), password) }
+        deletePassword() { return store.delete(this.key()) }
+      },
+    }) as never)
 
     const result = await revealUnderPlatform('linux')
 
@@ -314,12 +326,13 @@ describe('keychain platform guard vs test double', () => {
     ;(result as { release?: () => void }).release?.()
   })
 
-  it('still blocks keychain reveal on a non-darwin platform without a test double', async () => {
-    __setKeytarLoaderForTests(null)
+  it('still fails closed on a platform without a reachable keychain when no double is installed', async () => {
+    __setKeyringLoaderForTests(null)
 
     const result = await revealUnderPlatform('linux')
 
+    // 无替身时 Linux 上真 Entry 不可达（Secret Service 缺席）→ SourceError；
+    // 即便原生模块意外可用，也绝不静默空过。
     expect(result).toBeInstanceOf(Error)
-    expect((result as Error).message).toContain('macOS')
   })
 })

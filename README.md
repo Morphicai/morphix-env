@@ -6,7 +6,7 @@
 
 ### Your secret managers, composed.
 
-**mxenv** adopts the secret managers you already use — Infisical, Doppler, macOS Keychain, dotenvx — composes them per profile, and keeps values out of every prompt.
+**mxenv** adopts the secret managers you already use — Infisical, Doppler, the OS keychain, dotenvx — composes them per profile, and keeps values out of every prompt.
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Security model](docs/guide/security.md) · [Full guide](docs/guide/getting-started.md)
 
