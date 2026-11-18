@@ -73,6 +73,30 @@ describe('auth and names-only surface', () => {
   })
 })
 
+describe('panel page (token-in-path)', () => {
+  it('serves the panel HTML at the session token path without a Bearer header', async () => {
+    const res = await fetch(`${base}/${runtime.state.token}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const html = await res.text()
+    expect(html).toContain('mxenv') // 品牌 wordmark
+    expect(html).toContain('/unlock') // 面板交互面
+    expect(html).not.toContain(runtime.state.token) // token 不内嵌页面（取自 URL）
+  })
+
+  it('serves the same page with a trailing slash', async () => {
+    const res = await fetch(`${base}/${runtime.state.token}/`)
+    expect(res.status).toBe(200)
+  })
+
+  it('a wrong token path is not a page (401, session existence not disclosed)', async () => {
+    const res = await fetch(`${base}/not-the-token`)
+    expect(res.status).toBe(401)
+    expect(res.headers.get('content-type')).toContain('application/json')
+  })
+})
+
 describe('consumer boundary (reveal/unlock are panel-session only)', () => {
   it('rejects reveal and unlock without the panel marker and audits consumer-boundary', async () => {
     const unlock = await api('/unlock', { method: 'POST' })

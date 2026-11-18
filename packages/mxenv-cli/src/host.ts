@@ -8,6 +8,7 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { randomBytes } from 'crypto'
+import { panelPage } from './panel-page'
 import {
   acquireHostLock,
   clearHostSession,
@@ -196,6 +197,15 @@ export function createHostHandler(runtime: HostRuntime) {
       return
     }
 
+    const url = new URL(req.url || '/', 'http://127.0.0.1')
+
+    // 面板页（P2 第一片）：token-in-path 一次换 HTML。浏览器首访无 Bearer，
+    // 故须在认证检查前精确匹配当前会话 token；其余路径照旧走认证（不泄露会话存在性）。
+    if (req.method === 'GET' && (url.pathname === `/${s.token}` || url.pathname === `/${s.token}/`)) {
+      send(res, 200, panelPage(), { 'content-type': 'text/html; charset=utf-8' })
+      return
+    }
+
     // 认证：Bearer token（不进日志/审计）
     const auth = req.headers.authorization || ''
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
@@ -206,7 +216,6 @@ export function createHostHandler(runtime: HostRuntime) {
     }
     s.lastActivityAt = now
 
-    const url = new URL(req.url || '/', 'http://127.0.0.1')
     const isPanelClient = req.headers[PANEL_HEADER] === '1'
 
     try {
