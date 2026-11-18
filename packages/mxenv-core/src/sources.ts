@@ -187,20 +187,25 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
     .filter((key) => !key.startsWith('DOTENV_PUBLIC_KEY'))
   if (!keys.length) return { name: entry.name, provider: source.provider, values: {}, availability: 'loaded' }
 
-  const helper = 'const keys=JSON.parse(process.argv[1]);const output={};for(const key of keys){if(process.env[key]!==undefined)output[key]=process.env[key]}process.stdout.write(JSON.stringify(output))'
+  // Keys travel via an env var, not argv: `node -e script arg` puts arg in
+  // argv[1], but `bun -e script arg` puts the eval placeholder there instead —
+  // argv positions are runtime-specific. An ephemeral env var (names only,
+  // never values) survives dotenvx's injection and works under any runtime.
+  const helper = 'const keys=JSON.parse(process.env.__MXENV_KEYS__);const output={};for(const key of keys){if(process.env[key]!==undefined)output[key]=process.env[key]}process.stdout.write(JSON.stringify(output))'
   let stage = 'run'
   try {
     const output = execFileSync(
       // --overload aligns dotenvx with every other provider: composed file
       // values win over same-named variables already in the parent env.
       command,
-      ['run', '--overload', '-f', existingFiles.join(','), '--', process.execPath, '-e', helper, JSON.stringify(keys)],
+      ['run', '--overload', '-f', existingFiles.join(','), '--', process.execPath, '-e', helper],
       {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
           ...context.environment,
+          __MXENV_KEYS__: JSON.stringify(keys),
           // dotenvx's executable is a node script; direct API callers may
           // provide an intentionally small environment, so retain a path to
           // the current Node runtime for its shebang.
