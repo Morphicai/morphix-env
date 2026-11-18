@@ -618,7 +618,7 @@ async function cmdDoctor(args: Args): Promise<number> {
   } else if (layers.project.exists) {
     add('ok', `项目配置 ${CONFIG_FILE}`)
   } else {
-    add('ok', '无项目配置（legacy .env.local / 全局基线发现路径）')
+    add('ok', '无项目配置（legacy .env/.env.local / 全局基线发现路径）')
   }
 
   // ── Infisical env 钉定 ────────────────────────────────────

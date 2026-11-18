@@ -7,7 +7,7 @@
 
 ### Requirement: 迁移发现与计划
 
-`mxenv migrate`（不带 `--to`）SHALL 为纯只读操作：发现当前作用域内的可迁移单元（全局隐式 `~/.mxenv/.env` 若存在且为明文；全局与项目配置中声明的 `local` 源），并对每单元打印文件路径、key 名清单与计划动作。发现过程 SHALL NOT 打印任何密钥值、SHALL NOT 写任何文件。存在 legacy `.env.local`/`envFiles` 明文文件时 SHALL 提示"建议声明为 source 后再迁移"且不自动迁移。
+`mxenv migrate`（不带 `--to`）SHALL 为纯只读操作：发现当前作用域内的可迁移单元（全局隐式 `~/.mxenv/.env` 若存在且为明文；全局与项目配置中声明的 `local` 源），并对每单元打印文件路径、key 名清单与计划动作。发现过程 SHALL NOT 打印任何密钥值、SHALL NOT 写任何文件。存在 legacy 默认文件（`.env`/`.env.local`）或 `envFiles` 明文文件时 SHALL 提示"建议声明为 source 后再迁移"且不自动迁移。
 
 #### Scenario: 只读 discovery
 

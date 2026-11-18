@@ -1,4 +1,5 @@
 import { homedir } from 'os'
+import { resolve } from 'path'
 import {
   collectRedactionValues,
   CompositionError,
@@ -17,9 +18,14 @@ import {
 import { isDotenvxEncrypted } from './env'
 import { loadSource, type SourceEntry } from './sources'
 
-const DEFAULT_ENV_FILE = '.env.local'
+// dotenv parity for the default discovery path: `.env` AND `.env.local`, later
+// file wins. Frameworks' NODE_ENV variants (.env.development et al.) are
+// deliberately NOT defaulted — profiles are mxenv's env-specific layer, and a
+// second file-name convention would fight it.
+const DEFAULT_ENV_FILES = ['.env', '.env.local']
 export const GLOBAL_DOTENV_SOURCE = '__mx_global_dotenv'
 const LEGACY_LOCAL_SOURCE = '__mx_legacy_local'
+const LEGACY_DOTENVX_SOURCE = '__mx_legacy_dotenvx'
 
 // 组合/审计类型与 redaction 收集规则已抽至 ./contracts（L0）；re-export 保持
 // 原导出面。此模块只保留组合引擎实现（L1 值能力 compose 唯一实现）。
@@ -84,17 +90,41 @@ function legacyEntries(project: LoadedConfig, envFilesOverride?: string[]): Sour
       legacy: true,
     })
   }
-  entries.push({
-      name: LEGACY_LOCAL_SOURCE,
-      source: {
-        provider: 'local',
-        files: envFilesOverride?.length ? envFilesOverride : (project.config.envFiles || [DEFAULT_ENV_FILE]),
-        optional: true,
-        override: true,
-      },
-      baseDir: project.baseDir,
-      legacy: true,
-    })
+  // Default (and shorthand) local files follow dotenv semantics, but a file
+  // that is dotenvx-encrypted must load through the dotenvx provider —
+  // plain-parsing it would inject `KEY="encrypted:…"` ciphertext as the value.
+  // The two groups keep dotenv file order: the group whose first file appears
+  // later in `localFiles` sits higher in precedence.
+  const localFiles = envFilesOverride?.length ? envFilesOverride : (project.config.envFiles || DEFAULT_ENV_FILES)
+  const encryptedFiles: string[] = []
+  const plainFiles: string[] = []
+  for (const file of localFiles) {
+    (isDotenvxEncrypted(resolve(project.baseDir, file)) ? encryptedFiles : plainFiles).push(file)
+  }
+  const dotenvxFirst = localFiles.indexOf(encryptedFiles[0] ?? '') < localFiles.indexOf(plainFiles[0] ?? '')
+  const plainEntry: SourceEntry[] = plainFiles.length ? [{
+    name: LEGACY_LOCAL_SOURCE,
+    source: {
+      provider: 'local',
+      files: plainFiles,
+      optional: true,
+      override: true,
+    },
+    baseDir: project.baseDir,
+    legacy: true,
+  }] : []
+  const dotenvxEntry: SourceEntry[] = encryptedFiles.length ? [{
+    name: LEGACY_DOTENVX_SOURCE,
+    source: {
+      provider: 'dotenvx',
+      files: encryptedFiles,
+      optional: true,
+      override: true,
+    },
+    baseDir: project.baseDir,
+    legacy: true,
+  }] : []
+  entries.push(...(dotenvxFirst ? [...dotenvxEntry, ...plainEntry] : [...plainEntry, ...dotenvxEntry]))
   return entries
 }
 

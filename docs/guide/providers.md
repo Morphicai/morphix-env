@@ -71,7 +71,7 @@ Values live under the named Keychain service (default namespace `mxenv:<source>`
 { "provider": "local", "files": [".env.local"], "optional": true, "override": true }
 ```
 
-Plaintext dotenv files — the classic mechanism, deliberately positioned as **development only**: file permissions do not protect values from a same-uid agent process. Common pattern: `local` sits last in a profile with `optional` + `override`, giving developers per-machine overrides over the team sources. Move long-lived values into encrypted storage with [`mxenv migrate`](./commands.md#migrate).
+Plaintext dotenv files — the classic mechanism, deliberately positioned as **development only**: file permissions do not protect values from a same-uid agent process. Common pattern: `local` sits last in a profile with `optional` + `override`, giving developers per-machine overrides over the team sources. Without any configuration, mxenv discovers `.env` and `.env.local` automatically (dotenv precedence — later file wins). Move long-lived values into encrypted storage with [`mxenv migrate`](./commands.md#migrate).
 
 ## plugin
 

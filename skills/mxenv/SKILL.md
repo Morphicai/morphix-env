@@ -95,7 +95,7 @@ mxenv migrate [--to dotenvx|keychain]   # local 明文迁加密存储（无 --to
 mxenv-cli shell-init [--write|--remove] # 为声明的命令生成 PATH shim（全局管理面，shims: ["node","pnpm"] 配置项）
 ```
 
-**明文退场指引**：`local` provider（明文 dotenv 文件）定位是**仅开发用**——文件权限防不住同 uid 的 agent 进程。发现项目或全局在用明文源（`mxenv inspect` 里标 `[plaintext, dev-only]`），引导用户跑 `mxenv migrate` 看 plan，再 `--to dotenvx`（加密文件，跨机/CI 友好）或 `--to keychain`（macOS 钥匙串）。迁移有 0600 备份与值级等价验证，失败自动还原。legacy `.env.local` 不自动迁移——先引导声明为 source。
+**明文退场指引**：`local` provider（明文 dotenv 文件）定位是**仅开发用**——文件权限防不住同 uid 的 agent 进程。发现项目或全局在用明文源（`mxenv inspect` 里标 `[plaintext, dev-only]`），引导用户跑 `mxenv migrate` 看 plan，再 `--to dotenvx`（加密文件，跨机/CI 友好）或 `--to keychain`（macOS 钥匙串）。迁移有 0600 备份与值级等价验证，失败自动还原。legacy 默认文件（`.env` / `.env.local`）不自动迁移——先引导声明为 source。
 
 **shim 消费指引**：配置里声明过 `shims` 且执行过 `mxenv-cli shell-init` 的机器上，裸敲被声明命令（如 `pnpm dev`）等价于 `mxenv run -- pnpm dev`——你可以依赖它，无需加前缀。但 shim 是方便性不是隐藏：值仍在子进程 env。**需要值不进 env 的场景（高风险 agent 能力、不可信子进程树）必须显式用 `run --serve`**，不要依赖 shim。audit 里 `via: "shim"` 与 `"cli"` 可区分两种来路。
 
@@ -103,7 +103,7 @@ mxenv-cli shell-init [--write|--remove] # 为声明的命令生成 PATH shim（�
 
 ## 进入一个新项目的标准流程
 
-1. `mxenv inspect` — 看是否已有配置、哪些 key 已就绪；无配置时走 legacy `.env.local` / Infisical 兼容路径。
+1. `mxenv inspect` — 看是否已有配置、哪些 key 已就绪；无配置时走 legacy `.env` / `.env.local`（dotenv 优先级）兼容路径。
 2. 项目密钥来源多而杂且无 `mxenv.config.json` → 引导用户创建：给出上面模板改 source 名与 provider 选择，**不填值**。
 3. 缺值时 `mxenv edit` 打开本地编辑器让用户查看、填写、删除；macOS 浏览器自动打开，编辑器 URL 默认不打印（`--print-editor-url` 显式索取）。
 4. `mxenv doc` — 生成**本项目**的 key→source 表（`.agents/skills/mxenv/SKILL.md`，0600），后续以它为准。

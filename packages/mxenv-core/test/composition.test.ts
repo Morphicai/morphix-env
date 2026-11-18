@@ -143,6 +143,44 @@ describe('environment composition', () => {
     expect(result.provenance.MXTEST_LEGACY.source).toBe('__mx_legacy_local')
   })
 
+  it('default discovery digests .env and .env.local with dotenv precedence', async () => {
+    const shared = value('shared-env')
+    const overridden = value('env-local-wins')
+    const base = value('env-only')
+    const result = await compose('dotenv-parity', ({ project }) => {
+      write(join(project, '.env'), `MXTEST_SHARED=${shared}\nMXTEST_OVERRIDDEN=${overridden} WRONG\nMXTEST_BASE=${base}\n`)
+      write(join(project, '.env.local'), `MXTEST_OVERRIDDEN=${overridden}\n`)
+    })
+
+    expect(result.environment.MXTEST_SHARED).toBe(shared)
+    expect(result.environment.MXTEST_OVERRIDDEN).toBe(overridden)
+    expect(result.environment.MXTEST_BASE).toBe(base)
+    expect(result.provenance.MXTEST_BASE.source).toBe('__mx_legacy_local')
+  })
+
+  it('digests a lone .env via default discovery', async () => {
+    const base = value('lone-env')
+    const result = await compose('dotenv-lone-env', ({ project }) => {
+      write(join(project, '.env'), `MXTEST_BASE=${base}\n`)
+    })
+
+    expect(result.environment.MXTEST_BASE).toBe(base)
+    expect(result.provenance.MXTEST_BASE.source).toBe('__mx_legacy_local')
+  })
+
+  it('an explicit envFiles config replaces the dotenv default list', async () => {
+    const declared = value('declared-envfile')
+    const result = await compose('envfiles-replaces-default', ({ project }) => {
+      write(join(project, '.env'), `MXTEST_BASE=${value('not-loaded')}\n`)
+      write(join(project, 'custom.env'), `MXTEST_DECLARED=${declared}\n`)
+      write(join(project, 'mxenv.config.json'), JSON.stringify({ envFiles: ['custom.env'] }))
+    })
+
+    expect(result.environment.MXTEST_DECLARED).toBe(declared)
+    expect(result.environment.MXTEST_BASE).toBeUndefined()
+    expect(result.sourceEntries.find((entry) => entry.name === '__mx_legacy_local')?.source.files).toEqual(['custom.env'])
+  })
+
   it('fails a duplicate source key unless the later source declares override', async () => {
     await expect(compose('collision', ({ project }) => {
       write(join(project, 'first.env'), `MXTEST_DUPLICATE=${value('first')}\n`)

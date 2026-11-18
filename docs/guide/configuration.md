@@ -93,6 +93,8 @@ Unpinned-but-saved runs are visible, not silent: composed commands (`run`/`expor
 
 Projects configured before named profiles — a top-level `infisical` block and `envFiles` — keep working unchanged and can also pin `"env"` on the legacy block. Migrate to `sources` / `profiles` when a project needs named profiles, multiple providers, or unified editing.
 
+Default file discovery matches dotenv conventions: with no `envFiles` declared, mxenv digests `.env` and `.env.local` (later file wins). A dotenvx-encrypted `.env` is routed through the dotenvx provider automatically — plaintext-parsing it would inject ciphertext. NODE_ENV variants (`.env.development` et al.) are not auto-discovered; use profiles for environment-specific composition.
+
 ## Old-name compatibility (0.12.x → now)
 
 - Only `mxenv.config.json` is read; a found `mx-env.config.json` is never read — a rename hint is printed instead.
