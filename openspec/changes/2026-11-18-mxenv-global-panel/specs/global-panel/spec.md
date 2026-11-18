@@ -2,7 +2,7 @@
 
 ## Purpose
 
-全局面板的行为契约：已托管范围的枚举（项目注册表/远程登记）、面板 UI 服务与认证、多范围 names-only 读、解锁窗口内的写回管理、常驻生命周期，以及贯穿全程的值红线——为"本机 + 经 SSH 的远程机"提供统一管理面。
+全局面板的行为契约：已托管范围的枚举（项目注册表）、面板 UI 服务与认证、多范围 names-only 读、解锁窗口内的写回管理、常驻生命周期与对外暴露（人经机器 IP 远程访问同一面板），以及贯穿全程的值红线——本机与远程机是同一契约。
 
 ## ADDED Requirements
 
@@ -31,7 +31,7 @@
 
 ### Requirement: 多范围 names-only 读
 
-`GET /scopes` SHALL 返回全局、projects.json 项目、remotes.json 远程三类范围；`/keys?scope=global|project:<name>` SHALL 返回该范围的 names-only 键模型（源→键名），包含 Infisical/Doppler 等外部供应商，并为每行返回 `provider`、`source` 与继承标记；项目读 SHALL 在宿主进程内以项目 `baseDir` 完成；无效或未登记 scope SHALL 404。跨范围读 SHALL NOT 合并返回（保持范围隔离，防组合面泄漏）。
+`GET /scopes` SHALL 返回全局与 projects.json 项目两类范围（远程机是另一套独立面板，不在本机清单内）；`/keys?scope=global|project:<name>` SHALL 返回该范围的 names-only 键模型（源→键名），包含 Infisical/Doppler 等外部供应商，并为每行返回 `provider`、`source` 与继承标记；项目读 SHALL 在宿主进程内以项目 `baseDir` 完成；无效或未登记 scope SHALL 404。跨范围读 SHALL NOT 合并返回（保持范围隔离，防组合面泄漏）。
 
 #### Scenario: 项目范围不串其他项目键
 
@@ -116,11 +116,21 @@
 - **WHEN** daemon 会话空闲超时
 - **THEN** 会话存活、状态为 locked；unlock 仍可用
 
-### Requirement: 远程范围登记与隧道契约
+### Requirement: 对外暴露与远程人访问
 
-`~/.mxenv/remotes.json`（0600）SHALL 登记远程 `{name, host, port?, transport:'ssh'}`；面板远程范围 SHALL 经 SSH 本地转发消费**同一套宿主 API**；远程 token SHALL NOT 落盘于本机（经 SSH 执行远程 attach 获取一次性 URL）；远程面板上的动作 SHALL 在远程本机审计。本契约 SHALL NOT 引入云 relay、TLS 终结或公网直连。
+远程与本地 SHALL 为同一面板、同一契约：远程机运行同一 `gui install` 常驻 daemon，唯一差异是启动时的监听面。`gui install --expose` / `serve --daemon --expose` SHALL 显式将监听从 loopback（默认）改为全部接口；人 SHALL 用远程机的 IP 直接访问 `http://<host-ip>:<port>/<token>/`；对 Agent 而言语义永远本地（无代理、无聚合、无云 relay、无隧道簿记）。`--expose` SHALL 仅在 daemon 模式有意义；install/status/serve 输出 SHALL 警示 HTTP 明文风险（token 与揭示值在网络上是明文，仅限受信网络，禁止直连公网）；token/unlock/names-only/审计等安全语义 SHALL 不因暴露而放宽；远程面板上的动作 SHALL 在该机本机审计。
+
+#### Scenario: 暴露安装即警告
+
+- **WHEN** `gui install --expose` 成功
+- **THEN** 摘要声明 `0.0.0.0` 监听、给出可分享的 `http://<host-ip>:<port>/<token>/` 形态，并警示 HTTP 明文与"禁止公网直连"
 
 #### Scenario: 远程动作远程记账
 
-- **WHEN** 经隧道在远程范围 reveal 一个键
-- **THEN** 审计事件写入远程机 `~/.mxenv/audit/`，本机审计不含该事件与该值
+- **WHEN** 人从另一台机器经远程机 IP 在远程面板 reveal 一个键
+- **THEN** 审计事件写入远程机 `~/.mxenv/audit/`，访问者本机不含该事件与该值
+
+#### Scenario: 默认仍是 loopback
+
+- **WHEN** 不带 `--expose` 安装或启动
+- **THEN** 监听 127.0.0.1，`runtime.json` 不携带 `bind` 字段，其他机器无法连接

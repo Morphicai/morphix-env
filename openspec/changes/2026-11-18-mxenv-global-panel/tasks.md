@@ -4,13 +4,12 @@
 
 - [x] `projects.json` 注册表：读/幂等登记（name 冲突后缀）/ lastSeenAt 节流写 / remove / prune / `MXENV_NO_PROJECT_REGISTRY` 旁路；0600（mxenv-core/src/registry.ts；8 例 registry.test.ts）
 - [x] run/edit 首次成功组合登记埋点（仅当目录存在 .mxenv/ 或 mxenv.config.json；cli.ts registerCurrentProject；L2 3 例集成测试）
-- [ ] `remotes.json`：登记/删除/列出；0600
 - [x] `edit-actions` 提取：从 L2 editor.ts 抽白名单 set/delete 动作核（dotenvx 嗅探、文件序、审计事件构造）；L2 `edit` 改为消费之（行为零变化，既有编辑器测试护航）
 - [x] 测试：edit-actions 与编辑器行为等价（注册表幂等/节流/prune 已随 registry.test.ts 落地）
 
 ## 2. L3 宿主 API 扩展（mxenv-cli）
 
-- [x] `GET /scopes`：全局 + projects.json 清单（remotes.json 清单随 P4 落地，当前显式返回空远程清单）
+- [x] `GET /scopes`：全局 + projects.json 清单（远程机=另一套独立面板，不进本机清单——D6 裁决）
 - [x] `GET /wiring?scope=`：源接线与供应商状态（provider 类型/健康/Infisical env 钉定/dotenvx 文件形态/keychain service+keys；names/status only，无接线编辑——见 provider-wiring-edit change）
 - [x] 外部供应商 names-only：`/keys` 覆盖 Infisical/Doppler 等 provider，返回 provider/source/inherited，单源故障隔离，响应无值
 - [x] 外部供应商 reveal：复用 `revealSingle` + unlock + scope + no-store；90 秒自动隐藏、无值审计、远程 set/delete 继续拒绝
@@ -26,7 +25,7 @@
 ## 3. panel-ui（mxenv-cli 自有资产）
 
 - [x] 脚手架：React + shadcn + Tailwind + esbuild（组件从 editor-ui 拷贝同源）；`src/panel-ui/` 构建为内容寻址 JS/CSS + SRI，经 generated clientAssets 打进 dist，发布物自包含
-- [x] 范围侧栏：全局 / 项目（from /scopes）已落地；远程（from /scopes，隧道提示）随 P4
+- [x] 范围侧栏：全局 / 项目（from /scopes）；远程访问=打开远程机自己的面板 URL（D6 裁决，无本地远程清单）
 - [x] 键表：names-only、来源/Provider 列、组合顺序标注；解锁按钮 → 窗口内 reveal（单键、点击复制）
 - [x] set/delete 对话框（值输入 type=password、二次确认、审计提示文案）
 - [ ] doctor 摘要卡片（scope 级）
@@ -38,11 +37,12 @@
 - [x] `gui install|uninstall`：launchd plist / systemd --user 单元生成、装载、卸载；`--port` 可选固定；install 输出安全摘要
 - [x] 测试：单元文件生成快照、daemon 语义（空闲→locked 非 closed）（16 例 daemon.test.ts + cli 路由回归；真机 install→kill→KeepAlive 重拉→uninstall 全清验证）
 
-## 5. 远程范围（打开远程网页管理）
+## 5. 远程访问（同一面板、显式对外暴露；用户 2026-11-18 裁决）
 
-- [ ] `mxenv remote add/list/remove`：登记 `{name, host, port?, transport:'ssh'}` 到 remotes.json（0600）
-- [ ] 本地面板远程侧栏：点远程 → 起 `ssh -L` 隧道 → 经 SSH 执行远程 `mxenv gui attach --print-url` 取 URL → 浏览器打开**远程机自己的面板网页**；token 不落本机盘，隧道随会话拆
-- [ ] guide：远程机管理节（远程 `gui install --port` + 本地登记 + 打开流程 + 值红线在远程路径的语义：远程动作远程审计）
+- [x] `--expose`：`gui install --expose` / `serve --daemon --expose` 监听 0.0.0.0（默认 loopback 不变）；`runtime.json` 记 `bind:'all'`（旧文件按 loopback 读）；transient 会话拒绝 `--expose`
+- [x] `gui status` 显示暴露面与可达地址；`mxenv gui --print-editor-url` 对暴露会话追加输出 LAN URL（token 同一会话，仅主机名不同）
+- [x] install/serve 输出警示：HTTP 明文（token 与揭示值网络可读）、仅限受信网络、禁止公网直连；token/unlock/names-only/审计语义不因暴露放宽
+- [x] guide：远程机管理节（远程 `gui install --expose [--port]` → 远程机 `mxenv gui --print-editor-url` 取 URL → 本机浏览器直连；远程动作远程审计）
 
 ## 6. 文档与收口
 

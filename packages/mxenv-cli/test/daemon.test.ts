@@ -309,3 +309,50 @@ describe('daemon environment generality (no reliance on the installing shell)', 
     }
   })
 })
+
+describe('exposure (--expose: human remote access over the machine IP)', () => {
+  it('builders carry --expose only when requested (both unit forms)', () => {
+    const plist = buildLaunchdPlist({ homeDir: '/Users/t', program: PROGRAM, expose: true })
+    expect(plist).toContain('<string>--expose</string>')
+    expect(buildLaunchdPlist({ homeDir: '/Users/t', program: PROGRAM })).not.toContain('--expose')
+    const unit = buildSystemdUnit({ program: PROGRAM, expose: true })
+    expect(unit).toContain('gui serve --daemon --expose')
+    expect(buildSystemdUnit({ program: PROGRAM })).not.toContain('--expose')
+    // 单元文件仍不含 token/值
+    expect(plist).not.toMatch(/token/i)
+    expect(unit).not.toMatch(/token/i)
+  })
+
+  it('installSummary states 0.0.0.0 + cleartext warning for exposed installs; default stays loopback', () => {
+    const exposed = installSummary({ kind: 'launchd', unitPath: '/x' }, undefined, true)
+    expect(exposed).toContain('0.0.0.0')
+    expect(exposed).toContain('EXPOSED')
+    expect(exposed).toContain('cleartext')
+    expect(exposed).toContain('public internet')
+    expect(exposed).not.toContain('127.0.0.1 only')
+    expect(installSummary({ kind: 'launchd', unitPath: '/x' })).toContain('127.0.0.1 only')
+  })
+
+  it('startHostSession binds non-loopback and records bind:all; default stays loopback with no bind field', async () => {
+    const home = tempHome()
+    let second = tempHome()
+    try {
+      const started = await startHostSession({ homeDir: home, cwd: home, daemon: true, expose: true, entries: [] })
+      if (!('runtime' in started)) throw new Error('fresh session expected')
+      const address = started.runtime.server.address() as { address: string }
+      expect(address.address).not.toBe('127.0.0.1')
+      expect(readHostSession(home)?.bind).toBe('all')
+      await started.runtime.close()
+
+      const def = await startHostSession({ homeDir: second, cwd: second, daemon: true, entries: [] })
+      if (!('runtime' in def)) throw new Error('unexpected')
+      expect((def.runtime.server.address() as { address: string }).address).toBe('127.0.0.1')
+      expect(readHostSession(second)?.bind).toBeUndefined()
+      await def.runtime.close()
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+      rmSync(second, { recursive: true, force: true })
+      second = ''
+    }
+  })
+})

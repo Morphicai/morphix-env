@@ -709,6 +709,13 @@ export interface StartHostOptions {
   daemon?: boolean
   /** 固定端口（默认随机）。端口占用即启动失败（fail-closed，不静默改随机）。 */
   port?: number
+  /**
+   * 对外暴露（`--expose`）：监听 0.0.0.0 而非 loopback——人从其他机器经
+   * `http://<host-ip>:<port>/<token>/` 直接访问本面板。默认不暴露。
+   * 安全语义不变（token-in-path + unlock + names-only）；但 HTTP 明文，
+   * install/status 输出必须警示网络上的明文风险。
+   */
+  expose?: boolean
 }
 
 /** pid 存活校验（design 决策 2 的崩溃残留自愈）：死 pid 的发现文件/锁即陈旧。 */
@@ -777,10 +784,10 @@ export async function startHostSession(options: StartHostOptions): Promise<{ run
 
   await new Promise<void>((resolve, reject) => {
     runtime.server.once('error', reject)
-    runtime.server.listen(options.port ?? 0, '127.0.0.1', () => resolve())
+    runtime.server.listen(options.port ?? 0, options.expose ? '0.0.0.0' : '127.0.0.1', () => resolve())
   })
   const port = (runtime.server.address() as { port: number }).port
-  writeHostSession({ port, pid: process.pid, token, startedAt: new Date().toISOString() }, homeDir)
+  writeHostSession({ port, pid: process.pid, token, startedAt: new Date().toISOString(), ...(options.expose ? { bind: 'all' as const } : {}) }, homeDir)
   auditHost(
     { homeDir, profileName: runtime.profileName, configPath: resolveAuditConfigPath({ homeDir }, cwd) },
     { keys: [], outcome: 'success', action: 'start', ...(options.daemon ? { reason: 'daemon' } : {}) },

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { execFileSync, spawnSync } from 'child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { execFileSync, spawn, spawnSync } from 'child_process'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
@@ -38,6 +38,46 @@ describe('mxenv-cli face', () => {
     const r = spawnSync('node', [CLI, 'gui', 'status'], { encoding: 'utf8', env: { ...process.env, HOME: home } })
     expect(r.status).toBe(1)
     expect(r.stdout).toContain('no running host session')
+  })
+
+  it('gui serve --expose requires --daemon (transient sessions stay loopback-only)', () => {
+    const home = join(tmpdir(), `mxenv-cli-expose-guard-${randomUUID()}`)
+    const r = spawnSync('node', [CLI, 'gui', 'serve', '--expose'], { encoding: 'utf8', env: { ...process.env, HOME: home } })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('--expose is only meaningful with --daemon')
+  })
+
+  it('exposed daemon binds all interfaces and reports LAN reachability', { timeout: 20_000 }, async () => {
+    const home = join(tmpdir(), `mxenv-cli-expose-live-${randomUUID()}`)
+    const env = { ...process.env, HOME: home }
+    const child = spawn('node', [CLI, 'gui', 'serve', '--daemon', '--expose'], { env, stdio: 'ignore', detached: true })
+    child.unref()
+    try {
+      const runtimePath = join(home, '.mxenv', 'host', 'runtime.json')
+      const deadline = Date.now() + 10_000
+      while (!existsSync(runtimePath) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100))
+      expect(existsSync(runtimePath), 'daemon runtime.json should appear').toBe(true)
+      const session = JSON.parse(readFileSync(runtimePath, 'utf8')) as { bind?: string; port: number }
+      expect(session.bind).toBe('all')
+
+      const status = spawnSync('node', [CLI, 'gui', 'status'], { encoding: 'utf8', env })
+      expect(status.status, status.stderr).toBe(0)
+      expect(status.stdout).toContain('exposed on all interfaces')
+
+      const urls = spawnSync('node', [CLI, 'gui', '--print-editor-url'], { encoding: 'utf8', env })
+      expect(urls.status, urls.stderr).toBe(0)
+      const lines = urls.stdout.trim().split('\n').filter(Boolean)
+      expect(lines.length).toBeGreaterThanOrEqual(1)
+      expect(lines[0]).toMatch(/^http:\/\/127\.0\.0\.1:/)
+      // 有 LAN 地址时输出第二行可分享 URL（非 loopback 主机名），且页面可达
+      if (lines.length > 1) {
+        expect(lines[1]).not.toContain('127.0.0.1')
+        expect((await fetch(lines[1])).status).toBe(200)
+      }
+    } finally {
+      spawnSync('node', [CLI, 'gui', 'close'], { encoding: 'utf8', env })
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 
   it('gui edit opens the requested project scope and rejects an unwired directory', { timeout: 15_000 }, async () => {

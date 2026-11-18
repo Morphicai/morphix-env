@@ -74,7 +74,7 @@ L2 mxenv   ──┘
 > 2026-11-09 架构评审定案（用户拍板）：**会话式面板宿主**先行（`mxenv gui`，复用编辑器会话机；暴露面随使用生灭），常驻化（launchd 托管、TTL 翻无限、稳定端点消费者）后置为契约零变更的独立 change。**2026-11-18 已落地常驻**：`gui install|uninstall`（launchd `dev.mxenv.panel` / systemd --user）、daemon 会话 TTL 无限、空闲只锁不关、端口默认随机（`runtime.json` 发现，`--port` 可固定）——契约零变更承诺兑现，见 change `mxenv-global-panel`。下方 daemon 行保留为终局形态描述。
 
 
-- **daemon**：loopback HTTP（127.0.0.1，每会话一次性 token，文件 0600），launchd 可选托管（`mxenv host install`）+ 手动启动并存。
+- **daemon**：loopback HTTP（127.0.0.1，每会话一次性 token，文件 0600；`--expose` 可显式对外=0.0.0.0，人经主机 IP 远程访问同一面板，Agent 视角永远本地——2026-11-18 用户裁决，无 remotes 登记/隧道簿记/聚合），launchd/systemd 托管 + 手动启动并存。
 - **面板**（editor-ui 的常驻化超集）：来源/上游总览（provider 登录态、来源编排、profiles）、键管理与编辑、项目接线编辑、migrate 入口、审计查看器。2026-11-18 已实现 React 多范围面板、单源 doctor、`mxenv edit` 项目深链接与 P2.5 接线编辑：只读 diff 预览 → 指纹二次确认 → 0600 备份/原子写/失败回滚 → 脱敏前后审计；一次只改一个项目源，全局与远程 provider 值不在此写面。读性能采用 `/snapshot` 单源一次加载 + 有界并发 + 异步 dotenvx，React 通过 TanStack Query 做 scope/profile 内存短期缓存；缓存不包含 reveal 值。
 - **安全模型升级**（短命会话 → 常驻但默认锁定）：
   - 面板随时可开，默认**锁定态**只显示键名/状态（names-only 基线不变）；
@@ -137,7 +137,7 @@ flowchart TB
 | 波次 | 内容 | 备注 |
 |---|---|---|
 | **A 命名与品牌基础** ✅ 已完成 | 改名全切（含 `mxenv://`，同步 Trellis W2 change 文案）+ 三包拆分（`mxenv` / `mxenv-cli` / `mxenv-core`）+ LICENSE/SECURITY | 三个 change 已归档，0.13.x–0.15.0 发布 |
-| **B 常驻 host + 面板** 🟡 核心交互已落地 | daemon、React 多范围面板、供应商读/接线编辑、审计 `configPath`、reveal/write API、注册视图 | 0.14.0 会话式面板 + revealSingle；0.17.0 常驻（`gui install`，launchd/systemd，空闲只锁不关）；React 多范围、项目键写回、doctor 单源、P2.5 接线 diff/指纹/0600 备份回滚与 `edit` 深链接已在本机 Edge 验收；远程范围与不可达旧 editor 资产清理仍在后续项 |
+| **B 常驻 host + 面板** 🟡 核心交互已落地 | daemon、React 多范围面板、供应商读/接线编辑、审计 `configPath`、reveal/write API、注册视图 | 0.14.0 会话式面板 + revealSingle；0.17.0 常驻（`gui install`，launchd/systemd，空闲只锁不关）；React 多范围、项目键写回、doctor 单源、P2.5 接线 diff/指纹/0600 备份回滚与 `edit` 深链接已在本机 Edge 验收；远程访问已按用户裁决落地为 `--expose` 直连（同一面板、显式暴露、远程动作远程审计）；不可达旧 editor 资产清理仍在后续项 |
 | **C 开源收尾 + 1.0** 🟡 大半完成 | 新 icon（SVG 源 + favicon + 单色版）、README 重排、gitleaks 历史扫描、blog 收编 | icon/README/blog 宣传正文已完成（2026-11-17）；gitleaks 历史扫描与 CONTRIBUTING/issue 模板挂账 |
 
 ## 五、决策记录

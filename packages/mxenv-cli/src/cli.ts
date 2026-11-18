@@ -16,7 +16,7 @@ import {
 } from './shims'
 import { spawn } from 'child_process'
 import { collectEntries, hostLockState, hostStatus, startHostSession } from './host'
-import { installDaemon, uninstallDaemon, installSummary } from './daemon'
+import { installDaemon, uninstallDaemon, installSummary, primaryLanIPv4 } from './daemon'
 import { clearHostSession, globalBaselineEntry, isRegistryEligible, readHostSession, readProjectRegistry, registerProject, releaseHostLock } from '@morphixai/mxenv-core'
 import pkg from '../package.json'
 
@@ -51,6 +51,8 @@ interface Args {
   daemon: boolean
   /** gui serve/install：固定端口（默认随机；固定=可预测端点，更大暴露面）。 */
   port: number | null
+  /** gui serve/install：对外暴露（0.0.0.0，人经本机 IP 远程直连面板；默认仅 loopback）。 */
+  expose: boolean
   /** gui request：请求人类输入的键名所指向的 scope（global|project:<name>）。 */
   scope: string | null
   /** gui request：附带给人类的说明（仅经 URL 展示，不落盘、不含值）。 */
@@ -75,7 +77,7 @@ function parseArgs(argv: string[]): Args {
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
     target: null, hermesCategory: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
-    daemon: false, port: null, scope: null, reason: null,
+    daemon: false, port: null, expose: false, scope: null, reason: null,
     write: false, remove: false, warnPlaintext: false, help: false, unknownFlags: [],
   }
 
@@ -135,6 +137,8 @@ function parseArgs(argv: string[]): Args {
       args.serve = true
     } else if (arg === '--daemon') {
       args.daemon = true
+    } else if (arg === '--expose') {
+      args.expose = true
     } else if (arg === '--scope') {
       if (argv[++i]) args.scope = argv[i]
     } else if (arg === '--reason') {
@@ -296,11 +300,15 @@ mxenv gui request KEY [--scope global|project:<name>]
                            Ask the human to provide one secret through the
                            panel; the value goes straight into the secret
                            source, never through the agent or chat.
-mxenv gui install [--port N]
+mxenv gui install [--port N] [--expose]
                            Install the resident daemon (launchd on macOS,
                            systemd --user on Linux): no session TTL, idle only
                            locks. Port defaults to random per start; a fixed
-                           --port is a predictable endpoint (tunnels only).
+                           --port is a predictable endpoint (remote/tunnels).
+                           --expose binds all interfaces so a human can reach
+                           this panel from another machine via its IP (HTTP
+                           cleartext; same token/unlock gates; agents stay
+                           local). Default stays loopback-only.
 mxenv gui uninstall        Stop the daemon and remove its unit
 
 Project-level commands (run, export, inspect, edit, migrate, …) come from the
@@ -328,6 +336,12 @@ async function cmdGui(args: Args): Promise<number> {
     const lock = await hostLockState(homeDir)
     const lockLabel = lock ? (lock.locked ? 'locked' : 'unlocked') : 'unknown (host not answering)'
     console.log(`[mxenv] host session running — port ${st.port}, started ${st.startedAt}, ${lockLabel}`)
+    const session = readHostSession(homeDir)
+    if (session?.bind === 'all') {
+      const lan = primaryLanIPv4()
+      console.log(`[mxenv] exposed on all interfaces (HTTP)${lan ? ` — reachable at http://${lan}:${session.port}/` : ''}`)
+      console.log('[mxenv] share the full URL (with token) via `mxenv gui --print-editor-url` on this machine only.')
+    }
     return 0
   }
 
@@ -353,8 +367,8 @@ async function cmdGui(args: Args): Promise<number> {
 
   if (sub === 'install') {
     try {
-      const result = installDaemon({ homeDir, port: args.port ?? undefined })
-      console.log(installSummary(result, args.port ?? undefined))
+      const result = installDaemon({ homeDir, port: args.port ?? undefined, expose: args.expose })
+      console.log(installSummary(result, args.port ?? undefined, args.expose))
       return 0
     } catch (error) {
       console.error((error as Error).message)
@@ -375,9 +389,14 @@ async function cmdGui(args: Args): Promise<number> {
 
   if (sub === 'serve') {
     // 内部模式：detached 子进程持有会话（TTL/空闲/close 到期自清；
-    // --daemon=常驻（TTL 无限、空闲只锁不关），--port=固定端口（默认随机）。
+    // --daemon=常驻（TTL 无限、空闲只锁不关），--port=固定端口（默认随机），
+    // --expose=对外暴露（0.0.0.0；人经本机 IP 直连，默认仅 loopback）。
     if (args.port !== null && !args.daemon) {
       console.error('[mxenv] --port is only meaningful with --daemon (transient sessions use a random port)')
+      return 1
+    }
+    if (args.expose && !args.daemon) {
+      console.error('[mxenv] --expose is only meaningful with --daemon (transient sessions stay loopback-only)')
       return 1
     }
     const layers = loadConfigLayers({ homeDir })
@@ -394,6 +413,7 @@ async function cmdGui(args: Args): Promise<number> {
         entries,
         daemon: args.daemon,
         port: args.port ?? undefined,
+        expose: args.expose,
       })
     } catch (error) {
       const message = (error as Error).message
@@ -401,6 +421,10 @@ async function cmdGui(args: Args): Promise<number> {
       return 1
     }
     if (!('runtime' in started)) return 0 // 竞态下已有会话：子进程即退（幂等）
+    if (args.expose) {
+      const lan = primaryLanIPv4()
+      console.error(`[mxenv] listening on all interfaces${lan ? ` (${lan})` : ''} — HTTP is cleartext on the network; unlock/token gates unchanged`)
+    }
     await new Promise<void>((resolve) => started.runtime.server.on('close', () => resolve()))
     return 0
   }
@@ -459,7 +483,7 @@ async function cmdGui(args: Args): Promise<number> {
       }
     }
   }
-  const openSession = (session: { port: number; token: string }) => {
+  const openSession = (session: { port: number; token: string; bind?: 'loopback' | 'all' }) => {
     const query = new URLSearchParams()
     if (requestedScope) query.set('scope', requestedScope)
     if (args.profile) query.set('profile', args.profile)
@@ -469,8 +493,14 @@ async function cmdGui(args: Args): Promise<number> {
     }
     const suffix = query.toString() ? `?${query.toString()}` : ''
     const url = `http://127.0.0.1:${session.port}/${session.token}/${suffix}`
-    if (args.printEditorUrl) console.log(url)
-    else {
+    if (args.printEditorUrl) {
+      console.log(url)
+      // 暴露会话：同时给出可分享的 LAN 形态（token 同一个，仅主机名不同）。
+      if (session.bind === 'all') {
+        const lan = primaryLanIPv4()
+        if (lan) console.log(`http://${lan}:${session.port}/${session.token}/${suffix}`)
+      }
+    } else {
       console.log(requestKey
         ? `[mxenv] Opened an input request for ${requestKey} in the local management panel.`
         : requestedScope ? '[mxenv] Opened the project in the local management panel.' : '[mxenv] Opened local management panel in your browser.')

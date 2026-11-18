@@ -93,9 +93,10 @@ export function daemonEnvVars(run: RunFn = defaultRun): Record<string, string> {
 }
 
 /** launchd plist（XML；RunAtLoad+KeepAlive=常驻；日志进 ~/.mxenv/host/）。 */
-export function buildLaunchdPlist(options: { homeDir: string; program: string[]; port?: number; envVars?: Record<string, string> }): string {
+export function buildLaunchdPlist(options: { homeDir: string; program: string[]; port?: number; expose?: boolean; envVars?: Record<string, string> }): string {
   const args = [...options.program, 'gui', 'serve', '--daemon']
   if (options.port) args.push('--port', String(options.port))
+  if (options.expose) args.push('--expose')
   const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   // launchd 环境的 PATH 是系统默认（/usr/bin:/bin:...）——volta/nvm/homebrew
   // 装的 dotenvx 等 CLI 解析不到。通用化处理：不猜环境，把安装时确定的
@@ -134,9 +135,10 @@ ${envVars}  <key>RunAtLoad</key>
 }
 
 /** systemd --user 单元（Restart=always=常驻）。 */
-export function buildSystemdUnit(options: { program: string[]; port?: number; envVars?: Record<string, string> }): string {
+export function buildSystemdUnit(options: { program: string[]; port?: number; expose?: boolean; envVars?: Record<string, string> }): string {
   const exec = [...options.program, 'gui', 'serve', '--daemon']
   if (options.port) exec.push('--port', String(options.port))
+  if (options.expose) exec.push('--expose')
   // systemd 单元值里的空格需转义（ExecStart 逐词切分）
   const execLine = exec.map((a) => (a.includes(' ') ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ')
   // 同 launchd：守护环境无用户 PATH——安装时钉定（MXENV_*_BIN + PATH 兜底）。
@@ -164,6 +166,7 @@ export interface InstallResult {
 export function installDaemon(options: {
   homeDir: string
   port?: number
+  expose?: boolean
   platform?: string
   run?: RunFn
   program?: string[]
@@ -176,7 +179,7 @@ export function installDaemon(options: {
   if (kind === 'launchd') {
     const plist = launchdPlistPath(options.homeDir)
     mkdirSync(dirname(plist), { recursive: true })
-    writeFileSync(plist, buildLaunchdPlist({ homeDir: options.homeDir, program, port: options.port, envVars: daemonEnvVars(run) }), { mode: 0o644 })
+    writeFileSync(plist, buildLaunchdPlist({ homeDir: options.homeDir, program, port: options.port, expose: options.expose, envVars: daemonEnvVars(run) }), { mode: 0o644 })
     const guiDomainTarget = guiDomain()
     // 已装载的旧实例先卸（幂等重装）
     run('launchctl', ['bootout', `${guiDomainTarget}/${LAUNCHD_LABEL}`])
@@ -193,7 +196,7 @@ export function installDaemon(options: {
 
   const unit = systemdUnitPath(options.homeDir)
   mkdirSync(dirname(unit), { recursive: true })
-  writeFileSync(unit, buildSystemdUnit({ program, port: options.port, envVars: daemonEnvVars(run) }), { mode: 0o644 })
+  writeFileSync(unit, buildSystemdUnit({ program, port: options.port, expose: options.expose, envVars: daemonEnvVars(run) }), { mode: 0o644 })
   run('systemctl', ['--user', 'daemon-reload'])
   const enable = run('systemctl', ['--user', 'enable', '--now', SYSTEMD_UNIT])
   if (enable.status !== 0) {
@@ -237,17 +240,40 @@ export function uninstallDaemon(options: { homeDir: string; platform?: string; r
   return { kind, unitPath: kind === 'launchd' ? launchdPlistPath(options.homeDir) : systemdUnitPath(options.homeDir) }
 }
 
-/** install 的安全摘要（names-only；含固定端口警示）。 */
-export function installSummary(result: InstallResult, port?: number): string {
+/**
+ * 本机首个非内部 IPv4（远程访问提示用）。names-only：只取地址本身，
+ * 不探测任何端口/服务；没有可用地址（离线/仅 loopback）返回 null。
+ */
+export function primaryLanIPv4(interfaces: Readonly<Record<string, ReadonlyArray<{ address: string; family: string; internal: boolean }> | undefined>> = os.networkInterfaces()): string | null {
+  for (const list of Object.values(interfaces)) {
+    for (const ni of list || []) {
+      if (!ni.internal && ni.family === 'IPv4') return ni.address
+    }
+  }
+  return null
+}
+
+/** install 的安全摘要（names-only；含固定端口/对外暴露警示）。 */
+export function installSummary(result: InstallResult, port?: number, expose?: boolean): string {
   const lines = [
     `[mxenv] daemon installed (${result.kind === 'launchd' ? 'launchd' : 'systemd --user'}: ${result.kind === 'launchd' ? LAUNCHD_LABEL : SYSTEMD_UNIT})`,
-    `  bind      127.0.0.1 only`,
+    expose
+      ? `  bind      0.0.0.0 (EXPOSED — reachable from other machines via this host's IP)`
+      : `  bind      127.0.0.1 only`,
     port
-      ? `  port      ${port} (FIXED — predictable endpoint; intended for tunnels/remote registration, treat as wider exposure)`
+      ? `  port      ${port} (FIXED — predictable endpoint; intended for remote/tunnel access, treat as wider exposure)`
       : `  port      random per start (discovery: ~/.mxenv/host/runtime.json, 0600)`,
     `  idle      auto-locks (daemon never expires; values stay behind the unlock window)`,
-    `  open      mxenv gui`,
-    `  remove    mxenv gui uninstall`,
   ]
+  if (expose) {
+    const lan = primaryLanIPv4()
+    lines.push(
+      `  share     http://${lan || '<host-ip>'}:${'{port}'}/<token>/  (run \`mxenv gui status\` / \`mxenv gui --print-editor-url\` on this machine)`,
+      `  warning   HTTP is cleartext: the token and any revealed value are readable by`,
+      `            on-path network observers. Use only on networks you trust (LAN/VPN),`,
+      `            never expose this directly to the public internet.`,
+    )
+  }
+  lines.push(`  open      mxenv gui`, `  remove    mxenv gui uninstall`)
   return lines.join('\n')
 }

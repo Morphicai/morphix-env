@@ -13,6 +13,11 @@ export interface HostRuntimeSession {
   /** 会话 token：仅存于此 0600 文件与宿主内存/请求头，绝不进 argv、日志或审计。 */
   token: string
   startedAt: string
+  /**
+   * 监听面：'all' = 0.0.0.0（`--expose`，人经远程 IP 直连本面板）；
+   * 缺省 = loopback（127.0.0.1，安全默认）。旧发现文件无此字段按 loopback 读。
+   */
+  bind?: 'loopback' | 'all'
 }
 
 function hostDir(homeDir: string): string {
@@ -48,6 +53,7 @@ export function readHostSession(homeDir: string): HostRuntimeSession | null {
       pid: parsed.pid,
       token: parsed.token,
       startedAt: typeof parsed.startedAt === 'string' ? parsed.startedAt : '',
+      ...(parsed.bind === 'all' ? { bind: 'all' as const } : {}),
     }
   } catch {
     return null
