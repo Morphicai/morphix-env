@@ -65,8 +65,8 @@ describe('dotenv-parity default discovery', () => {
 
     expect(result.environment.MXTEST_DOTENVX_REAL).toBe(sentinel)
     expect(result.environment.MXTEST_LOCAL).toBe(local)
-    expect(result.provenance.MXTEST_DOTENVX_REAL.source).toBe('__mx_legacy_dotenvx')
-    expect(result.provenance.MXTEST_LOCAL.source).toBe('__mx_legacy_local')
+    expect(result.provenance.MXTEST_DOTENVX_REAL.source).toBe('__mx_default_dotenvx')
+    expect(result.provenance.MXTEST_LOCAL.source).toBe('__mx_default_local')
     expect(readFileSync(join(project, '.env'), 'utf8')).not.toContain(sentinel)
   }, 30_000)
 })

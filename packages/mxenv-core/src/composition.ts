@@ -24,8 +24,8 @@ import { loadSource, type SourceEntry } from './sources'
 // second file-name convention would fight it.
 const DEFAULT_ENV_FILES = ['.env', '.env.local']
 export const GLOBAL_DOTENV_SOURCE = '__mx_global_dotenv'
-const LEGACY_LOCAL_SOURCE = '__mx_legacy_local'
-const LEGACY_DOTENVX_SOURCE = '__mx_legacy_dotenvx'
+const DEFAULT_LOCAL_SOURCE = '__mx_default_local'
+const DEFAULT_DOTENVX_SOURCE = '__mx_default_dotenvx'
 
 // 组合/审计类型与 redaction 收集规则已抽至 ./contracts（L0）；re-export 保持
 // 原导出面。此模块只保留组合引擎实现（L1 值能力 compose 唯一实现）。
@@ -103,7 +103,7 @@ function legacyEntries(project: LoadedConfig, envFilesOverride?: string[]): Sour
   }
   const dotenvxFirst = localFiles.indexOf(encryptedFiles[0] ?? '') < localFiles.indexOf(plainFiles[0] ?? '')
   const plainEntry: SourceEntry[] = plainFiles.length ? [{
-    name: LEGACY_LOCAL_SOURCE,
+    name: DEFAULT_LOCAL_SOURCE,
     source: {
       provider: 'local',
       files: plainFiles,
@@ -114,7 +114,7 @@ function legacyEntries(project: LoadedConfig, envFilesOverride?: string[]): Sour
     legacy: true,
   }] : []
   const dotenvxEntry: SourceEntry[] = encryptedFiles.length ? [{
-    name: LEGACY_DOTENVX_SOURCE,
+    name: DEFAULT_DOTENVX_SOURCE,
     source: {
       provider: 'dotenvx',
       files: encryptedFiles,

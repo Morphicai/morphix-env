@@ -52,7 +52,8 @@ function sourcePath(state: { token: string }, sourceName: string): string {
 // display names; the raw ID stays visible in detailed views.
 const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   __mx_global_dotenv: 'Global store',
-  __mx_legacy_local: 'Local override',
+  __mx_default_local: 'Local files (default)',
+  __mx_default_dotenvx: 'dotenvx files (default)',
   __mx_legacy_infisical: 'Infisical (legacy)',
   __mx_cli_local_override: 'CLI local override',
 }

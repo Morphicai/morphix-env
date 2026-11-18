@@ -87,7 +87,7 @@ describe('SDK facade from dist', () => {
       baseEnvironment: {},
     })
     expect(composition.environment.MXTEST_SDK).toBe(sentinel)
-    expect(composition.provenance.MXTEST_SDK.source).toBe('__mx_legacy_local')
+    expect(composition.provenance.MXTEST_SDK.source).toBe('__mx_default_local')
     expect(Array.isArray(composition.redactionValues)).toBe(true)
     expect(composition.redactionValues).toContain(sentinel)
   })
@@ -108,7 +108,7 @@ describe('SDK facade from dist', () => {
     const parsed = JSON.parse(out.trim()) as { keys: string[]; value: string; source: string }
     expect(parsed.keys).toContain('MXTEST_SDK')
     expect(parsed.value).toBe(sentinel)
-    expect(parsed.source).toBe('__mx_legacy_local')
+    expect(parsed.source).toBe('__mx_default_local')
   })
 
   it('loadConfigLayers() with no options uses the real home directory (config.ts homedir import)', () => {

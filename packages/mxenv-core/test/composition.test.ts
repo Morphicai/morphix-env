@@ -140,7 +140,7 @@ describe('environment composition', () => {
     })
 
     expect(result.environment.MXTEST_LEGACY).toBe(local)
-    expect(result.provenance.MXTEST_LEGACY.source).toBe('__mx_legacy_local')
+    expect(result.provenance.MXTEST_LEGACY.source).toBe('__mx_default_local')
   })
 
   it('default discovery digests .env and .env.local with dotenv precedence', async () => {
@@ -155,7 +155,7 @@ describe('environment composition', () => {
     expect(result.environment.MXTEST_SHARED).toBe(shared)
     expect(result.environment.MXTEST_OVERRIDDEN).toBe(overridden)
     expect(result.environment.MXTEST_BASE).toBe(base)
-    expect(result.provenance.MXTEST_BASE.source).toBe('__mx_legacy_local')
+    expect(result.provenance.MXTEST_BASE.source).toBe('__mx_default_local')
   })
 
   it('digests a lone .env via default discovery', async () => {
@@ -165,7 +165,7 @@ describe('environment composition', () => {
     })
 
     expect(result.environment.MXTEST_BASE).toBe(base)
-    expect(result.provenance.MXTEST_BASE.source).toBe('__mx_legacy_local')
+    expect(result.provenance.MXTEST_BASE.source).toBe('__mx_default_local')
   })
 
   it('an explicit envFiles config replaces the dotenv default list', async () => {
@@ -178,7 +178,7 @@ describe('environment composition', () => {
 
     expect(result.environment.MXTEST_DECLARED).toBe(declared)
     expect(result.environment.MXTEST_BASE).toBeUndefined()
-    expect(result.sourceEntries.find((entry) => entry.name === '__mx_legacy_local')?.source.files).toEqual(['custom.env'])
+    expect(result.sourceEntries.find((entry) => entry.name === '__mx_default_local')?.source.files).toEqual(['custom.env'])
   })
 
   it('fails a duplicate source key unless the later source declares override', async () => {

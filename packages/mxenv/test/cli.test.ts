@@ -154,7 +154,7 @@ describe('mxenv run', () => {
     writeFileSync(join(TMP, '.env.local'), 'MXTEST_VERB=value-not-visible\n')
 
     const out = run(['run', '-v', '--', 'node', '-e', 'console.log("done")'])
-    expect(out).toContain('__mx_legacy_local: loaded (1 keys)')
+    expect(out).toContain('__mx_default_local: loaded (1 keys)')
     expect(out).not.toContain('MXTEST_VERB')
     expect(out).not.toContain('value-not-visible')
   })
@@ -209,15 +209,15 @@ describe('mxenv inspect', () => {
     writeFileSync(join(TMP, '.env.local'), `MXTEST_SECRET=${longValue}\nMXTEST_SHORT=${shortValue}\n`)
 
     const out = run(['inspect'])
-    expect(out).toContain('MXTEST_SECRET — __mx_legacy_local (local)')
-    expect(out).toContain('MXTEST_SHORT — __mx_legacy_local (local)')
+    expect(out).toContain('MXTEST_SECRET — __mx_default_local (local)')
+    expect(out).toContain('MXTEST_SHORT — __mx_default_local (local)')
     expect(out).not.toContain(longValue)
     expect(out).not.toContain(shortValue)
   })
 
   it('文件不存在时显示 source 缺失状态', () => {
     const out = run(['inspect', '-f', '.env.nonexistent'])
-    expect(out).toContain('__mx_legacy_local (local) — missing-optional, 0 keys')
+    expect(out).toContain('__mx_default_local (local) — missing-optional, 0 keys')
   })
 })
 
@@ -239,7 +239,7 @@ describe('plaintext marking and optional reminder', () => {
   it('inspect 对 local 明文源追加 [plaintext, dev-only] 标识', () => {
     writeFileSync(join(TMP, '.env.local'), `MXTEST_MARK=${testValue('mark')}\n`)
     const out = run(['inspect'])
-    expect(out).toContain('__mx_legacy_local (local) — loaded, 1 keys [plaintext, dev-only]')
+    expect(out).toContain('__mx_default_local (local) — loaded, 1 keys [plaintext, dev-only]')
   })
 
   it('inspect 不标记 dotenvx 源', () => {
