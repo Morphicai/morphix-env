@@ -46,6 +46,16 @@ editor.ts 的白名单 set/delete（含 dotenvx 嗅探、文件序、审计、`s
 
 远程 provider 的 reveal 复用既有 `revealSingle`：同一 Bearer + 面板边界头 + unlock 窗口，单值驻留、`no-store`、90 秒 UI 自动隐藏、值无关审计。这里只开放**读值**，不开放远程 set/delete；UI 继续用 provider 元数据隐藏远程写按钮，继承的全局源在项目 scope 中同样禁止写回。
 
+### D8 快照与短期读缓存
+
+`/snapshot` 为同一 scope/profile 同时生成 keys 与 wiring：每个来源只加载一次，多文件来源保留 fileIndex，来源间采用有界并发，dotenvx CLI 探测与解密使用异步子进程，避免重复上游认证和同步阻塞 loopback。`/keys`、`/wiring` 保留为兼容投影。
+
+React 面板以 scope/profile 为 Query key 做内存短期缓存，fresh 读在 60 秒内复用；写回、Refresh 或显式失效触发重取。切换 scope 不显示旧 scope 数据；reveal 值、token 与编辑表单不进入 Query 持久化或跨 scope 缓存。
+
+### D9 Agent 输入请求
+
+密钥泄露的高频路径不是面板，而是"Agent 让用户把 secret 粘贴进聊天"。`gui request` 用深链把这一步搬回面板：URL 只带键名+说明（无值），人类解锁后表单预填该键，提交走既有 set 通道（unlock 窗口、二次确认、无值审计），值直达密钥源。请求参数消费后即从 URL 清除，防刷新重开；锁定态只显示提示。scope 解析复用 edit 的项目注册表逻辑，键名校验 env 命名风格。reveal 值同时改为行内展示（90 秒隐藏、可手动隐藏），去掉顶部值横幅——值离键行更近，误读/误复制面更小。
+
 ## 风险
 
 - **面板 bundle 供应链**：静态资产由构建产出，npm 发布前 CI 校验 bundle 哈希与源一致（任务组 5）。

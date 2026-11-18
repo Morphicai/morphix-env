@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process'
+import { execFile, execFileSync, type ExecFileOptions } from 'child_process'
 import { existsSync, statSync } from 'fs'
 import { delimiter, dirname, isAbsolute, join, resolve } from 'path'
 import { parse as dotenvParse } from 'dotenv'
@@ -179,7 +179,35 @@ export function ensureCommand(command: string, sourceName: string, provider: Sec
   }
 }
 
-function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: SourceContext): LoadedSource {
+function execFileText(command: string, args: string[], options: ExecFileOptions): Promise<string> {
+  return new Promise((resolveOutput, reject) => {
+    execFile(command, args, options, (error, stdout) => {
+      if (error) { reject(error); return }
+      resolveOutput(typeof stdout === 'string' ? stdout : stdout?.toString() ?? '')
+    })
+  })
+}
+
+/** 面板/常驻宿主使用异步命令解析，避免 CLI 探测阻塞整个 loopback 服务。 */
+export async function ensureCommandAsync(command: string, sourceName: string, provider: SecretSource['provider']): Promise<string> {
+  const override = process.env[`MXENV_${command.toUpperCase().replace(/-/g, '_')}_BIN`]
+  const executable = async (candidate: string): Promise<boolean> => {
+    try {
+      await execFileText(candidate, ['--version'], { encoding: 'utf8', maxBuffer: 1024 * 64 })
+      return true
+    } catch {
+      return false
+    }
+  }
+  if (override && await executable(override)) return override
+  const localBinary = resolve(process.cwd(), 'node_modules', '.bin', command)
+  if (existsSync(localBinary) && await executable(localBinary)) return localBinary
+  if (await executable(command)) return command
+  const pinnedHint = override ? ` The pinned ${`MXENV_${command.toUpperCase().replace(/-/g, '_')}_BIN`} (${override}) is no longer executable; re-pin or unset it.` : ''
+  throw new SourceError(sourceName, provider, `[mxenv] ${provider} source "${sourceName}" requires the ${command} CLI.${pinnedHint}`)
+}
+
+async function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: SourceContext): Promise<LoadedSource> {
   const files = source.files.map((file) => resolveSourcePath(file, entry, context.homeDir))
   const existingFiles = files.filter(existsSync)
   if (!existingFiles.length) {
@@ -202,7 +230,7 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
     }
   }
 
-  const command = ensureCommand('dotenvx', entry.name, source.provider)
+  const command = await ensureCommandAsync('dotenvx', entry.name, source.provider)
   const keys = [...new Set(existingFiles.flatMap((file) => Object.keys(parseEnvFile(file))))]
     .filter((key) => !key.startsWith('DOTENV_PUBLIC_KEY'))
   if (!keys.length) return { name: entry.name, provider: source.provider, values: {}, availability: 'loaded' }
@@ -214,14 +242,14 @@ function resolveDotenvx(entry: SourceEntry, source: DotenvxSource, context: Sour
   const helper = 'const keys=JSON.parse(process.env.__MXENV_KEYS__);const output={};for(const key of keys){if(process.env[key]!==undefined)output[key]=process.env[key]}process.stdout.write(JSON.stringify(output))'
   let stage = 'run'
   try {
-    const output = execFileSync(
+    const output = await execFileText(
       // --overload aligns dotenvx with every other provider: composed file
       // values win over same-named variables already in the parent env.
       command,
       ['run', '--overload', '-f', existingFiles.join(','), '--', process.execPath, '-e', helper],
       {
         encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 16 * 1024 * 1024,
         env: {
           ...process.env,
           ...context.environment,

@@ -18,6 +18,9 @@ vi.mock('child_process', async (importOriginal) => ({
   execFileSync: vi.fn(() => {
     throw Object.assign(new Error('decrypt blew up with sentinel-inside-error'), { code: 'ESECRET' })
   }),
+  execFile: vi.fn((_command: string, _args: string[], _options: unknown, callback: (error: Error) => void) => {
+    callback(Object.assign(new Error('decrypt blew up with sentinel-inside-error'), { code: 'ESECRET' }))
+  }),
 }))
 
 const ROOT = mkdtempSync(join(tmpdir(), 'mxenv-value-reveal-'))

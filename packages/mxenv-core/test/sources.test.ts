@@ -4,6 +4,7 @@ import { join } from 'path'
 import { randomUUID } from 'crypto'
 
 const mocks = vi.hoisted(() => ({
+  execFile: vi.fn(),
   execFileSync: vi.fn(),
   keyringStore: new Map<string, string>(),
   resolveInfisicalSecrets: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('child_process', async (importOriginal) => ({
   ...(await importOriginal<typeof import('child_process')>()),
+  execFile: mocks.execFile,
   execFileSync: mocks.execFileSync,
 }))
 
@@ -57,6 +59,7 @@ function entry(name: string, source: SourceEntry['source']): SourceEntry {
 beforeEach(() => {
   mkdirSync(ROOT, { recursive: true })
   mocks.execFileSync.mockReset()
+  mocks.execFile.mockReset()
   mocks.keyringStore.clear()
   mocks.resolveInfisicalSecrets.mockReset()
   mocks.fetchSecretsViaCLI.mockReset()
@@ -245,10 +248,10 @@ describe('provider source adapters', () => {
     const sentinel = value('dotenvx')
     const file = join(ROOT, 'encrypted.env')
     writeFileSync(file, 'DOTENV_PUBLIC_KEY=public\nMXTEST_DOTENVX=encrypted:opaque\n')
-    mocks.execFileSync.mockImplementation((command: string, args: string[]) => {
-      if (command.endsWith('dotenvx') && args[0] === '--version') return 'dotenvx test'
-      if (command.endsWith('dotenvx') && args[0] === 'run') return JSON.stringify({ MXTEST_DOTENVX: sentinel })
-      throw new Error('unexpected command')
+    mocks.execFile.mockImplementation((command: string, args: string[], _options: unknown, callback: (error: Error | null, stdout: string) => void) => {
+      if (command.endsWith('dotenvx') && args[0] === '--version') callback(null, 'dotenvx test')
+      else if (command.endsWith('dotenvx') && args[0] === 'run') callback(null, JSON.stringify({ MXTEST_DOTENVX: sentinel }))
+      else callback(new Error('unexpected command'), '')
     })
 
     const loaded = await loadSource(entry('encrypted', { provider: 'dotenvx', files: ['encrypted.env'] }), context())

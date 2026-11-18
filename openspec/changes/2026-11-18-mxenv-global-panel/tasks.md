@@ -18,6 +18,10 @@
 - [x] `POST /set` `/delete`：unlock 窗口门禁 + `x-mxenv-panel` 边界 + edit-actions 执行 + 审计 `via:'host'`；全局基线与项目 local/dotenvx 文件
 - [x] 静态 UI 服务：`GET /{token}/` token-in-path 校验 → panel bundle；token 失效即 404（与 API 同纪律）
 - [x] 测试：scopes/keys 隔离、写门禁（锁定态拒绝/边界头缺失拒绝）、审计事件、UI 路径认证
+- [x] `GET /snapshot?scope=`：keys + wiring 共用一次来源加载，有界并发、异步 dotenvx；`/keys`/`/wiring` 保持兼容投影
+- [x] 测试：snapshot 无值与 provider 元数据、故障隔离、真实 Edge scope 切换 Query 缓存（60 秒内不重复请求）
+- [x] Agent 输入请求：`gui request KEY [--scope] [--reason]` 深链（键名/说明无值、URL 消费即清）；面板解锁后预填表单 + reason 展示；CLI 键名/scope 校验（L3 集成测试 + Edge 全流程：锁定提示→解锁预填→取消→URL 清参）
+- [x] reveal 行内展示：值显示在所属键行内（复制/手动隐藏、90 秒自动隐藏），移除顶部值横幅（Edge 实证）
 
 ## 3. panel-ui（mxenv-cli 自有资产）
 

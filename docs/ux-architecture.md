@@ -75,7 +75,7 @@ L2 mxenv   ──┘
 
 
 - **daemon**：loopback HTTP（127.0.0.1，每会话一次性 token，文件 0600），launchd 可选托管（`mxenv host install`）+ 手动启动并存。
-- **面板**（editor-ui 的常驻化超集）：来源/上游总览（provider 登录态、来源编排、profiles）、键管理与编辑、项目接线编辑、migrate 入口、审计查看器。2026-11-18 已实现 React 多范围面板、单源 doctor、`mxenv edit` 项目深链接与 P2.5 接线编辑：只读 diff 预览 → 指纹二次确认 → 0600 备份/原子写/失败回滚 → 脱敏前后审计；一次只改一个项目源，全局与远程 provider 值不在此写面。
+- **面板**（editor-ui 的常驻化超集）：来源/上游总览（provider 登录态、来源编排、profiles）、键管理与编辑、项目接线编辑、migrate 入口、审计查看器。2026-11-18 已实现 React 多范围面板、单源 doctor、`mxenv edit` 项目深链接与 P2.5 接线编辑：只读 diff 预览 → 指纹二次确认 → 0600 备份/原子写/失败回滚 → 脱敏前后审计；一次只改一个项目源，全局与远程 provider 值不在此写面。读性能采用 `/snapshot` 单源一次加载 + 有界并发 + 异步 dotenvx，React 通过 TanStack Query 做 scope/profile 内存短期缓存；缓存不包含 reveal 值。
 - **安全模型升级**（短命会话 → 常驻但默认锁定）：
   - 面板随时可开，默认**锁定态**只显示键名/状态（names-only 基线不变）；
   - 值回显需显式解锁，沿用**逐键 reveal + 单值驻留**；

@@ -91,6 +91,14 @@ export interface PanelKey {
   inherited?: boolean
 }
 
+export interface ScopeSnapshot {
+  scope?: string
+  profile: string
+  legacy: boolean
+  sources: ProviderState[]
+  keys: PanelKey[]
+}
+
 export interface WriteTarget {
   key: string
   provider: string
@@ -101,6 +109,8 @@ export interface WriteTarget {
 export interface EditorState extends WriteTarget {
   mode: 'add' | 'update'
   value: string
+  /** Agent 输入请求附带的说明（仅展示，不落盘、不含值）。 */
+  reason?: string
 }
 
 export type PendingAction =

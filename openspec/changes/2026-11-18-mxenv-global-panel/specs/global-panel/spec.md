@@ -68,6 +68,36 @@
 - **WHEN** 外部 provider 键出现在 Keys 表
 - **THEN** 可 reveal，但不出现 set/delete 控件，直接调用远程写端点仍被拒绝
 
+### Requirement: 快照读取与短期缓存
+
+宿主 SHALL 提供 `GET /snapshot?scope=&profile=`，在一次来源加载中同时返回该范围的 names-only 键与供应商状态；`/keys` 与 `/wiring` SHALL 保持兼容。来源加载 SHALL 使用有界并发，dotenvx CLI 调用 SHALL 异步执行，单源失败 SHALL 不阻塞其他来源。
+
+面板 SHALL 以 scope/profile 隔离内存读缓存，fresh 快照 SHALL 在 60 秒内复用；写回或 Refresh SHALL 使受影响 scope 失效。缓存 SHALL NOT 持久化，也 SHALL NOT 保存 reveal 值、token 或编辑表单。
+
+#### Scenario: 切换范围不重复请求新鲜快照
+
+- **WHEN** 用户在 60 秒内从 Global 切换到项目再切回 Global
+- **THEN** 新鲜快照从对应 scope 的内存缓存复用，不重复加载上游，且不显示另一 scope 的键
+
+#### Scenario: 写回后读取新快照
+
+- **WHEN** 当前 scope 的 set/delete 或接线写成功
+- **THEN** 该 scope 的快照失效并重新加载，其他 scope 的缓存不被混入
+
+### Requirement: Agent 输入请求
+
+`mxenv gui request KEY [--scope] [--reason]` SHALL 生成指向面板的输入请求深链：URL SHALL 只携带键名与说明（≤200 字符），SHALL NOT 携带值；scope 未显式给定时 SHALL 解析为 cwd 对应项目（不可用时 global 并提示）。面板在解锁后 SHALL 打开预填该键的输入表单（已有键定位其来源；新键优先项目 local 源，全局 scope 用全局基线），提交走既有 unlock + 二次确认 + 无值审计；请求参数消费后 SHALL 从 URL 移除。锁定态 SHALL 仅展示提示，不出现任何值。无效键名或未登记 scope SHALL 拒绝退出 1。
+
+#### Scenario: Agent 请求经面板输入
+
+- **WHEN** Agent 以 `gui request API_TOKEN --reason "deploy needs it"` 打开面板且人类解锁后输入
+- **THEN** 值直达所选密钥源，审计不含值；URL 的 request/reason 参数在表单打开时被移除，刷新不再重开
+
+#### Scenario: 值不经过 Agent
+
+- **WHEN** 人类通过输入请求表单提交值
+- **THEN** 请求 URL、终端输出与审计都不包含该值；Agent 侧仅能通过 `run` 注入获得该键
+
 ### Requirement: 解锁窗口内的写回管理
 
 `POST /set`/`POST /delete` SHALL 仅在解锁窗口内且请求携带面板客户端标识头时执行，动作核 = L1 `edit-actions`（文件嗅探、文件序、审计构造）；适用面 = 全局基线与项目的 local/dotenvx 文件源及 os-keychain 已声明键；每个写动作 SHALL 记审计（`via: 'host'`，含 scope/key/action，不含值）。锁定态 SHALL 423、边界缺失 SHALL 403并审计。写端点 SHALL NOT 接受远程 provider（Infisical/Doppler）目标。

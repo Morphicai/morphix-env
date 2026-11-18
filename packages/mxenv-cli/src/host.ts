@@ -32,7 +32,6 @@ import {
   writeHostSession,
   type AuditEvent,
   type ConfigAction,
-  type LoadedSource,
   type PanelKeyInfo,
   type SourceEntry,
 } from '@morphixai/mxenv-core'
@@ -112,49 +111,55 @@ export function collectEntries(layers: { global: { config: { sources?: Record<st
   return entries
 }
 
-// ─── names-only 资源（GET /keys） ───────────────────────────────
+// ─── names-only 资源（GET /keys、/wiring、/snapshot） ───────────────
 
-/** 所有已配置来源都可枚举键名，包括 Infisical/Doppler 等远程 provider。
- * 与 /wiring 一样复用 L1 loadSource；响应只投影 key/source/provider，绝不返回值。
- * 单源不可用只省略该源行，其健康状态由 /wiring 的 error 卡片表达，不阻塞其他来源。 */
-async function collectKeys(entries: SourceEntry[], context: { homeDir: string; globalScope: boolean }): Promise<PanelKeyInfo[]> {
-  const rows: PanelKeyInfo[] = []
-  for (const entry of entries) {
+const PANEL_SOURCE_CONCURRENCY = 4
+
+async function mapConcurrent<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {
+  const output = new Array<R>(items.length)
+  let cursor = 0
+  const workers = Array.from({ length: Math.min(PANEL_SOURCE_CONCURRENCY, items.length) }, async () => {
+    while (true) {
+      const index = cursor++
+      if (index >= items.length) return
+      output[index] = await fn(items[index])
+    }
+  })
+  await Promise.all(workers)
+  return output
+}
+
+/** keys 与 wiring 共享一次来源加载；多文件来源按文件加载以保留 reveal 的 fileIndex。 */
+async function collectScopeSnapshot(scope: PanelScopeContext, homeDir: string) {
+  const parts = await mapConcurrent(scope.entries, async (entry) => {
     const source = entry.source
-    // 多文件来源逐文件枚举（fileIndex 与揭示的单文件作用域对称——同名跨文件不串读）。
     const files = 'files' in source ? source.files : undefined
-    const scopes: Array<number | undefined> = files && files.length > 1 ? files.map((_, i) => i) : [undefined]
-    for (const fileIndex of scopes) {
-      const scoped: SourceEntry =
-        fileIndex !== undefined && files
-          ? { ...entry, source: { ...source, files: [files[fileIndex]] } as SourceEntry['source'] }
-          : entry
-      let loaded: LoadedSource
+    const scopedEntries = files && files.length > 1
+      ? files.map((_, fileIndex) => ({ entry: { ...entry, source: { ...source, files: [files[fileIndex]] } as SourceEntry['source'] }, fileIndex }))
+      : [{ entry, fileIndex: undefined }]
+    const loaded = await Promise.all(scopedEntries.map(async ({ entry: scoped, fileIndex }) => {
       try {
-        loaded = await loadSource(scoped, { homeDir: context.homeDir, environment: {} })
+        return { result: await loadSource(scoped, { homeDir, environment: {} }), fileIndex, error: false }
       } catch {
-        continue // 来源不可用时不阻塞其余来源
+        return { result: null, fileIndex, error: true }
       }
-      for (const key of Object.keys(loaded.values)) {
+    }))
+    const rows: PanelKeyInfo[] = []
+    for (const item of loaded) {
+      if (!item.result) continue
+      for (const key of Object.keys(item.result.values)) {
         rows.push({
-          key,
-          source: entry.name,
-          provider: source.provider,
-          ...(!context.globalScope && entry.globalImplicit ? { inherited: true } : {}),
-          ...(fileIndex !== undefined ? { fileIndex } : {}),
-          status: 'present', // 枚举自存储实际键；配置声明而存储缺失的 missing 行留 B2 细化
+          key, source: entry.name, provider: source.provider,
+          ...(scope.id !== 'global' && entry.globalImplicit ? { inherited: true } : {}),
+          ...(item.fileIndex !== undefined ? { fileIndex: item.fileIndex } : {}),
+          status: 'present',
         })
       }
     }
-  }
-  return rows.sort((a, b) => a.key.localeCompare(b.key))
-}
-
-/** names/status-only 供应商读视图；健康检查在内存加载来源，只输出计数与状态。 */
-async function collectWiring(scope: PanelScopeContext, homeDir: string) {
-  const sources = []
-  for (const [order, entry] of scope.entries.entries()) {
-    const source = entry.source
+    const statuses = loaded.filter((item) => item.result).map((item) => item.result!.availability)
+    const status = loaded.some((item) => item.error) ? 'error'
+      : statuses.length && statuses.every((item) => item === 'missing-optional') ? 'missing-optional'
+        : statuses.length && statuses.every((item) => item === 'skipped') ? 'skipped' : 'loaded'
     const details: Record<string, unknown> = {}
     if (source.provider === 'infisical') {
       details.paths = source.paths
@@ -162,11 +167,7 @@ async function collectWiring(scope: PanelScopeContext, homeDir: string) {
       details.envPinned = Boolean(source.env)
       if (source.envPrefix) details.envPrefix = source.envPrefix
     } else if (source.provider === 'local' || source.provider === 'dotenvx') {
-      details.files = source.files.map((file) => ({
-        file,
-        exists: existsSync(resolve(entry.baseDir, file)),
-        encrypted: isDotenvxEncrypted(resolve(entry.baseDir, file)),
-      }))
+      details.files = source.files.map((file) => ({ file, exists: existsSync(resolve(entry.baseDir, file)), encrypted: isDotenvxEncrypted(resolve(entry.baseDir, file)) }))
     } else if (source.provider === 'os-keychain') {
       details.service = source.service
       details.keys = source.keys || []
@@ -179,31 +180,15 @@ async function collectWiring(scope: PanelScopeContext, homeDir: string) {
       details.plugin = source.plugin
       details.keys = source.keys
     }
-
-    let status = 'error'
-    let keyCount = 0
-    try {
-      const loaded = await loadSource(entry, { homeDir, environment: {} })
-      status = loaded.availability
-      keyCount = Object.keys(loaded.values).length
-    } catch {
-      // 不把 provider 原始错误透到 API：第三方 CLI 的 stderr 不属于可信安全边界。
-      status = 'error'
+    return {
+      source: {
+        name: entry.name, provider: source.provider, order: scope.entries.indexOf(entry), status,
+        keyCount: new Set(rows.map((row) => row.key)).size, override: Boolean(source.override), optional: Boolean(source.optional), details, config: source,
+      },
+      keys: rows,
     }
-    sources.push({
-      name: entry.name,
-      provider: source.provider,
-      order,
-      status,
-      keyCount,
-      override: Boolean(source.override),
-      optional: Boolean(source.optional),
-      details,
-      // 接线定义只含 provider 连接元数据；值从不存入或经此字段返回。
-      config: source,
-    })
-  }
-  return { legacy: scope.legacy, sources }
+  })
+  return { legacy: scope.legacy, sources: parts.map((part) => part.source), keys: parts.flatMap((part) => part.keys).sort((a, b) => a.key.localeCompare(b.key)) }
 }
 
 // ─── HTTP 面（Bearer token；reveal/unlock 需面板标记） ─────────────
@@ -349,7 +334,7 @@ export function createHostHandler(runtime: HostRuntime) {
 
     // 面板页：token-in-path 一次换 HTML。浏览器首访无 Bearer，
     // 故须在认证检查前精确匹配当前会话 token；错 token 与不存在路径同为 404。
-    const pageLikePath = /^\/[^/]+\/?$/.test(url.pathname) && !['/status', '/scopes', '/keys', '/wiring', '/doctor'].includes(url.pathname)
+    const pageLikePath = /^\/[^/]+\/?$/.test(url.pathname) && !['/status', '/scopes', '/keys', '/wiring', '/snapshot', '/doctor'].includes(url.pathname)
     if (req.method === 'GET' && pageLikePath) {
       if (url.pathname === `/${s.token}`) {
         // 规范化到尾斜杠，HTML 才能用不含 token 的相对资源 URL。
@@ -411,8 +396,8 @@ export function createHostHandler(runtime: HostRuntime) {
           send(res, 404, { error: 'unknown or unavailable scope' })
           return
         }
-        const wiring = await collectWiring(scope, runtime.homeDir)
-        send(res, 200, { scope: scope.id || undefined, profile: scope.profileName, legacy: wiring.legacy, sources: wiring.sources })
+        const snapshot = await collectScopeSnapshot(scope, runtime.homeDir)
+        send(res, 200, { scope: scope.id || undefined, profile: scope.profileName, legacy: snapshot.legacy, sources: snapshot.sources })
         return
       }
 
@@ -454,6 +439,17 @@ export function createHostHandler(runtime: HostRuntime) {
         return
       }
 
+      if (req.method === 'GET' && url.pathname === '/snapshot') {
+        const scope = scopeForRequest(runtime, url.searchParams.get('scope'), url.searchParams.get('profile'))
+        if (!scope) {
+          send(res, 404, { error: 'unknown or unavailable scope' })
+          return
+        }
+        const snapshot = await collectScopeSnapshot(scope, runtime.homeDir)
+        send(res, 200, { scope: scope.id || undefined, profile: scope.profileName, legacy: snapshot.legacy, sources: snapshot.sources, keys: snapshot.keys })
+        return
+      }
+
       if (req.method === 'GET' && url.pathname === '/keys') {
         const scopeId = url.searchParams.get('scope')
         const profile = url.searchParams.get('profile')
@@ -463,10 +459,11 @@ export function createHostHandler(runtime: HostRuntime) {
           return
         }
         // names-only：值只用于 presence 判定，不出响应（names-only 查询不记审计）
+        const snapshot = await collectScopeSnapshot(scope, runtime.homeDir)
         send(res, 200, {
           scope: scope.id || undefined,
           profile: scope.profileName,
-          keys: await collectKeys(scope.entries, { homeDir: runtime.homeDir, globalScope: scope.id === 'global' }),
+          keys: snapshot.keys,
         })
         return
       }

@@ -65,6 +65,41 @@ describe('mxenv-cli face', () => {
     }
   })
 
+  it('gui request builds an agent input-request URL and validates its inputs', { timeout: 15_000 }, async () => {
+    const home = join(tmpdir(), `mxenv-cli-gui-request-${randomUUID()}`)
+    const project = join(home, 'project')
+    mkdirSync(project, { recursive: true })
+    const env = { ...process.env, HOME: home, MX_ENV_NO_OPEN: '1' }
+    // 无 daemon 会话时 request 依赖附着分支起会话；键名校验在任何会话操作之前。
+    const invalidKey = spawnSync('node', [CLI, 'gui', 'request', '9BAD-KEY', '--print-editor-url'], { encoding: 'utf8', env, cwd: project })
+    expect(invalidKey.status).toBe(1)
+    expect(invalidKey.stderr).toContain('env-style key name')
+    const badScope = spawnSync('node', [CLI, 'gui', 'request', 'API_TOKEN', '--scope', 'cluster:prod', '--print-editor-url'], { encoding: 'utf8', env, cwd: project })
+    expect(badScope.status).toBe(1)
+    expect(badScope.stderr).toContain('--scope must be')
+    const unknownProject = spawnSync('node', [CLI, 'gui', 'request', 'API_TOKEN', '--scope', 'project:ghost', '--print-editor-url'], { encoding: 'utf8', env, cwd: project })
+    expect(unknownProject.status).toBe(1)
+    expect(unknownProject.stderr).toContain('not registered')
+
+    writeFileSync(join(project, 'mxenv.config.json'), JSON.stringify({
+      sources: { local: { provider: 'local', files: ['.env.local'], optional: true } },
+      profiles: { default: ['local'] }, defaultProfile: 'default',
+    }))
+    try {
+      const opened = spawnSync('node', [CLI, 'gui', 'request', 'API_TOKEN', '--reason', 'CI deploy needs the API token', '--print-editor-url'], { encoding: 'utf8', env, cwd: project })
+      expect(opened.status, opened.stderr).toBe(0)
+      const url = new URL(opened.stdout.trim())
+      expect(url.origin).toMatch(/^http:\/\/127\.0\.0\.1:/)
+      expect(url.searchParams.get('scope')).toBe('project:project')
+      expect(url.searchParams.get('request')).toBe('API_TOKEN')
+      expect(url.searchParams.get('reason')).toBe('CI deploy needs the API token')
+      // 面板页对请求 URL 同样返回 200（token-in-path 校验不变）。
+      expect((await fetch(url)).status).toBe(200)
+    } finally {
+      spawnSync('node', [CLI, 'gui', 'close'], { encoding: 'utf8', env })
+    }
+  })
+
   it('--version matches the package manifest', () => {
     const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as { version: string }
     expect(run(['--version']).trim()).toBe(manifest.version)

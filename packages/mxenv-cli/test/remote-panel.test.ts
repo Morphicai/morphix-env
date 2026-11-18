@@ -96,6 +96,17 @@ describe('remote provider key names and reveal', () => {
     expect(JSON.stringify(response.body)).not.toContain('mxenv_test_local')
   })
 
+  it('serves keys and wiring from one snapshot response', async () => {
+    const response = await api('/snapshot')
+    expect(response.status).toBe(200)
+    expect(response.body.keys.map((row: any) => row.key)).toEqual(['LOCAL_ONLY', 'REMOTE_ONLY', 'SHARED_REMOTE'])
+    expect(response.body.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'remote', provider: 'infisical', keyCount: 2 }),
+      expect.objectContaining({ name: 'local', provider: 'local', keyCount: 1 }),
+    ]))
+    expect(JSON.stringify(response.body)).not.toContain(sentinel)
+  })
+
   it('reveals one remote value only after unlock, audits without values, and never enables remote writes', async () => {
     expect((await api('/reveal', {
       method: 'POST', panel: true, body: { key: 'REMOTE_ONLY', source: 'remote' },

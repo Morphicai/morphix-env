@@ -55,6 +55,11 @@ export function EditorDialogs({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="my-5 space-y-4">
+              {editor?.reason && (
+                <p className="rounded-md border border-muted bg-muted/30 px-2.5 py-2 text-xs leading-5 text-muted-foreground">
+                  Agent request: {editor.reason}
+                </p>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="panel-key">Key</Label>
                 <Input
@@ -74,7 +79,7 @@ export function EditorDialogs({
                   type="password"
                   value={editor?.value ?? ''}
                   autoComplete="off"
-                  autoFocus={editor?.mode === 'update'}
+                  autoFocus={editor?.mode === 'update' || Boolean(editor?.reason)}
                   className="font-mono"
                   onChange={(event) => editor && onEditorChange({ ...editor, value: event.target.value })}
                 />

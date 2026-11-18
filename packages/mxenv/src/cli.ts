@@ -92,6 +92,10 @@ interface Args {
   daemon: boolean
   /** gui serve/install：固定端口（默认随机；固定=可预测端点，更大暴露面）。 */
   port: number | null
+  /** gui request：请求人类输入的键名所指向的 scope（global|project:<name>）。 */
+  scope: string | null
+  /** gui request：附带给人类的说明（仅经 URL 展示，不落盘、不含值）。 */
+  reason: string | null
   write: boolean
   remove: boolean
   warnPlaintext: boolean
@@ -107,7 +111,7 @@ function parseArgs(argv: string[]): Args {
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
     target: null, hermesCategory: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
-    daemon: false, port: null,
+    daemon: false, port: null, scope: null, reason: null,
     write: false, remove: false, warnPlaintext: false, help: false, unknownFlags: [],
   }
 
@@ -167,6 +171,10 @@ function parseArgs(argv: string[]): Args {
       args.serve = true
     } else if (arg === '--daemon') {
       args.daemon = true
+    } else if (arg === '--scope') {
+      if (argv[++i]) args.scope = argv[i]
+    } else if (arg === '--reason') {
+      if (argv[++i]) args.reason = argv[i]
     } else if (arg === '--port') {
       const raw = argv[++i]
       if (raw) {

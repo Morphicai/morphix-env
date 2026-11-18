@@ -51,6 +51,10 @@ interface Args {
   daemon: boolean
   /** gui serve/install：固定端口（默认随机；固定=可预测端点，更大暴露面）。 */
   port: number | null
+  /** gui request：请求人类输入的键名所指向的 scope（global|project:<name>）。 */
+  scope: string | null
+  /** gui request：附带给人类的说明（仅经 URL 展示，不落盘、不含值）。 */
+  reason: string | null
   write: boolean
   remove: boolean
   warnPlaintext: boolean
@@ -71,7 +75,7 @@ function parseArgs(argv: string[]): Args {
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
     target: null, hermesCategory: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
-    daemon: false, port: null,
+    daemon: false, port: null, scope: null, reason: null,
     write: false, remove: false, warnPlaintext: false, help: false, unknownFlags: [],
   }
 
@@ -131,6 +135,10 @@ function parseArgs(argv: string[]): Args {
       args.serve = true
     } else if (arg === '--daemon') {
       args.daemon = true
+    } else if (arg === '--scope') {
+      if (argv[++i]) args.scope = argv[i]
+    } else if (arg === '--reason') {
+      if (argv[++i]) args.reason = argv[i]
     } else if (arg === '--port') {
       const raw = argv[++i]
       if (raw) {
@@ -283,6 +291,11 @@ mxenv gui [status|close]   Open the machine-level React management panel;
                            values never leave this machine.
 mxenv gui edit [path]      Open a project directly in that panel; used by
                            the project-local \`mxenv edit\` shortcut.
+mxenv gui request KEY [--scope global|project:<name>]
+                           [--reason "why the agent needs it"]
+                           Ask the human to provide one secret through the
+                           panel; the value goes straight into the secret
+                           source, never through the agent or chat.
 mxenv gui install [--port N]
                            Install the resident daemon (launchd on macOS,
                            systemd --user on Linux): no session TTL, idle only
@@ -393,6 +406,8 @@ async function cmdGui(args: Args): Promise<number> {
   }
 
   let requestedScope = ''
+  let requestKey = ''
+  let requestReason = ''
   if (sub === 'edit') {
     const baseDir = resolve(args.positionals[1] || process.cwd())
     const layers = loadConfigLayers({ cwd: baseDir, homeDir })
@@ -408,15 +423,57 @@ async function cmdGui(args: Args): Promise<number> {
     }
     requestedScope = `project:${project.name}`
   }
+  if (sub === 'request') {
+    // Agent 输入请求：URL 只带键名与说明（不含值）。人类在面板里解锁后
+    // 输入，值直达密钥源，不经过 Agent、聊天或终端。
+    requestKey = args.positionals[1] || ''
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(requestKey)) {
+      console.error('[mxenv] gui request needs an env-style key name (letters, digits, underscore; no leading digit), e.g. `mxenv gui request API_TOKEN`.')
+      return 1
+    }
+    requestReason = (args.reason || '').slice(0, 200)
+    if (args.scope) {
+      if (args.scope === 'global') {
+        requestedScope = 'global'
+      } else if (args.scope.startsWith('project:')) {
+        const name = args.scope.slice('project:'.length)
+        if (!readProjectRegistry(homeDir).some((entry) => entry.name === name)) {
+          console.error(`[mxenv] Project "${name}" is not registered; run mxenv inside that project once, or pass --scope global.`)
+          return 1
+        }
+        requestedScope = args.scope
+      } else {
+        console.error('[mxenv] --scope must be "global" or "project:<name>".')
+        return 1
+      }
+    } else {
+      const baseDir = resolve(process.cwd())
+      if (isRegistryEligible(baseDir) && loadConfigLayers({ cwd: baseDir, homeDir }).project.exists) {
+        registerProject(baseDir, homeDir)
+        const project = readProjectRegistry(homeDir).find((entry) => entry.path === baseDir || entry.path === realpathSync(baseDir))
+        if (project) requestedScope = `project:${project.name}`
+      }
+      if (!requestedScope) {
+        requestedScope = 'global'
+        console.log('[mxenv] Current directory is not an mxenv project; the input request targets the global scope (pass --scope project:<name> to change).')
+      }
+    }
+  }
   const openSession = (session: { port: number; token: string }) => {
     const query = new URLSearchParams()
     if (requestedScope) query.set('scope', requestedScope)
     if (args.profile) query.set('profile', args.profile)
+    if (requestKey) {
+      query.set('request', requestKey)
+      if (requestReason) query.set('reason', requestReason)
+    }
     const suffix = query.toString() ? `?${query.toString()}` : ''
     const url = `http://127.0.0.1:${session.port}/${session.token}/${suffix}`
     if (args.printEditorUrl) console.log(url)
     else {
-      console.log(requestedScope ? '[mxenv] Opened the project in the local management panel.' : '[mxenv] Opened local management panel in your browser.')
+      console.log(requestKey
+        ? `[mxenv] Opened an input request for ${requestKey} in the local management panel.`
+        : requestedScope ? '[mxenv] Opened the project in the local management panel.' : '[mxenv] Opened local management panel in your browser.')
       openInBrowser(url)
     }
   }
