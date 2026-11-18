@@ -3,14 +3,15 @@
  * 是"这台机器被 mxenv 托管过的项目"的诚实清单——**登记而非发现**（不扫盘）。
  *
  * - 登记时机：项目级 run/edit 首次成功组合后幂等登记（registerProject）。
- * - 资格线：目录内存在 `.mxenv/` 或 package.json 带 `mxenv` 字段（现代/legacy
- *   接线都算"被托管"）；一次性 CI/临时目录不进表。
+ * - 资格线：目录内存在项目接线层——`mxenv.config.json`（现代/legacy 字段都
+ *   算"被托管"）或 `.mxenv/` 目录；一次性 CI/临时目录不进表。
  * - `lastSeenAt` 每次组合刷新，写节流 60s（同路径短时间重复 run 不重复写盘）。
  * - `MXENV_NO_PROJECT_REGISTRY=1` 全局旁路（读返回空清单，写直接跳过）。
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { basename, join, resolve } from 'path'
+import { CONFIG_FILE } from './contracts'
 
 export interface ProjectRegistryEntry {
   /** 显示名 = basename(path)；路径不同重名时加后缀 -2/-3… */
@@ -51,15 +52,10 @@ export function readProjectRegistry(homeDir = homedir()): ProjectRegistryEntry[]
   return readEntries(registryPath(homeDir))
 }
 
-/** 目录是否有托管资格：`.mxenv/` 存在，或 package.json 带 `mxenv` 字段。 */
+/** 目录是否有托管资格：存在项目接线层——`mxenv.config.json`（主）或 `.mxenv/` 目录。 */
 export function isRegistryEligible(baseDir: string): boolean {
-  if (existsSync(join(baseDir, '.mxenv'))) return true
-  try {
-    const pkg = JSON.parse(readFileSync(join(baseDir, 'package.json'), 'utf8')) as { mxenv?: unknown }
-    return pkg.mxenv != null
-  } catch {
-    return false
-  }
+  if (existsSync(join(baseDir, CONFIG_FILE))) return true
+  return existsSync(join(baseDir, '.mxenv'))
 }
 
 /** 同名不同路径时取未占用的后缀名（demo → demo-2 → demo-3…）。 */

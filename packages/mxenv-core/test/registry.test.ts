@@ -83,16 +83,20 @@ describe('mxenv-core registry（global-panel D1）', () => {
     }
   })
 
-  it('资格线：无 .mxenv/ 且无 package.json mxenv 字段的目录不登记', () => {
-    // projectA 保持裸目录（mkdtemp 出来的空目录）
-    expect(isRegistryEligible(projectA)).toBe(false)
-    registerProject(projectA, home) // registerProject 本身不设防（调用方先查资格），但埋点侧有 isRegistryEligible 门
-    // legacy 接线也算托管：package.json 带 mxenv 字段
-    writeFileSync(join(projectB, 'package.json'), JSON.stringify({ name: 'legacy', mxenv: { infisical: { paths: [] } } }))
+  it('资格线：mxenv.config.json（现代/legacy 字段）与 .mxenv/ 目录算托管，裸目录不算', () => {
+    expect(isRegistryEligible(projectA)).toBe(false) // 裸目录
+    // legacy 字段形态的 mxenv.config.json 也算（接线层存在即托管过）
+    writeFileSync(join(projectB, 'mxenv.config.json'), JSON.stringify({ infisical: { paths: ['/ai'] } }))
     expect(isRegistryEligible(projectB)).toBe(true)
-    // package.json 无 mxenv 字段不算
-    writeFileSync(join(projectA, 'package.json'), JSON.stringify({ name: 'plain' }))
-    expect(isRegistryEligible(projectA)).toBe(false)
+    writeFileSync(join(projectA, 'mxenv.config.json'), JSON.stringify({ sources: {} }))
+    expect(isRegistryEligible(projectA)).toBe(true)
+    const plain = mkdtempSync(join(tmpdir(), 'plain-'))
+    try {
+      writeFileSync(join(plain, 'package.json'), JSON.stringify({ name: 'plain' }))
+      expect(isRegistryEligible(plain)).toBe(false) // package.json 不是接线层
+    } finally {
+      try { rmSync(plain, { recursive: true, force: true }) } catch { /* 幂等 */ }
+    }
   })
 
   it('removeProject：按 name 或绝对路径移除，幂等；清空即删文件', () => {
