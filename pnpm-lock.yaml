@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@morphixai/mxenv-core':
-        specifier: workspace:*
+        specifier: ^0.18.0
         version: link:packages/mxenv-core
     devDependencies:
       '@dotenvx/dotenvx':
