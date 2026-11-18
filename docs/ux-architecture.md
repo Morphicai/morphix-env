@@ -137,7 +137,7 @@ flowchart TB
 | 波次 | 内容 | 备注 |
 |---|---|---|
 | **A 命名与品牌基础** ✅ 已完成 | 改名全切（含 `mxenv://`，同步 Trellis W2 change 文案）+ 三包拆分（`mxenv` / `mxenv-cli` / `mxenv-core`）+ LICENSE/SECURITY | 三个 change 已归档，0.13.x–0.15.0 发布 |
-| **B 常驻 host + 面板** 🟡 核心交互已落地 | daemon、React 多范围面板、供应商读/接线编辑、审计 `configPath`、reveal/write API、注册视图 | 0.14.0 会话式面板 + revealSingle；0.17.0 常驻（`gui install`，launchd/systemd，空闲只锁不关）；React 多范围、项目键写回、doctor 单源、P2.5 接线 diff/指纹/0600 备份回滚与 `edit` 深链接已在本机 Edge 验收；远程访问已按用户裁决落地为 `--expose` 直连（同一面板、显式暴露、远程动作远程审计）；不可达旧 editor 资产清理仍在后续项 |
+| **B 常驻 host + 面板** 🟡 核心交互已落地 | daemon、React 多范围面板、供应商读/接线编辑、审计 `configPath`、reveal/write API、注册视图 | 0.14.0 会话式面板 + revealSingle；0.17.0 常驻（`gui install`，launchd/systemd，空闲只锁不关）；React 多范围、项目键写回、doctor 单源、P2.5 接线 diff/指纹/0600 备份回滚与 `edit` 深链接已在本机 Edge 验收；远程访问已按用户裁决落地为 `--expose` 直连（同一面板、显式暴露、远程动作远程审计）；0.18.0 汇集发布（面板全套+性能快照+Agent 输入请求+--expose）；不可达旧 editor 资产清理仍在后续项 |
 | **C 开源收尾 + 1.0** 🟡 大半完成 | 新 icon（SVG 源 + favicon + 单色版）、README 重排、gitleaks 历史扫描、blog 收编 | icon/README/blog 宣传正文已完成（2026-11-17）；gitleaks 历史扫描与 CONTRIBUTING/issue 模板挂账 |
 
 ## 五、决策记录
