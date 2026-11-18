@@ -32,11 +32,13 @@ editor.ts 的白名单 set/delete（含 dotenvx 嗅探、文件序、审计、`s
 
 端口：默认随机 + runtime.json 发现（现有模型，安全默认）；`--port` 显式固定仅服务远程/自动化场景，文档钉"固定端口=更大的本机暴露面，仅在理解后使用"。
 
-### D6 远程：契约先行，SSH 隧道零新密码学
+### D6 远程：打开远程机的网页，经 gui 管理（用户 2026-11-18 定向）
 
-远程主机管理的最小诚实形态：**同一套宿主 API，经 SSH 端口转发到达**。`~/.mxenv/remotes.json`（0600）登记 `{name, host, port=7654?, transport:'ssh'}`（远程侧 `gui install --port` 固定端口 + 隧道 `ssh -L 17654:127.0.0.1:<port>`）。面板远程范围的 token 获取 = 首次连接触发远程 `mxenv gui attach --print-url`（经 SSH 执行）——token 不落 remotes.json（每会话短生命周期，与本地宿主同纪律）。
+远程主机管理的形态（用户定向）：**本地面板列出远程 → 点开即起 `ssh -L` 隧道 → 浏览器打开远程机自己的面板网页**——同一套 UI 与宿主 API 跑在远程机上，管理动作全部在远程面板内完成，本地不做数据聚合/中转（值永不离开远程机的 loopback → 隧道 → 本地浏览器的这条直线）。
 
-不做：云 relay、mTLS、面板直连公网。值红线在远程路径不变（names-only 默认、unlock 窗口、审计落远程本机 `~/.mxenv/audit/`——远程动作远程记账，本机不中转值）。
+`~/.mxenv/remotes.json`（0600）只存 `{name, host, port=7654?, transport:'ssh'}`（远程侧 `gui install --port` 固定端口）。打开远程时本地经 SSH 执行远程 `mxenv gui attach --print-url` 取一次性 URL——token 不落 remotes.json（每会话短生命周期，与本地宿主同纪律），隧道进程随面板会话结束而拆。
+
+不做：云 relay、mTLS、面板直连公网、本地面板内嵌远程数据。值红线在远程路径不变（names-only 默认、unlock 窗口、审计落远程本机 `~/.mxenv/audit/`——远程动作远程记账，本机不中转值）。
 
 ## 风险
 

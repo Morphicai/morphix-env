@@ -11,7 +11,7 @@
 - **多范围读**：宿主 API 扩 `GET /scopes`（全局+项目清单）与按范围参数化的 `/keys?scope=global|project:<name>`（项目读在宿主进程内经 L1 以 `baseDir` 切换，不 spawn）。
 - **写回（管理面）**：解锁窗口内 `POST /set|/delete`（本地文件 / dotenvx 重加密 / 全局基线 `~/.mxenv/.env`）；动作语义 = 编辑器既有白名单 set/delete，核心从 L2 editor 提取为 L1 能力（`edit-actions`）供 L2/L3 双消费，审计并轨 `via: 'host'`。远程 provider（Infisical/Doppler）写回**不在本 change**（= remote-source 真编辑，独立 change）。
 - **常驻模式（additive）**：`mxenv gui install|uninstall` 生成 launchd（macOS）/ systemd --user（Linux）单元；常驻会话 TTL 无限、空闲仍默认锁定、unlock 窗口语义不变、`close` 仍可终。端口默认随机（runtime.json 发现），`--port` 可选固定（远程/自动化用）。
-- **远程管理（契约先行）**：`~/.mxenv/remotes.json` 登记 `{name, host, port?, transport: 'ssh'}`；面板把远程范围经 SSH 隧道（`ssh -L`，零新密码学）指向**同一套宿主 API**。本 change 交付：远程登记 + 面板侧范围切换 + 隧道指令提示；云端 relay / mTLS 后置。
+- **远程管理（打开远程网页）**：`~/.mxenv/remotes.json` 登记 `{name, host, port?, transport: 'ssh'}`；本地面板点远程 → 起 SSH 隧道 → 浏览器打开**远程机自己的面板网页**（同一 UI/宿主 API 跑在远程，管理动作全在远程面板内完成；值不聚合回本机）。token 经 SSH attach 获取、不落盘；远程动作在远程本机审计。云 relay / mTLS 后置。
 
 ## Capabilities
 

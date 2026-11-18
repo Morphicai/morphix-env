@@ -30,10 +30,11 @@
 - [ ] `gui install|uninstall`：launchd plist / systemd --user 单元生成、装载、卸载；`--port` 可选固定；install 输出安全摘要
 - [ ] 测试：单元文件生成快照、daemon 语义（空闲→locked 非 closed）
 
-## 5. 远程范围（契约先行）
+## 5. 远程范围（打开远程网页管理）
 
-- [ ] remotes.json 消费：面板远程侧栏 + `ssh -L` 隧道指令展示 + 远程 attach（经 SSH 取一次性 URL，token 不落盘）
-- [ ] guide：远程机管理节（install --port + 隧道 + attach 流程 + 值红线在远程路径的语义）
+- [ ] `mxenv remote add/list/remove`：登记 `{name, host, port?, transport:'ssh'}` 到 remotes.json（0600）
+- [ ] 本地面板远程侧栏：点远程 → 起 `ssh -L` 隧道 → 经 SSH 执行远程 `mxenv gui attach --print-url` 取 URL → 浏览器打开**远程机自己的面板网页**；token 不落本机盘，隧道随会话拆
+- [ ] guide：远程机管理节（远程 `gui install --port` + 本地登记 + 打开流程 + 值红线在远程路径的语义：远程动作远程审计）
 
 ## 6. 文档与收口
 
