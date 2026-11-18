@@ -24,6 +24,7 @@ import {
   StreamingRedactor,
   stripShimsFromPath,
   suppressLegacyHomeHint,
+  sourceLabel,
   validateShimList,
   writeAudit,
   type ComposeOptions,
@@ -262,7 +263,7 @@ function warnSkippedSources(composition: EnvironmentComposition, noInfisical: bo
   )
   for (const source of skipped) {
     const reason = source.detail ? ` — ${source.detail}` : ''
-    console.warn(`[mxenv] Warning: source "${source.name}" (${source.provider}) was skipped${reason}; its keys are NOT in this environment.`)
+    console.warn(`[mxenv] Warning: source "${sourceLabel(source.name)}" (${source.provider}) was skipped${reason}; its keys are NOT in this environment.`)
   }
 }
 
@@ -303,7 +304,7 @@ function warnUnpinnedInfisicalEnv(composition: EnvironmentComposition, args: Arg
     const via = pin.resolvedVia === 'cli-env' ? '--env/-e'
       : pin.resolvedVia === 'deploy-env' ? 'DEPLOY_ENV'
       : 'INFISICAL_ENV'
-    console.warn(`[mxenv] Warning: Infisical source "${pin.name}" has no pinned env (this run resolved "${pin.env}" via ${via}); declare "env" on the source — runs without --env/-e fail closed.`)
+    console.warn(`[mxenv] Warning: Infisical source "${sourceLabel(pin.name)}" has no pinned env (this run resolved "${pin.env}" via ${via}); declare "env" on the source — runs without --env/-e fail closed.`)
   }
 }
 
@@ -460,7 +461,7 @@ async function cmdRun(args: Args): Promise<number> {
   warnUnpinnedInfisicalEnv(composition, args)
   if (args.verbose) {
     for (const source of composition.sourceStatuses) {
-      console.log(`[mxenv] ${source.name}: ${source.availability}${source.detail ? ` (${source.detail})` : ''} (${source.keyCount} keys)`)
+      console.log(`[mxenv] ${sourceLabel(source.name)}: ${source.availability}${source.detail ? ` (${source.detail})` : ''} (${source.keyCount} keys)`)
     }
   }
   if (args.dryRun) {
@@ -576,12 +577,12 @@ async function cmdInspect(args: Args): Promise<number> {
     const envMark = source.provider === 'infisical' && envPins.has(source.name)
       ? ` [${envPinLabel(envPins.get(source.name)!)}]`
       : ''
-    console.log(`source: ${source.name} (${source.provider}) — ${source.availability}${detailMark}, ${source.keyCount} keys${plaintextMark}${envMark}`)
+    console.log(`source: ${sourceLabel(source.name)} (${source.provider}) — ${source.availability}${detailMark}, ${source.keyCount} keys${plaintextMark}${envMark}`)
   }
   for (const [key, provenance] of Object.entries(composition.provenance).sort(([a], [b]) => a.localeCompare(b))) {
     if (!args.filter || key.startsWith(args.filter)) {
-      const overridden = provenance.overriddenSources.length ? `; overrides ${provenance.overriddenSources.join(', ')}` : ''
-      console.log(`  ${key} — ${provenance.source} (${provenance.provider})${overridden}`)
+      const overridden = provenance.overriddenSources.length ? `; overrides ${provenance.overriddenSources.map(sourceLabel).join(', ')}` : ''
+      console.log(`  ${key} — ${sourceLabel(provenance.source)} (${provenance.provider})${overridden}`)
     }
   }
   return 0
@@ -628,11 +629,11 @@ async function cmdDoctor(args: Args): Promise<number> {
   }
   for (const pin of pins) {
     if (pin.pinned) {
-      add('ok', `Infisical env 钉定: "${pin.name}" → ${pin.env}（配置声明）`)
+      add('ok', `Infisical env 钉定: "${sourceLabel(pin.name)}" → ${pin.env}（配置声明）`)
     } else if (pin.resolvedVia) {
-      add('warn', `Infisical env 未钉定: "${pin.name}" 本次经 ${pin.resolvedVia === 'cli-env' ? '--env/-e' : pin.resolvedVia} 解析为 "${pin.env}"——换台机器/换个 shell 可能不再解析，建议声明 "env" 或统一走显式 --env/-e`)
+      add('warn', `Infisical env 未钉定: "${sourceLabel(pin.name)}" 本次经 ${pin.resolvedVia === 'cli-env' ? '--env/-e' : pin.resolvedVia} 解析为 "${pin.env}"——换台机器/换个 shell 可能不再解析，建议声明 "env" 或统一走显式 --env/-e`)
     } else {
-      add('warn', `Infisical env 未钉定: "${pin.name}" 且无 --env/INFISICAL_ENV/DEPLOY_ENV——裸 run 将 fail-closed 拒绝（0.15.0+ 设计预期；显式传 --env/-e 或声明 "env" 均可）`)
+      add('warn', `Infisical env 未钉定: "${sourceLabel(pin.name)}" 且无 --env/INFISICAL_ENV/DEPLOY_ENV——裸 run 将 fail-closed 拒绝（0.15.0+ 设计预期；显式传 --env/-e 或声明 "env" 均可）`)
     }
   }
 
@@ -649,13 +650,13 @@ async function cmdDoctor(args: Args): Promise<number> {
       if (source.availability === 'loaded') {
         const plaintext = source.provider === 'local' && source.keyCount > 0
         add(plaintext ? 'warn' : 'ok',
-          `source "${source.name}" (${source.provider}) — loaded, ${source.keyCount} keys${detail}${plaintext ? ' [plaintext, dev-only] — 跑 mxenv migrate 迁入加密存储' : ''}`)
+          `source "${sourceLabel(source.name)}" (${source.provider}) — loaded, ${source.keyCount} keys${detail}${plaintext ? ' [plaintext, dev-only] — 跑 mxenv migrate 迁入加密存储' : ''}`)
       } else if (source.availability === 'missing-optional') {
-        add('ok', `source "${source.name}" (${source.provider}) — missing-optional${detail}（可选文件缺失，正常）`)
+        add('ok', `source "${sourceLabel(source.name)}" (${source.provider}) — missing-optional${detail}（可选文件缺失，正常）`)
       } else if (source.availability === 'skipped' && source.detail === 'disabled by --no-infisical') {
-        add('ok', `source "${source.name}" (${source.provider}) — skipped (--no-infisical)`)
+        add('ok', `source "${sourceLabel(source.name)}" (${source.provider}) — skipped (--no-infisical)`)
       } else {
-        add('fail', `source "${source.name}" (${source.provider}) — ${source.availability}${detail || ' (无原因)'}：其 key 不在组合环境中`)
+        add('fail', `source "${sourceLabel(source.name)}" (${source.provider}) — ${source.availability}${detail || ' (无原因)'}：其 key 不在组合环境中`)
       }
     }
     const collisions = highCollisionValueKeys(composition.environment, composition.provenance)

@@ -154,7 +154,7 @@ describe('mxenv run', () => {
     writeFileSync(join(TMP, '.env.local'), 'MXTEST_VERB=value-not-visible\n')
 
     const out = run(['run', '-v', '--', 'node', '-e', 'console.log("done")'])
-    expect(out).toContain('__mx_default_local: loaded (1 keys)')
+    expect(out).toContain('local files: loaded (1 keys)')
     expect(out).not.toContain('MXTEST_VERB')
     expect(out).not.toContain('value-not-visible')
   })
@@ -209,15 +209,15 @@ describe('mxenv inspect', () => {
     writeFileSync(join(TMP, '.env.local'), `MXTEST_SECRET=${longValue}\nMXTEST_SHORT=${shortValue}\n`)
 
     const out = run(['inspect'])
-    expect(out).toContain('MXTEST_SECRET — __mx_default_local (local)')
-    expect(out).toContain('MXTEST_SHORT — __mx_default_local (local)')
+    expect(out).toContain('MXTEST_SECRET — local files (local)')
+    expect(out).toContain('MXTEST_SHORT — local files (local)')
     expect(out).not.toContain(longValue)
     expect(out).not.toContain(shortValue)
   })
 
   it('文件不存在时显示 source 缺失状态', () => {
     const out = run(['inspect', '-f', '.env.nonexistent'])
-    expect(out).toContain('__mx_default_local (local) — missing-optional, 0 keys')
+    expect(out).toContain('local files (local) — missing-optional, 0 keys')
   })
 })
 
@@ -239,7 +239,7 @@ describe('plaintext marking and optional reminder', () => {
   it('inspect 对 local 明文源追加 [plaintext, dev-only] 标识', () => {
     writeFileSync(join(TMP, '.env.local'), `MXTEST_MARK=${testValue('mark')}\n`)
     const out = run(['inspect'])
-    expect(out).toContain('__mx_default_local (local) — loaded, 1 keys [plaintext, dev-only]')
+    expect(out).toContain('local files (local) — loaded, 1 keys [plaintext, dev-only]')
   })
 
   it('inspect 不标记 dotenvx 源', () => {
@@ -592,7 +592,7 @@ describe('mxenv doctor', () => {
     writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({ infisical: { paths: ['/ai'], env: 'dev' } }))
     const res = runCapture(['doctor', '--no-infisical'])
     expect(res.status).toBe(0)
-    expect(res.stdout).toContain('[ok] Infisical env 钉定: "__mx_legacy_infisical" → dev')
+    expect(res.stdout).toContain('[ok] Infisical env 钉定: "Infisical (legacy)" → dev')
   })
 
   it('短值高碰撞 key 点名但不回显值', () => {
@@ -641,6 +641,6 @@ describe('inspect env 钉定标注与告警', () => {
     expect(res.stdout).toContain('[env: dev (via --env, unpinned)]')
     expect(res.stderr).toContain('no pinned env')
     expect(res.stderr).toContain('fail closed')
-    expect(res.stderr).toContain('__mx_legacy_infisical')
+    expect(res.stderr).toContain('Infisical (legacy)')
   })
 })

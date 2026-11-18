@@ -185,6 +185,30 @@ export function infisicalEnvPins(
 }
 
 /**
+ * Prefix reserving source names for mxenv's auto-generated sources. Declaring
+ * a source with this prefix is a config error — it would collide with
+ * implicit sources (`__mx_global_dotenv` et al) in provenance and statuses.
+ */
+export const INTERNAL_SOURCE_PREFIX = '__mx'
+
+const INTERNAL_SOURCE_LABELS: Record<string, string> = {
+  __mx_global_dotenv: 'global baseline',
+  __mx_default_local: 'local files',
+  __mx_default_dotenvx: 'dotenvx files',
+  __mx_legacy_infisical: 'Infisical (legacy)',
+  __mx_cli_local_override: 'env-file override',
+}
+
+/**
+ * Human-facing label for a source name. Internal `__mx*` identifiers never
+ * print raw: they are stable machine keys, not prose. User-declared names
+ * pass through unchanged.
+ */
+export function sourceLabel(name: string): string {
+  return INTERNAL_SOURCE_LABELS[name] ?? name
+}
+
+/**
  * Returns human-readable validation problems without echoing provider values.
  * Provider credentials deliberately have no place in the declared schema.
  */
@@ -194,6 +218,9 @@ export function validateConfig(config: MxEnvConfig, label = CONFIG_FILE): string
 
   for (const [name, source] of Object.entries(sources)) {
     if (!name.trim()) errors.push(`${label}: source names cannot be empty`)
+    if (name.startsWith(INTERNAL_SOURCE_PREFIX)) {
+      errors.push(`${label}: source names starting with "${INTERNAL_SOURCE_PREFIX}" are reserved for mxenv's implicit sources`)
+    }
     if (!source || typeof source !== 'object' || !('provider' in source)) {
       errors.push(`${label}: source "${name}" must declare a provider`)
       continue

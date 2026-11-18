@@ -207,7 +207,7 @@ describe('项目装即完整可用（验收口径①）', () => {
     // provenance 各归其源
     const inspect = runCli(['inspect']).output
     expect(inspect).toContain('MXTEST_PI_GKEY')
-    expect(inspect).toContain('__mx_global_dotenv')
+    expect(inspect).toContain('global baseline')
     expect(inspect).toContain('MXTEST_PI_PKEY')
     expect(inspect).toContain('local (local)')
     expect(inspect).toContain('MXTEST_PI_UKEY')

@@ -109,7 +109,9 @@ describe('mxenv-core/contracts 入口', () => {
       'GLOBAL_CONFIG_DIR',
       'GLOBAL_CONFIG_FILE',
       'GLOBAL_ENV_FILE',
+      'INTERNAL_SOURCE_PREFIX',
       'LEGACY_INFISICAL_SOURCE',
+      'sourceLabel',
       'StreamingRedactor',
       'collectRedactionValues',
       'findMxEnvReferences',
@@ -144,6 +146,8 @@ describe('mxenv-core/contracts 入口', () => {
 
 import {
   collectRedactionValues,
+  sourceLabel,
+  validateConfig,
   highCollisionValueKeys,
   type KeyProvenance,
 } from '../src/contracts'
@@ -218,5 +222,21 @@ describe('infisicalEnvPins', () => {
 
   it('空配置返回空数组', () => {
     expect(infisicalEnvPins({}, { processEnv: {} })).toEqual([])
+  })
+})
+
+describe('internal source naming (user-facing)', () => {
+  it('rejects source names that claim the reserved __mx prefix', () => {
+    const errors = validateConfig({
+      sources: { '__mx_default_local': { provider: 'local', files: ['.env'] } },
+    })
+    expect(errors.some((e) => e.includes('reserved'))).toBe(true)
+  })
+
+  it('sourceLabel maps internal ids to prose and passes user names through', () => {
+    expect(sourceLabel('__mx_global_dotenv')).toBe('global baseline')
+    expect(sourceLabel('__mx_default_local')).toBe('local files')
+    expect(sourceLabel('__mx_legacy_infisical')).toBe('Infisical (legacy)')
+    expect(sourceLabel('team')).toBe('team')
   })
 })
