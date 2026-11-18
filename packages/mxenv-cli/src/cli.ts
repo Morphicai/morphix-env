@@ -15,7 +15,7 @@ import {
 import { spawn } from 'child_process'
 import { collectEntries, hostLockState, hostStatus, startHostSession } from './host'
 import { installDaemon, uninstallDaemon, installSummary } from './daemon'
-import { clearHostSession, readHostSession, releaseHostLock } from '@morphixai/mxenv-core'
+import { clearHostSession, globalBaselineEntry, readHostSession, releaseHostLock } from '@morphixai/mxenv-core'
 import pkg from '../package.json'
 
 const VERSION = pkg.version
@@ -366,12 +366,17 @@ async function cmdGui(args: Args): Promise<number> {
       return 1
     }
     const layers = loadConfigLayers({ homeDir })
+    // 面板=机器级视图：隐式全局基线（~/.mxenv/.env，未在 config 声明）必须
+    // 在列——collectEntries 只收声明源，基线用与组合共享的 globalBaselineEntry
+    // 构造（嗅探明文/加密，与 compose 的加载路径一致）。
+    const baseline = globalBaselineEntry(layers)
+    const entries = [...(baseline ? [baseline] : []), ...collectEntries(layers)]
     let started: Awaited<ReturnType<typeof startHostSession>>
     try {
       started = await startHostSession({
         homeDir,
         cwd: process.cwd(),
-        entries: collectEntries(layers),
+        entries,
         daemon: args.daemon,
         port: args.port ?? undefined,
       })

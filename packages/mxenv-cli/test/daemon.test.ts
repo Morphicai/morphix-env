@@ -10,6 +10,7 @@ import {
   uninstallDaemon,
   daemonKind,
   installSummary,
+  resolveCliBin,
   LAUNCHD_LABEL,
   launchdPlistPath,
   systemdUnitPath,
@@ -235,6 +236,74 @@ describe('daemon host semantics', () => {
         startHostSession({ homeDir: mkdtempSync(join(tmpdir(), 'mxenv-daemon-test-')), cwd: home, daemon: true, port, entries: [] }),
       ).rejects.toThrow()
       await first.runtime.close()
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('daemon environment generality (no reliance on the installing shell)', () => {
+  it('builders embed envVars dict — launchd EnvironmentVariables', () => {
+    const plist = buildLaunchdPlist({
+      homeDir: '/Users/t',
+      program: PROGRAM,
+      envVars: { PATH: '/usr/local/bin:/opt/homebrew/bin', MXENV_DOTENVX_BIN: '/Users/t/.volta/bin/dotenvx' },
+    })
+    expect(plist).toContain('<key>EnvironmentVariables</key>')
+    expect(plist).toContain('<string>/usr/local/bin:/opt/homebrew/bin</string>')
+    expect(plist).toContain('<string>/Users/t/.volta/bin/dotenvx</string>')
+    expect(plist).not.toMatch(/token/i)
+  })
+
+  it('builders embed envVars — systemd Environment= lines', () => {
+    const unit = buildSystemdUnit({ program: PROGRAM, envVars: { PATH: '/a:/b', MXENV_DOTENVX_BIN: '/home/u/.local/bin/dotenvx' } })
+    expect(unit).toContain('Environment="PATH=/a:/b"')
+    expect(unit).toContain('Environment="MXENV_DOTENVX_BIN=/home/u/.local/bin/dotenvx"')
+  })
+
+  it('builders omit the env block entirely when nothing to pin', () => {
+    expect(buildLaunchdPlist({ homeDir: '/Users/t', program: PROGRAM })).not.toContain('EnvironmentVariables')
+    expect(buildSystemdUnit({ program: PROGRAM })).not.toContain('Environment=')
+  })
+
+  it('resolveCliBin takes the first absolute which hit; null on miss', () => {
+    const ok: RunFn = () => ({ status: 0, stdout: '/Users/t/.volta/bin/dotenvx\n', stderr: '' })
+    expect(resolveCliBin('dotenvx', ok)).toBe('/Users/t/.volta/bin/dotenvx')
+    const miss: RunFn = () => ({ status: 1, stdout: '', stderr: 'not found' })
+    expect(resolveCliBin('dotenvx', miss)).toBeNull()
+    const relative: RunFn = () => ({ status: 0, stdout: 'dotenvx\n', stderr: '' })
+    expect(resolveCliBin('dotenvx', relative)).toBeNull()
+  })
+
+  it('installDaemon pins dotenvx via which and keeps PATH as fallback', () => {
+    const home = tempHome()
+    try {
+      const base = fakeRun()
+      const run: RunFn = (file, args) => {
+        if (file === 'which' && args[0] === 'dotenvx') return { status: 0, stdout: '/Users/t/.volta/bin/dotenvx\n', stderr: '' }
+        return base.run(file, args)
+      }
+      installDaemon({ homeDir: home, platform: 'darwin', run, program: PROGRAM })
+      const plist = readFileSync(launchdPlistPath(home), 'utf8')
+      expect(plist).toContain('<key>MXENV_DOTENVX_BIN</key>')
+      expect(plist).toContain('<string>/Users/t/.volta/bin/dotenvx</string>')
+      if (process.env.PATH) expect(plist).toContain('<key>PATH</key>')
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('installDaemon survives without dotenvx installed (PATH-only unit)', () => {
+    const home = tempHome()
+    try {
+      const base = fakeRun()
+      const run: RunFn = (file, args) => {
+        if (file === 'which') return { status: 1, stdout: '', stderr: 'not found' }
+        return base.run(file, args)
+      }
+      installDaemon({ homeDir: home, platform: 'darwin', run, program: PROGRAM })
+      const plist = readFileSync(launchdPlistPath(home), 'utf8')
+      expect(plist).not.toContain('MXENV_DOTENVX_BIN')
     } finally {
       rmSync(home, { recursive: true, force: true })
     }

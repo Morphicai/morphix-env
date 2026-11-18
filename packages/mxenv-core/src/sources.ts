@@ -142,6 +142,19 @@ async function resolveInfisical(entry: SourceEntry, source: InfisicalSource, con
 }
 
 export function ensureCommand(command: string, sourceName: string, provider: SecretSource['provider']): string {
+  // 显式钉定优先：MXENV_<COMMAND>_BIN（如 MXENV_DOTENVX_BIN / MXENV_DOPPLER_BIN）。
+  // 面向宿主/守护场景（launchd/systemd 环境无用户 PATH）与 Nix/受限 PATH 安装；
+  // 钉定失效则继续常规解析，最终不可用时报错并列出该环境变量。
+  const override = process.env[`MXENV_${command.toUpperCase().replace(/-/g, '_')}_BIN`]
+  if (override) {
+    try {
+      execFileSync(override, ['--version'], { stdio: ['ignore', 'ignore', 'ignore'] })
+      return override
+    } catch {
+      // 钉定路径失效（版本管理器升级后镜像目录迁移等）——落到常规解析，
+      // 全部失败时错误信息带上钉定线索。
+    }
+  }
   const localBinary = resolve(process.cwd(), 'node_modules', '.bin', command)
   try {
     if (existsSync(localBinary)) {
@@ -161,7 +174,8 @@ export function ensureCommand(command: string, sourceName: string, provider: Sec
     } catch {
       // Fall through to the value-free availability error below.
     }
-    throw new SourceError(sourceName, provider, `[mxenv] ${provider} source "${sourceName}" requires the ${command} CLI.`)
+    const pinnedHint = override ? ` The pinned ${`MXENV_${command.toUpperCase().replace(/-/g, '_')}_BIN`} (${override}) is no longer executable; re-pin or unset it.` : ''
+    throw new SourceError(sourceName, provider, `[mxenv] ${provider} source "${sourceName}" requires the ${command} CLI.${pinnedHint}`)
   }
 }
 

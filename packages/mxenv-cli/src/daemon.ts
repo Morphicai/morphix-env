@@ -10,6 +10,7 @@
  *   只活在 runtime.json（0600）。
  */
 import { spawnSync } from 'child_process'
+import * as os from 'os'
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, realpathSync, chmodSync } from 'fs'
 import { dirname, join } from 'path'
 import { clearHostSession, readHostSession, releaseHostLock } from '@morphixai/mxenv-core'
@@ -49,11 +50,19 @@ export function systemdUnitPath(homeDir: string): string {
 /**
  * 守护进程的启动命令：解析当前 CLI 入口为绝对稳定路径。
  * - 入口是可执行 shim（volta/bin 等）→ 直接执行（shim 自带解释器定位）；
- * - 入口是 .js/.cjs → 前缀当前 node（process.execPath）。
+ * - 入口是 .js/.cjs → 前缀当前 node（process.execPath）；
+ * - npx 缓存入口（_npx / 临时目录）拒绝安装——缓存即焚，装进去的单元
+ *   下次清理就变悬空指针，这是"各种安装情况"里唯一必须硬拒的形态。
  */
 export function daemonProgram(): string[] {
   let entry = process.argv[1] || ''
   entry = realpathSync(entry)
+  const tmp = typeof os.tmpdir === 'function' ? os.tmpdir() : '/tmp'
+  if (entry.includes(`/_npx/`) || (tmp && entry.startsWith(tmp))) {
+    throw new Error(
+      `[mxenv] cannot install a daemon from an ephemeral entry (${entry}). Install the CLI persistently first (npm i -g mxenv-cli, or from your repo checkout), then run gui install again.`,
+    )
+  }
   if (/\.(js|cjs|mjs)$/.test(entry)) {
     chmodSync(entry, 0o755) // node 直跑需可执行位（launchd/systemd 不走 shell）
     return [process.execPath, entry]
@@ -61,11 +70,44 @@ export function daemonProgram(): string[] {
   return [entry]
 }
 
+/**
+ * 安装时解析外部 CLI 的稳定绝对路径（which，不追 realpath：volta shim
+ * ~/.volta/bin/dotenvx 跨 node 版本稳定，而 realpath 会落进带版本号的
+ * image 目录，升级即失效）。解析不到 → 不钉定，靠 PATH 兜底并在摘要提示。
+ */
+export function resolveCliBin(command: string, run: RunFn = defaultRun): string | null {
+  if (process.platform === 'win32') return null
+  const r = run('which', [command])
+  const out = (r.stdout || '').trim().split('\n').filter(Boolean)
+  if (r.status === 0 && out.length && out[0].startsWith('/')) return out[0]
+  return null
+}
+
+/** 守护环境需要的组合：PATH 兜底（未来 shell-out 型 provider/插件）+ 可钉定的外部 CLI。 */
+export function daemonEnvVars(run: RunFn = defaultRun): Record<string, string> {
+  const env: Record<string, string> = {}
+  if (process.env.PATH) env.PATH = process.env.PATH
+  const dotenvx = resolveCliBin('dotenvx', run)
+  if (dotenvx) env.MXENV_DOTENVX_BIN = dotenvx
+  return env
+}
+
 /** launchd plist（XML；RunAtLoad+KeepAlive=常驻；日志进 ~/.mxenv/host/）。 */
-export function buildLaunchdPlist(options: { homeDir: string; program: string[]; port?: number }): string {
+export function buildLaunchdPlist(options: { homeDir: string; program: string[]; port?: number; envVars?: Record<string, string> }): string {
   const args = [...options.program, 'gui', 'serve', '--daemon']
   if (options.port) args.push('--port', String(options.port))
   const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  // launchd 环境的 PATH 是系统默认（/usr/bin:/bin:...）——volta/nvm/homebrew
+  // 装的 dotenvx 等 CLI 解析不到。通用化处理：不猜环境，把安装时确定的
+  // 事实钉进单元（MXENV_*_BIN 显式钉定 + PATH 兜底），换工具链后重跑
+  // `gui install` 即刷新。
+  const envVars = options.envVars && Object.keys(options.envVars).length
+    ? `  <key>EnvironmentVariables</key>
+  <dict>
+${Object.entries(options.envVars).map(([k, v]) => `    <key>${esc(k)}</key>\n    <string>${esc(v)}</string>`).join('\n')}
+  </dict>
+`
+    : ''
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -76,7 +118,7 @@ export function buildLaunchdPlist(options: { homeDir: string; program: string[];
   <array>
 ${args.map((a) => `    <string>${esc(a)}</string>`).join('\n')}
   </array>
-  <key>RunAtLoad</key>
+${envVars}  <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
@@ -92,18 +134,22 @@ ${args.map((a) => `    <string>${esc(a)}</string>`).join('\n')}
 }
 
 /** systemd --user 单元（Restart=always=常驻）。 */
-export function buildSystemdUnit(options: { program: string[]; port?: number }): string {
+export function buildSystemdUnit(options: { program: string[]; port?: number; envVars?: Record<string, string> }): string {
   const exec = [...options.program, 'gui', 'serve', '--daemon']
   if (options.port) exec.push('--port', String(options.port))
   // systemd 单元值里的空格需转义（ExecStart 逐词切分）
   const execLine = exec.map((a) => (a.includes(' ') ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ')
+  // 同 launchd：守护环境无用户 PATH——安装时钉定（MXENV_*_BIN + PATH 兜底）。
+  const envLines = options.envVars
+    ? Object.entries(options.envVars).map(([k, v]) => `Environment="${k}=${String(v).replace(/"/g, '\\"')}"`).join('\n') + '\n'
+    : ''
   return `[Unit]
 Description=mxenv panel host (daemon)
 After=network.target
 
 [Service]
 ExecStart=${execLine}
-Restart=always
+${envLines}Restart=always
 
 [Install]
 WantedBy=default.target
@@ -130,7 +176,7 @@ export function installDaemon(options: {
   if (kind === 'launchd') {
     const plist = launchdPlistPath(options.homeDir)
     mkdirSync(dirname(plist), { recursive: true })
-    writeFileSync(plist, buildLaunchdPlist({ homeDir: options.homeDir, program, port: options.port }), { mode: 0o644 })
+    writeFileSync(plist, buildLaunchdPlist({ homeDir: options.homeDir, program, port: options.port, envVars: daemonEnvVars(run) }), { mode: 0o644 })
     const guiDomainTarget = guiDomain()
     // 已装载的旧实例先卸（幂等重装）
     run('launchctl', ['bootout', `${guiDomainTarget}/${LAUNCHD_LABEL}`])
@@ -147,7 +193,7 @@ export function installDaemon(options: {
 
   const unit = systemdUnitPath(options.homeDir)
   mkdirSync(dirname(unit), { recursive: true })
-  writeFileSync(unit, buildSystemdUnit({ program, port: options.port }), { mode: 0o644 })
+  writeFileSync(unit, buildSystemdUnit({ program, port: options.port, envVars: daemonEnvVars(run) }), { mode: 0o644 })
   run('systemctl', ['--user', 'daemon-reload'])
   const enable = run('systemctl', ['--user', 'enable', '--now', SYSTEMD_UNIT])
   if (enable.status !== 0) {

@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
-import { composeEnvironment, CompositionError } from '../src/composition'
+import { composeEnvironment, CompositionError, globalBaselineEntry, GLOBAL_DOTENV_SOURCE } from '../src/composition'
 import { loadConfigLayers, validateConfig } from '../src/config'
 import { ReferenceResolver } from '../src/refs'
 
@@ -236,5 +236,39 @@ describe('issue #9 F5: prototype-pollution-safe value maps', () => {
     expect((result.environment as Record<string, string>)['__proto__']).toBe('poison')
     expect(result.environment.SAFE).toBe('ok')
     expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+})
+
+describe('globalBaselineEntry (panel/composition shared construction)', () => {
+  it('plaintext global baseline → local provider; null when absent', () => {
+    const p = paths('baseline-plain')
+    try {
+      write(join(p.home, '.mxenv', '.env'), `A=${value('a')}\n`)
+      const layers = loadConfigLayers({ homeDir: p.home, cwd: p.project })
+      const entry = globalBaselineEntry(layers)
+      expect(entry?.name).toBe(GLOBAL_DOTENV_SOURCE)
+      expect(entry?.source.provider).toBe('local')
+      expect(entry?.globalImplicit).toBe(true)
+      // 未创建全局文件的家目录 → null（面板不显示幽灵来源）
+      const empty = paths('baseline-missing')
+      try {
+        expect(globalBaselineEntry(loadConfigLayers({ homeDir: empty.home, cwd: empty.project }))).toBeNull()
+      } finally {
+        rmSync(empty.home, { recursive: true, force: true })
+      }
+    } finally {
+      rmSync(p.home, { recursive: true, force: true })
+    }
+  })
+
+  it('encrypted global baseline (migrate --to dotenvx) → dotenvx provider', () => {
+    const p = paths('baseline-enc')
+    try {
+      write(join(p.home, '.mxenv', '.env'), `A="encrypted:${value('a')}"\nDOTENV_PUBLIC_KEY="__mx_pbk__"\n`)
+      const entry = globalBaselineEntry(loadConfigLayers({ homeDir: p.home, cwd: p.project }))
+      expect(entry?.source.provider).toBe('dotenvx')
+    } finally {
+      rmSync(p.home, { recursive: true, force: true })
+    }
   })
 })

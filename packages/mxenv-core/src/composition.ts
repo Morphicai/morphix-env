@@ -15,6 +15,7 @@ import {
   type SourceStatus,
   validateConfig,
 } from './contracts'
+import { existsSync } from 'fs'
 import { isDotenvxEncrypted } from './env'
 import { loadSource, type SourceEntry } from './sources'
 
@@ -135,6 +136,25 @@ function configProblems(layers: ConfigLayers, includeGlobal: boolean): string[] 
   ]
 }
 
+/**
+ * 机器级隐式全局基线（~/.mxenv/.env，`__mx_global_dotenv`）：组合链与
+ * 面板/宿主共享同一构造——嗅探文件形态（明文 local / 加密 dotenvx），
+ * 文件不存在返回 null。migrate --to dotenvx 原地加密不改 config，靠这里
+ * 的嗅探保持加载路径正确（design decision 2）。
+ */
+export function globalBaselineEntry(layers: ConfigLayers): SourceEntry | null {
+  if (!existsSync(layers.globalEnvFile)) return null
+  const encrypted = isDotenvxEncrypted(layers.globalEnvFile)
+  return {
+    name: GLOBAL_DOTENV_SOURCE,
+    source: encrypted
+      ? { provider: 'dotenvx', files: [layers.globalEnvFile], optional: true }
+      : { provider: 'local', files: [layers.globalEnvFile], optional: true },
+    baseDir: layers.global.baseDir,
+    globalImplicit: true,
+  }
+}
+
 function resolveEntries(layers: ConfigLayers, options: ComposeOptions): { name: string; entries: SourceEntry[] } {
   const includeGlobal = !options.noGlobal
   const errors = configProblems(layers, includeGlobal)
@@ -151,15 +171,8 @@ function resolveEntries(layers: ConfigLayers, options: ComposeOptions): { name: 
   // Sniff the global implicit file: after `mxenv migrate --to dotenvx` it is
   // encrypted in place and must load through the dotenvx provider — no config
   // change is involved (design decision 2).
-  const globalEncrypted = isDotenvxEncrypted(layers.globalEnvFile)
-  const globalDotenv: SourceEntry[] = includeGlobal ? [{
-    name: GLOBAL_DOTENV_SOURCE,
-    source: globalEncrypted
-      ? { provider: 'dotenvx', files: [layers.globalEnvFile], optional: true }
-      : { provider: 'local', files: [layers.globalEnvFile], optional: true },
-    baseDir: layers.global.baseDir,
-    globalImplicit: true,
-  }] : []
+  const baseline = globalBaselineEntry(layers)
+  const globalDotenv: SourceEntry[] = includeGlobal && baseline ? [baseline] : []
   const explicitProfile = options.profile || null
   const projectDefault = layers.project.config.defaultProfile
   const globalDefault = includeGlobal ? layers.global.config.defaultProfile : undefined
