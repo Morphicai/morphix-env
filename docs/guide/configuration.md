@@ -101,3 +101,7 @@ Default file discovery matches dotenv conventions: with no `envFiles` declared, 
 - `~/.mx-env/` still reads until you run `mxenv migrate --home` (see [Commands → migrate --home](./commands.md#migrate---home)).
 - `mx-env://profile/KEY` references are rejected with a rename hint.
 - Keychain services named `mx-env:<source>` keep working — the name is carried in config, nothing to migrate.
+
+## Project registry
+
+The first successful `mxenv run` / `mxenv edit` composition in a wired project (a `.mxenv/` directory or a `package.json` `mxenv` field) registers the project in `~/.mxenv/projects.json` (0600) — this is the machine's honest list of "projects managed by mxenv" that the panel enumerates. Registration is idempotent (same path never duplicates; `lastSeenAt` refreshes are write-throttled to once per minute). Set `MXENV_NO_PROJECT_REGISTRY=1` to opt out entirely (reads return an empty list, writes are skipped).

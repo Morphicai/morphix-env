@@ -38,6 +38,15 @@
 - **WHEN** `GET /keys?scope=project:demo`
 - **THEN** 仅返回 demo 项目声明的源与键名；全局基线键不出现（它们属 `scope=global`）
 
+### Requirement: 供应商读视图（providers as first-class）
+
+面板 SHALL 把密钥供应商实例作为一等对象展示（全局与各项目范围）：每源显示 provider 类型、连接/健康状态、Infisical env 钉定状态、dotenvx 文件形态（加密/明文）、os-keychain service 与声明键、Doppler/plugin 同理。供应商视图 SHALL 为 names/status-only（无值）。接线编辑（增删改源、改钉定、写 config.json）SHALL NOT 属本 change（见 `provider-wiring-edit` change）。
+
+#### Scenario: 供应商状态可见、接线不可改
+
+- **WHEN** 面板查看某项目的供应商视图
+- **THEN** 可见每源类型/健康/env 钉定/文件形态；不提供任何修改接线的入口（编辑属 provider-wiring-edit）
+
 ### Requirement: 解锁窗口内的写回管理
 
 `POST /set`/`POST /delete` SHALL 仅在解锁窗口内且请求携带面板客户端标识头时执行，动作核 = L1 `edit-actions`（文件嗅探、文件序、审计构造）；适用面 = 全局基线与项目的 local/dotenvx 文件源；每个写动作 SHALL 记审计（`via: 'host'`，含 scope/key/action，不含值）。锁定态或边界缺失 SHALL 403 并审计。写端点 SHALL NOT 接受远程 provider（Infisical/Doppler）目标。

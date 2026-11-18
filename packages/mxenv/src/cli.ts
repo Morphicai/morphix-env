@@ -33,6 +33,8 @@ import {
   type InfisicalEnvPin,
   type MxEnvConfig,
   type UnresolvedReference,
+  isRegistryEligible,
+  registerProject,
 } from '@morphixai/mxenv-core'
 import { launchEditor, startEditorServer } from './editor'
 import {
@@ -237,6 +239,18 @@ function resolveComposition(args: Args): Promise<EnvironmentComposition> {
   const layers = configLayers()
   warnInvalidShims(layers, !args.noGlobal)
   return composeEnvironment(layers, composeOptions(args))
+}
+
+/**
+ * 项目注册表埋点（global-panel D1）：项目级 run/edit 成功组合后幂等登记到
+ * `~/.mxenv/projects.json`（仅当目录有 .mxenv/ 或 package.json mxenv 字段）。
+ * 注册表故障不得影响 run/edit —— try/catch 静默兜底。
+ */
+function registerCurrentProject(): void {
+  try {
+    const layers = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
+    if (isRegistryEligible(layers.project.baseDir)) registerProject(layers.project.baseDir)
+  } catch { /* 登记而非前置条件（D1） */ }
 }
 
 /**
@@ -468,6 +482,7 @@ async function cmdRun(args: Args): Promise<number> {
   }
   const startedAt = Date.now()
   const composition = await resolveComposition(args)
+  registerCurrentProject()
   warnPlaintextSources(composition, args)
   warnSkippedSources(composition, Boolean(args.noInfisical))
   warnHighCollisionValues(composition)
@@ -826,6 +841,7 @@ async function cmdEdit(args: Args): Promise<number> {
   // Bare `mxenv edit` opens the default composition (the implicit global on
   // config-less machines); --profile/--source narrow the scope.
   const composition = await resolveComposition(args)
+  registerCurrentProject()
   if (args.source && !composition.sourceEntries.some((entry) => entry.name === args.source)) {
     const layers = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
     const declared = layers.project.config.sources?.[args.source]

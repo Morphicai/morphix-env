@@ -2,15 +2,16 @@
 
 ## 1. L1 能力（mxenv-core）
 
-- [ ] `projects.json` 注册表：读/幂等登记（name 冲突后缀）/ lastSeenAt 节流写 / remove / prune / `MXENV_NO_PROJECT_REGISTRY` 旁路；0600
+- [x] `projects.json` 注册表：读/幂等登记（name 冲突后缀）/ lastSeenAt 节流写 / remove / prune / `MXENV_NO_PROJECT_REGISTRY` 旁路；0600（mxenv-core/src/registry.ts；8 例 registry.test.ts）
+- [x] run/edit 首次成功组合登记埋点（仅当目录存在 .mxenv/ 或 package.json mxenv 字段；cli.ts registerCurrentProject；L2 3 例集成测试）
 - [ ] `remotes.json`：登记/删除/列出；0600
 - [ ] `edit-actions` 提取：从 L2 editor.ts 抽白名单 set/delete 动作核（dotenvx 嗅探、文件序、审计事件构造）；L2 `edit` 改为消费之（行为零变化，既有编辑器测试护航）
-- [ ] run/edit 首次成功组合登记埋点（仅当目录存在 .mxenv/ 或 config 层）
-- [ ] 测试：注册表幂等/节流/prune、edit-actions 与编辑器行为等价
+- [ ] 测试：edit-actions 与编辑器行为等价（注册表幂等/节流/prune 已随 registry.test.ts 落地）
 
 ## 2. L3 宿主 API 扩展（mxenv-cli）
 
 - [ ] `GET /scopes`：全局 + projects.json 清单 + remotes.json 清单
+- [ ] `GET /wiring?scope=`：源接线与供应商状态（provider 类型/健康/Infisical env 钉定/dotenvx 文件形态/keychain service+keys；names/status only，无接线编辑——见 provider-wiring-edit change）
 - [ ] `/keys?scope=`：`global` / `project:<name>`（baseDir 进程内切换）；无效 scope 404
 - [ ] `POST /set` `/delete`：unlock 窗口门禁 + `x-mxenv-panel` 边界 + edit-actions 执行 + 审计 `via:'host'`；全局基线与项目 local/dotenvx 文件
 - [ ] 静态 UI 服务：`GET /{token}/` token-in-path 校验 → panel bundle；token 失效即 404（与 API 同纪律）
@@ -23,6 +24,7 @@
 - [ ] 键表：names-only、来源/Provider 列、组合顺序标注；解锁按钮 → 窗口内 reveal（单键、点击复制）
 - [ ] set/delete 对话框（值输入 type=password、二次确认、审计提示文案）
 - [ ] doctor 摘要卡片（scope 级）
+- [ ] 供应商状态卡片：每源类型/健康/env 钉定/文件形态（读视图，接线编辑属 provider-wiring-edit）
 
 ## 4. 常驻模式
 

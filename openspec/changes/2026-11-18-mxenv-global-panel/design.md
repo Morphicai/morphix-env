@@ -14,7 +14,7 @@ mxenv 至今无机器级项目清单——组合是 cwd 驱动的无状态行为
 
 面板 UI 由 **L3 宿主服务**（`GET /{token}/` token-in-path 一次性换 HTML，bundle 内嵌 token 转 Bearer，后续 API 带 `x-mxenv-panel: 1`）。资产 = mxenv-cli 自有 `panel-ui/`（构建期由 scripts 打包，技术栈与 L2 editor-ui 同源——React+shadcn 复用组件拷贝，非运行时依赖）。**不破产品包零依赖纪律**：L3 不 import L2，静态资产不是依赖。
 
-`mxenv edit` 保持现状（一次性、项目态、深链接直达单源编辑页）——编辑器是"改这一处"，面板是"看全局+管一切"，两形态并存不合并。
+`mxenv edit` 本 change 保持现状（一次性、项目态、深链接直达单源编辑页）。**终态（用户 2026-11-18 定向）：编辑器并入管理面板**——`edit` 退化为"打开面板的项目范围编辑"快捷入口，编辑成为面板的一个形态而非平行工具；合并排在面板 v1（读+值写回）稳定后，属 `provider-wiring-edit` change 的收口项。
 
 ### D3 项目读：进程内 baseDir 切换，不 spawn
 

@@ -644,3 +644,39 @@ describe('inspect env 钉定标注与告警', () => {
     expect(res.stderr).toContain('Infisical (legacy)')
   })
 })
+
+describe('项目注册表埋点（global-panel D1）', () => {
+  it('run 成功组合登记项目到 ~/.mxenv/projects.json（0600）；无接线目录不登记', () => {
+    mkdirSync(join(TMP, '.mxenv'), { recursive: true }) // 现代接线目录
+    writeFileSync(join(TMP, '.env.local'), 'REG_TEST=1\n')
+    run(['run', '--', 'node', '-e', 'process.exit(0)'])
+    const reg = JSON.parse(readFileSync(join(TMP, 'home', '.mxenv', 'projects.json'), 'utf8'))
+    expect(reg.projects).toHaveLength(1)
+    expect(reg.projects[0].path).toBe(require('fs').realpathSync(TMP))
+    const { statSync } = require('fs') as typeof import('fs')
+    expect(statSync(join(TMP, 'home', '.mxenv', 'projects.json')).mode & 0o777).toBe(0o600)
+    // 再 run：幂等（60s 节流窗口内不新增）
+    run(['run', '--', 'node', '-e', 'process.exit(0)'])
+    expect(JSON.parse(readFileSync(join(TMP, 'home', '.mxenv', 'projects.json'), 'utf8')).projects).toHaveLength(1)
+    rmSync(join(TMP, '.mxenv'), { recursive: true, force: true })
+    unlinkSync(join(TMP, '.env.local'))
+  })
+
+  it('MXENV_NO_PROJECT_REGISTRY=1 全局旁路', () => {
+    rmSync(join(TMP, 'home', '.mxenv', 'projects.json'), { force: true }) // 前例遗留
+    mkdirSync(join(TMP, '.mxenv'), { recursive: true })
+    writeFileSync(join(TMP, '.env.local'), 'REG_TEST=1\n')
+    run(['run', '--', 'node', '-e', 'process.exit(0)'], { MXENV_NO_PROJECT_REGISTRY: '1' })
+    expect(existsSync(join(TMP, 'home', '.mxenv', 'projects.json'))).toBe(false)
+    rmSync(join(TMP, '.mxenv'), { recursive: true, force: true })
+    unlinkSync(join(TMP, '.env.local'))
+  })
+
+  it('裸目录（无 .mxenv/ 无 package.json mxenv 字段）不登记', () => {
+    rmSync(join(TMP, 'home', '.mxenv', 'projects.json'), { force: true }) // 前例遗留
+    writeFileSync(join(TMP, '.env.local'), 'REG_TEST=1\n')
+    run(['run', '--', 'node', '-e', 'process.exit(0)'])
+    expect(existsSync(join(TMP, 'home', '.mxenv', 'projects.json'))).toBe(false)
+    unlinkSync(join(TMP, '.env.local'))
+  })
+})
