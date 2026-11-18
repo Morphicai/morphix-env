@@ -36,7 +36,6 @@ import {
   isRegistryEligible,
   registerProject,
 } from '@morphixai/mxenv-core'
-import { startEditorServer } from './editor'
 import {
   discoverPlaintextUnits,
   executeUnit,
@@ -1125,7 +1124,7 @@ Usage:
   mxenv migrate --home                  Move the global directory ~/.mx-env → ~/.mxenv (verified, timestamped backup)
   mxenv doc [options]                    Generate a value-free project Skill
   mxenv audit [tail]                     Read value-free local audit events
-  mxenv edit [--profile|--source <name>] Open the visual editor (15-min session)
+  mxenv edit [--profile|--source <name>] Open the management panel scoped to this project
   mxenv skill install [--target <t>]     Install the Agent Skill (global|project|trellis|hermes)
   mxenv skill show                       Show skill install status per target
 
@@ -1199,15 +1198,10 @@ async function main(): Promise<number> {
   }
 }
 
-if (process.argv[2] === '__mx_editor') {
-  startEditorServer(process.argv[3])
-    .catch(() => { process.exitCode = 1 })
-} else {
-  main()
-    .then((code) => { process.exitCode = code })
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : '[mxenv] Failed to compose environment.'
-      console.error(message)
-      process.exitCode = 1
-    })
-}
+main()
+  .then((code) => { process.exitCode = code })
+  .catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : '[mxenv] Failed to compose environment.'
+    console.error(message)
+    process.exitCode = 1
+  })

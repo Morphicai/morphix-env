@@ -5,7 +5,5 @@ dist/
 .env.local
 .env.keys
 *.tgz
-src/editor-ui/generated/
-packages/mxenv/src/editor-ui/generated/
 packages/mxenv-cli/src/panel-ui/generated/
 tmp/

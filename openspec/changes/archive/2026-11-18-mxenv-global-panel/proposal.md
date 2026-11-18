@@ -30,4 +30,4 @@
 - **mxenv**（跟随）: `edit` 改为消费 L1 `edit-actions`（行为不变）；项目登记埋点。
 - **运行时目录**: `~/.mxenv/projects.json`（0600）、`~/.mxenv/host/runtime.json`（0600，新增 `bind` 字段）。
 - **测试面**: 宿主 API 集成（临时 HOME + 假 token）扩 scopes/write；注册表幂等；单元文件生成快照；全门护航。
-- **非目标**: 远程 provider 写回（remote-source editing，独立 change）；云 relay/mTLS；Windows 自启；移动端。
+- **非目标**: 远程 provider 写回（remote-source editing——2026-11-19 用户裁决**永不实施**：远程值一律在供应商自己的管理后台编辑，mxenv 面板对远程源保持只读 names + 解锁后 reveal）；云 relay/mTLS；Windows 自启；移动端。

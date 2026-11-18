@@ -14,7 +14,7 @@ mxenv's security story is a set of narrow, auditable surfaces — not a cryptogr
 - `inspect` — key names, source provenance, availability
 - `audit` — names, outcomes, exit codes, channels (`cli` / `shim` / `host`), config path
 - the packaged Agent Skill and `mxenv doc` output
-- editor and panel listings; error messages (provider stderr is never surfaced because it may contain sensitive material)
+- panel listings; error messages (provider stderr is never surfaced because it may contain sensitive material)
 - `migrate` plans and reports
 
 ## Output redaction (`run`)
@@ -42,7 +42,7 @@ mxenv's security story is a set of narrow, auditable surfaces — not a cryptogr
 
 ## Value reveal: one key, one resident, one audit line
 
-Every "show me this value" surface (editor, panel) goes through a single core capability, `revealSingle`:
+Every "show me this value" surface (panel) goes through a single core capability, `revealSingle`:
 
 - one key at a time, on explicit request
 - one resident value per session slot — revealing a new key evicts the previous one; short residence TTL; explicit release on close

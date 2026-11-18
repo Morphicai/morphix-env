@@ -28,6 +28,6 @@
 
 ## 非目标
 
-- 远程 provider 值写回（Infisical/Doppler 云端编辑 = remote-source editing，独立 change）。
+- 远程 provider 值写回（2026-11-19 用户裁决不做：远程值在供应商自己的管理后台编辑，面板对远程源只读）。
 - 全局配置（`~/.mxenv/config.json`）的面板编辑（先项目侧；全局侧接线变更更低频，CLI 兜底）。
 - Windows 自启/移动端。

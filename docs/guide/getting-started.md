@@ -73,7 +73,7 @@ Create `~/.mxenv/.env` (chmod 600) for machine-wide defaults. It joins every run
 Values are edited by you in the browser, never through the terminal or an agent:
 
 ```bash
-npx mxenv edit                 # session-based local editor (loopback + 15 min TTL)
+npx mxenv edit                 # open the management panel scoped to this project
 ```
 
 Browse key names per source, reveal a stored value one key at a time on explicit request, add/edit/delete keys, switch sources. Remote sources route to their provider's own UI. On macOS the editor opens automatically; the URL is not printed unless `--print-editor-url`.

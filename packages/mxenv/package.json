@@ -38,10 +38,10 @@
     "access": "public"
   },
   "scripts": {
-    "build": "node scripts/build-editor-ui.mjs && tsup && node scripts/copy-skill.mjs",
-    "dev": "node scripts/build-editor-ui.mjs && tsup --watch",
+    "build": "tsup && node scripts/copy-skill.mjs",
+    "dev": "tsup --watch",
     "test": "pnpm --filter @morphixai/mxenv-core build && pnpm build && vitest run",
-    "typecheck": "pnpm --filter @morphixai/mxenv-core build && node scripts/build-editor-ui.mjs && tsc --noEmit && tsc --noEmit -p tsconfig.editor-ui.json",
+    "typecheck": "pnpm --filter @morphixai/mxenv-core build && tsc --noEmit",
     "prepublishOnly": "node ../../scripts/prepublish-guard.mjs"
   },
   "dependencies": {

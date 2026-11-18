@@ -16,14 +16,14 @@ import { LEGACY_GLOBAL_CONFIG_DIR } from './global-home'
 /**
  * Names a shim may never take: every CLI subcommand of either CLI, all bin
  * names (new primary `mxenv` plus the deprecated aliases kept during 0.12.x),
- * and the internal editor entry. Kept in one place; the shim tests
+ * entries. Kept in one place; the shim tests
  * assert parity with the dispatch tables in both cli.ts files so future
  * commands cannot drift past it.
  */
 export const RESERVED_SHIM_NAMES = [
   'run', 'fetch', 'export', 'render', 'inject', 'generate', 'gen',
   'inspect', 'doctor', 'migrate', 'audit', 'edit', 'doc', 'skill', 'shell-init', 'help',
-  'mxenv', 'mx-env', 'morphix-env', '__mx_editor',
+  'mxenv', 'mx-env', 'morphix-env',
   // Wave B placeholders reserved by mxenv-cli (dispatch labels exist, not implemented).
   'gui', 'global', 'host',
 ]

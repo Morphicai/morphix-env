@@ -56,7 +56,7 @@ function printNextSteps(): void {
   console.log(`[mxenv] Next steps:
   1. mxenv inspect                        check this project's config and resolved key names
   2. create mxenv.config.json if absent   see the skill's configuration section (source wiring only, no values)
-  3. mxenv edit --profile <name>          let the user fill values in the local visual editor
+  3. mxenv edit --profile <name>          open the management panel prefilled for this project (values via unlock)
   4. mxenv doc                            generate this project's key-to-source workflow Skill`)
 }
 

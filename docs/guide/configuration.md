@@ -20,7 +20,7 @@ Both share the same schema. The global layer can be excluded per run with `--no-
 
 ## sources
 
-Each entry maps a name to a provider declaration. The name is how profiles reference the source, and how `inspect`, `audit`, and the editor identify it.
+Each entry maps a name to a provider declaration. The name is how profiles reference the source, and how `inspect`, `audit`, and the panel identify it.
 
 | Provider | Fields | Notes |
 |---|---|---|

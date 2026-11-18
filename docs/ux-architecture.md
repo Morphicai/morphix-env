@@ -24,7 +24,7 @@
 |---|---|---|
 | 1 | **项目中安装即可正常使用**：可定制上游（sources 按项目任选编排 provider 与 profile）；可用全局变量，也可用项目级 `env.local` 文件，两者并用 | `mxenv` 项目包独立完整（零机器态）；组合语义：`process.env` → 全局库 → 项目 sources（含 local `env.local`）→ `-f` override；无配置项目默认吃全局库 |
 | 2 | **全局 CLI 是增强体验**：更好地管理全局环境变量/密钥，支持可视化管理 | 全局 CLI 叠加管理命令（全局库 list/add/edit/reveal/delete）+ GUI；项目级能力不缩水，装全局只做加法 |
-| 3 | **CLI 带 GUI 能力**：GUI 随全局 CLI 分发，一条命令进入可视化管理 | GUI **不独立发包**，作为全局 CLI 内置模块（沿用 editor-ui 打进 CLI dist 的现有模式）；`mxenv gui` 启动 |
+| 3 | **CLI 带 GUI 能力**：GUI 随全局 CLI 分发，一条命令进入可视化管理 | GUI **不独立发包**，作为全局 CLI 内置模块（panel-ui 构建链打进 CLI dist）；`mxenv gui` 启动 |
 
 ### 2.1 品牌与命名（Wave A，BREAKING 一次切）
 
@@ -42,7 +42,7 @@
 | 层 | 内容 | 包 |
 |---|---|---|
 | **L3 管理面**（产品） | 全局密钥/环境变量管理命令（list/add/edit/reveal/delete）、**内置 GUI**、daemon（127.0.0.1 + token）、launchd、shell-init shim、审计聚合/项目注册视图 | 全局 CLI（暂名 `mxenv-cli`） |
-| **L2 运行面**（产品） | 程序的运行（`run`/`export`/`inspect`/`render`/`inject`/`generate`）、来源管理命令（**定制上游**）、`migrate`、`edit`（本地会话式编辑器，含 editor-ui/clientAssets 生成链）、`skill install` | `mxenv`（默认名安装包，devDep / npx） |
+| **L2 运行面**（产品） | 程序的运行（`run`/`export`/`inspect`/`render`/`inject`/`generate`）、来源管理命令（**定制上游**）、`migrate`、`edit`（打开管理面板的项目深链接，委派全局 CLI）、`skill install` | `mxenv`（默认名安装包，devDep / npx） |
 | **L1 能力层**（共享） | 组合引擎（**全局变量 ∪ 项目 `env.local`**）、provider 适配、配置加载、审计读写、**值能力 `compose`/`revealSingle`（唯一实现）** | `mxenv-core` 主入口 |
 | **L0 契约层**（纯，无 IO） | 配置 schema、`mxenv://` 引用语法、组合/审计/IPC 类型、redaction 规则 | `mxenv-core/contracts` |
 
@@ -75,7 +75,7 @@ L2 mxenv   ──┘
 
 
 - **daemon**：loopback HTTP（127.0.0.1，每会话一次性 token，文件 0600；`--expose` 可显式对外=0.0.0.0，人经主机 IP 远程访问同一面板，Agent 视角永远本地——2026-11-18 用户裁决，无 remotes 登记/隧道簿记/聚合），launchd/systemd 托管 + 手动启动并存。
-- **面板**（editor-ui 的常驻化超集）：来源/上游总览（provider 登录态、来源编排、profiles）、键管理与编辑、项目接线编辑、migrate 入口、审计查看器。2026-11-18 已实现 React 多范围面板、单源 doctor、`mxenv edit` 项目深链接与 P2.5 接线编辑：只读 diff 预览 → 指纹二次确认 → 0600 备份/原子写/失败回滚 → 脱敏前后审计；一次只改一个项目源，全局与远程 provider 值不在此写面。读性能采用 `/snapshot` 单源一次加载 + 有界并发 + 异步 dotenvx，React 通过 TanStack Query 做 scope/profile 内存短期缓存；缓存不包含 reveal 值。
+- **面板**（常驻 host 的可视化管理面）：来源/上游总览（provider 登录态、来源编排、profiles）、键管理与编辑、项目接线编辑、migrate 入口、审计查看器。2026-11-18 已实现 React 多范围面板、单源 doctor、`mxenv edit` 项目深链接与 P2.5 接线编辑：只读 diff 预览 → 指纹二次确认 → 0600 备份/原子写/失败回滚 → 脱敏前后审计；一次只改一个项目源，全局与远程 provider 值不在此写面。读性能采用 `/snapshot` 单源一次加载 + 有界并发 + 异步 dotenvx，React 通过 TanStack Query 做 scope/profile 内存短期缓存；缓存不包含 reveal 值。
 - **安全模型升级**（短命会话 → 常驻但默认锁定）：
   - 面板随时可开，默认**锁定态**只显示键名/状态（names-only 基线不变）；
   - 值回显需显式解锁，沿用**逐键 reveal + 单值驻留**；
@@ -137,7 +137,7 @@ flowchart TB
 | 波次 | 内容 | 备注 |
 |---|---|---|
 | **A 命名与品牌基础** ✅ 已完成 | 改名全切（含 `mxenv://`，同步 Trellis W2 change 文案）+ 三包拆分（`mxenv` / `mxenv-cli` / `mxenv-core`）+ LICENSE/SECURITY | 三个 change 已归档，0.13.x–0.15.0 发布 |
-| **B 常驻 host + 面板** 🟡 核心交互已落地 | daemon、React 多范围面板、供应商读/接线编辑、审计 `configPath`、reveal/write API、注册视图 | 0.14.0 会话式面板 + revealSingle；0.17.0 常驻（`gui install`，launchd/systemd，空闲只锁不关）；React 多范围、项目键写回、doctor 单源、P2.5 接线 diff/指纹/0600 备份回滚与 `edit` 深链接已在本机 Edge 验收；远程访问已按用户裁决落地为 `--expose` 直连（同一面板、显式暴露、远程动作远程审计）；0.18.0 汇集发布（面板全套+性能快照+Agent 输入请求+--expose）；不可达旧 editor 资产清理仍在后续项 |
+| **B 常驻 host + 面板** 🟡 核心交互已落地 | daemon、React 多范围面板、供应商读/接线编辑、审计 `configPath`、reveal/write API、注册视图 | 0.14.0 会话式面板 + revealSingle；0.17.0 常驻（`gui install`，launchd/systemd，空闲只锁不关）；React 多范围、项目键写回、doctor 单源、P2.5 接线 diff/指纹/0600 备份回滚与 `edit` 深链接已在本机 Edge 验收；远程访问已按用户裁决落地为 `--expose` 直连（同一面板、显式暴露、远程动作远程审计）；0.18.0 汇集发布（面板全套+性能快照+Agent 输入请求+--expose）；旧 one-shot editor 资产已清理（0.18.0 后，L2 仅保留面板深链接委派） |
 | **C 开源收尾 + 1.0** 🟡 大半完成 | 新 icon（SVG 源 + favicon + 单色版）、README 重排、gitleaks 历史扫描、blog 收编 | icon/README/blog 宣传正文已完成（2026-11-17）；gitleaks 历史扫描与 CONTRIBUTING/issue 模板挂账 |
 
 ## 五、决策记录

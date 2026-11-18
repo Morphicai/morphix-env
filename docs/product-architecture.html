@@ -345,7 +345,7 @@
       <div class="card">
         <span class="k">姿势 3 · CLI 带 GUI</span>
         <h3>一条命令进入可视化管理</h3>
-        <p>GUI <strong>不独立发包</strong>，作为全局 CLI 内置模块分发（沿用 editor-ui 打进 dist 的既有模式）：面板级来源总览、键管理、migrate 入口、审计查看。（Wave B 交付）</p>
+        <p>GUI <strong>不独立发包</strong>，作为全局 CLI 内置模块分发（panel-ui 构建链打进 dist）：面板级来源总览、键管理、migrate 入口、审计查看。（Wave B 交付）</p>
       </div>
     </div>
 
@@ -440,7 +440,7 @@ mxenv inspect              <span class="c"># 只看 key 名 / 来源归属 / 状
         <div class="lv l2"><b>L2</b><span>运行面 · 产品</span></div>
         <div class="body">
           <div class="pkg">mxenv（默认名安装包）</div>
-          <div class="desc"><code>run</code>/<code>export</code>/<code>inspect</code>/<code>render</code>/<code>inject</code>/<code>generate</code> · 来源管理命令（定制上游）· <code>migrate</code> · <code>edit</code>（含 editor-ui / clientAssets 生成链）· <code>skill install</code> —— devDep / npx，项目装即完整可用</div>
+          <div class="desc"><code>run</code>/<code>export</code>/<code>inspect</code>/<code>render</code>/<code>inject</code>/<code>generate</code> · 来源管理命令（定制上游）· <code>migrate</code> · <code>edit</code>（打开管理面板项目深链接，委派全局 CLI）· <code>skill install</code> —— devDep / npx，项目装即完整可用</div>
         </div>
       </div>
       <div class="depbar"><span>▼ 通用能力下沉共享</span><div class="line"></div></div>
