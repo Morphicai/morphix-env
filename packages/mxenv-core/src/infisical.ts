@@ -119,8 +119,8 @@ export function isInfisicalLoggedIn(): boolean {
 /**
  * 读取项目 .infisical.json 获取 workspaceId（projectId）。
  */
-function readInfisicalJson(): { workspaceId?: string } {
-  const filePath = resolve('.infisical.json')
+function readInfisicalJson(cwd = process.cwd()): { workspaceId?: string } {
+  const filePath = resolve(cwd, '.infisical.json')
   if (!existsSync(filePath)) return {}
   try {
     return JSON.parse(readFileSync(filePath, 'utf8'))
@@ -147,7 +147,8 @@ export interface InfisicalCliError {
 export function fetchSecretsViaCLI(
   environment: string,
   paths: string[],
-  envPrefix?: string
+  envPrefix?: string,
+  cwd = process.cwd(),
 ): { values: Record<string, string>; count: number; errors: InfisicalCliError[] } {
   const values: Record<string, string> = {}
   const errors: InfisicalCliError[] = []
@@ -157,7 +158,7 @@ export function fetchSecretsViaCLI(
       const output = execFileSync(
         'infisical',
         ['export', `--path=${secretPath}`, `--env=${environment}`, '--format=dotenv'],
-        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], cwd }
       )
 
       const vars = dotenvParse(output)

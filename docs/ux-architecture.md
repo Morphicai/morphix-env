@@ -75,7 +75,7 @@ L2 mxenv   ──┘
 
 
 - **daemon**：loopback HTTP（127.0.0.1，每会话一次性 token，文件 0600），launchd 可选托管（`mxenv host install`）+ 手动启动并存。
-- **面板**（editor-ui 的常驻化超集）：来源/上游总览（provider 登录态、来源编排、profiles）、键管理与编辑、migrate 入口、审计查看器。
+- **面板**（editor-ui 的常驻化超集）：来源/上游总览（provider 登录态、来源编排、profiles）、键管理与编辑、项目接线编辑、migrate 入口、审计查看器。2026-11-18 已实现 React 多范围面板、单源 doctor、`mxenv edit` 项目深链接与 P2.5 接线编辑：只读 diff 预览 → 指纹二次确认 → 0600 备份/原子写/失败回滚 → 脱敏前后审计；一次只改一个项目源，全局与远程 provider 值不在此写面。
 - **安全模型升级**（短命会话 → 常驻但默认锁定）：
   - 面板随时可开，默认**锁定态**只显示键名/状态（names-only 基线不变）；
   - 值回显需显式解锁，沿用**逐键 reveal + 单值驻留**；
@@ -84,7 +84,7 @@ L2 mxenv   ──┘
 
 ### 2.4 项目注册视图（面板"哪些项目在用"）
 
-**不扫描文件系统。** 注册视图两个源：
+**不扫描文件系统。** 2026-11-18 当前实现采用 0600 的 `~/.mxenv/projects.json`：`run`/编辑入口在检测到 `mxenv.config.json` 或 `.mxenv/` 时幂等登记，不读取项目值；同名路径自动后缀，`lastSeenAt` 写节流，可 prune，可用 `MXENV_NO_PROJECT_REGISTRY=1` 全旁路。早期“审计派生 + link”草案保留如下，未实施的聚合器不视为现状。
 
 1. **审计 journal 派生**（主源）：运行面每次 run/edit 经 L1 写审计（补 `configPath` 字段）→ 全局 CLI 聚合出项目列表：最近使用、频率、通道（cli/shim/管理面）、对账陈旧项（目录消失 → 灰显提示，不自动删）。
 2. **`mxenv link` 显式清单**：想钉住的项目手动置顶（含从未 run 过的）。
@@ -137,7 +137,7 @@ flowchart TB
 | 波次 | 内容 | 备注 |
 |---|---|---|
 | **A 命名与品牌基础** ✅ 已完成 | 改名全切（含 `mxenv://`，同步 Trellis W2 change 文案）+ 三包拆分（`mxenv` / `mxenv-cli` / `mxenv-core`）+ LICENSE/SECURITY | 三个 change 已归档，0.13.x–0.15.0 发布 |
-| **B 常驻 host + 面板** 🟡 会话+常驻已发 | daemon、面板、审计 `configPath`、reveal API、注册视图 | 0.14.0 会话式面板 + revealSingle；0.17.0 常驻（`gui install`，launchd/systemd，空闲只锁不关）；多范围面板 UI 与注册视图在 `mxenv-global-panel` 进行中 |
+| **B 常驻 host + 面板** 🟡 核心交互已落地 | daemon、React 多范围面板、供应商读/接线编辑、审计 `configPath`、reveal/write API、注册视图 | 0.14.0 会话式面板 + revealSingle；0.17.0 常驻（`gui install`，launchd/systemd，空闲只锁不关）；React 多范围、项目键写回、doctor 单源、P2.5 接线 diff/指纹/0600 备份回滚与 `edit` 深链接已在本机 Edge 验收；远程范围与不可达旧 editor 资产清理仍在后续项 |
 | **C 开源收尾 + 1.0** 🟡 大半完成 | 新 icon（SVG 源 + favicon + 单色版）、README 重排、gitleaks 历史扫描、blog 收编 | icon/README/blog 宣传正文已完成（2026-11-17）；gitleaks 历史扫描与 CONTRIBUTING/issue 模板挂账 |
 
 ## 五、决策记录

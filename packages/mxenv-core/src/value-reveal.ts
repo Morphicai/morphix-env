@@ -55,6 +55,8 @@ export interface RevealParams {
   authorized?: boolean
   /** 审计口径的 profile 名。 */
   profileName?: string
+  /** 审计归属的项目目录；缺省保持原行为（只标 home，不伪造项目路径）。 */
+  cwd?: string
   options?: Pick<ComposeOptions, 'noInfisical' | 'envName' | 'allowInsecureGlobal' | 'homeDir'>
 }
 
@@ -120,7 +122,7 @@ function auditReveal(params: RevealParams, sources: string[], outcome: 'success'
     via: params.subject,
     action: 'reveal',
     ...(reason ? { reason } : {}),
-    configPath: resolveAuditConfigPath(params.options),
+    configPath: resolveAuditConfigPath(params.options, params.cwd),
   }, params.options?.homeDir || homedir())
 }
 

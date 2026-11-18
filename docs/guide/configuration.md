@@ -104,4 +104,4 @@ Default file discovery matches dotenv conventions: with no `envFiles` declared, 
 
 ## Project registry
 
-The first successful `mxenv run` / `mxenv edit` composition in a wired project (a `.mxenv/` directory or a `package.json` `mxenv` field) registers the project in `~/.mxenv/projects.json` (0600) — this is the machine's honest list of "projects managed by mxenv" that the panel enumerates. Registration is idempotent (same path never duplicates; `lastSeenAt` refreshes are write-throttled to once per minute). Set `MXENV_NO_PROJECT_REGISTRY=1` to opt out entirely (reads return an empty list, writes are skipped).
+The first successful `mxenv run` / `mxenv edit` composition in a wired project (a `.mxenv/` directory or `mxenv.config.json`) registers the project in `~/.mxenv/projects.json` (0600) — this is the machine's honest list of "projects managed by mxenv" that the panel enumerates. Registration is idempotent (same path never duplicates; `lastSeenAt` refreshes are write-throttled to once per minute). Set `MXENV_NO_PROJECT_REGISTRY=1` to opt out entirely (reads return an empty list, writes are skipped).

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { homedir } from 'os'
+import { resolve } from 'path'
+import { realpathSync } from 'fs'
 import { loadConfigLayers, sanitizeBootEnv, shimsDir, suppressLegacyHomeHint, validateShimList, type ConfigLayers } from '@morphixai/mxenv-core'
 import {
   defaultRcPath,
@@ -15,7 +17,7 @@ import {
 import { spawn } from 'child_process'
 import { collectEntries, hostLockState, hostStatus, startHostSession } from './host'
 import { installDaemon, uninstallDaemon, installSummary } from './daemon'
-import { clearHostSession, globalBaselineEntry, readHostSession, releaseHostLock } from '@morphixai/mxenv-core'
+import { clearHostSession, globalBaselineEntry, isRegistryEligible, readHostSession, readProjectRegistry, registerProject, releaseHostLock } from '@morphixai/mxenv-core'
 import pkg from '../package.json'
 
 const VERSION = pkg.version
@@ -277,10 +279,10 @@ Options:
   --help, -h               Show this help
   --version                Show version
 
-mxenv gui [status|close]   Panel-host session (machine-level keys view & safe
-                           reveal; values never leave this machine; opens the
-                           panel in a browser — distinct from the project
-                           editor \`mxenv edit\`)
+mxenv gui [status|close]   Open the machine-level React management panel;
+                           values never leave this machine.
+mxenv gui edit [path]      Open a project directly in that panel; used by
+                           the project-local \`mxenv edit\` shortcut.
 mxenv gui install [--port N]
                            Install the resident daemon (launchd on macOS,
                            systemd --user on Linux): no session TTL, idle only
@@ -390,13 +392,40 @@ async function cmdGui(args: Args): Promise<number> {
     return 0
   }
 
+  let requestedScope = ''
+  if (sub === 'edit') {
+    const baseDir = resolve(args.positionals[1] || process.cwd())
+    const layers = loadConfigLayers({ cwd: baseDir, homeDir })
+    if (!isRegistryEligible(baseDir) || !layers.project.exists) {
+      console.error(`[mxenv] No ${baseDir}/mxenv.config.json; run mxenv init before opening the project panel.`)
+      return 1
+    }
+    registerProject(baseDir, homeDir)
+    const project = readProjectRegistry(homeDir).find((entry) => entry.path === baseDir || entry.path === realpathSync(baseDir))
+    if (!project) {
+      console.error('[mxenv] Project registration failed; the panel was not opened.')
+      return 1
+    }
+    requestedScope = `project:${project.name}`
+  }
+  const openSession = (session: { port: number; token: string }) => {
+    const query = new URLSearchParams()
+    if (requestedScope) query.set('scope', requestedScope)
+    if (args.profile) query.set('profile', args.profile)
+    const suffix = query.toString() ? `?${query.toString()}` : ''
+    const url = `http://127.0.0.1:${session.port}/${session.token}/${suffix}`
+    if (args.printEditorUrl) console.log(url)
+    else {
+      console.log(requestedScope ? '[mxenv] Opened the project in the local management panel.' : '[mxenv] Opened local management panel in your browser.')
+      openInBrowser(url)
+    }
+  }
+
   // 默认：起或附着（spec：再次执行附着已运行会话，不产生第二实例）。
   // 会话判断走 runtime 发现文件；无会话则 spawn detached 子进程持有会话。
   const existing = readHostSession(homeDir)
   if (existing) {
-    const url = `http://127.0.0.1:${existing.port}/${existing.token}`
-    console.log(`[mxenv] attaching to running host session: ${url}`)
-    openInBrowser(url)
+    openSession(existing)
     return 0
   }
   const child = spawn(process.execPath, [process.argv[1], 'gui', 'serve'], { detached: true, stdio: 'ignore' })
@@ -411,9 +440,7 @@ async function cmdGui(args: Args): Promise<number> {
     console.error('[mxenv] host session did not come up within 5s')
     return 1
   }
-  const url = `http://127.0.0.1:${session.port}/${session.token}`
-  console.log(`[mxenv] host session up: ${url}`)
-  openInBrowser(url)
+  openSession(session)
   return 0
 }
 

@@ -178,7 +178,9 @@ describe('environment composition', () => {
 
     expect(result.environment.MXTEST_DECLARED).toBe(declared)
     expect(result.environment.MXTEST_BASE).toBeUndefined()
-    expect(result.sourceEntries.find((entry) => entry.name === '__mx_default_local')?.source.files).toEqual(['custom.env'])
+    const defaultLocal = result.sourceEntries.find((entry) => entry.name === '__mx_default_local')
+    expect(defaultLocal?.source.provider).toBe('local')
+    expect(defaultLocal?.source.provider === 'local' ? defaultLocal.source.files : undefined).toEqual(['custom.env'])
   })
 
   it('fails a duplicate source key unless the later source declares override', async () => {

@@ -391,7 +391,7 @@ export interface AuditEvent {
    * Action kind. Value-free by contract: events carry key names only, never
    * values. `unlock`/`lock` are panel-host session state transitions.
    */
-  action?: 'set' | 'delete' | 'reveal' | 'close' | 'unlock' | 'lock' | 'start'
+  action?: 'set' | 'delete' | 'reveal' | 'close' | 'unlock' | 'lock' | 'start' | 'wiring-write'
   /** Value-free reveal outcome detail (`locked` / `not-found` / `read-error`). */
   reason?: string
   /**
@@ -401,6 +401,24 @@ export interface AuditEvent {
    * the field and readers tolerate its absence.
    */
   configPath?: string
+  /** 接线写只记已脱敏的元数据 diff，不记配置原文或密钥值。 */
+  wiring?: {
+    before: AuditWiringSource[]
+    after: AuditWiringSource[]
+  }
+}
+
+export interface AuditWiringSource {
+  name: string
+  provider: string
+  order: number
+  override?: boolean
+  files?: string[]
+  paths?: string[]
+  env?: string
+  service?: string
+  keys?: number
+  profiles: string[]
 }
 
 // ─── panel-host API 资源模型（L0 契约；消费方=面板 UI 与未来 SDK） ─────
@@ -409,6 +427,10 @@ export interface AuditEvent {
 export interface PanelKeyInfo {
   key: string
   source: string
+  /** Concrete provider used by the UI to distinguish read-only remote sources. */
+  provider: SecretProvider
+  /** Inherited global entries are revealable but not editable from a project scope. */
+  inherited?: boolean
   /** File scope within a multi-file source (set/del/reveal symmetry). */
   fileIndex?: number
   /** Whether the key currently has a stored value (`present`/`missing`). */

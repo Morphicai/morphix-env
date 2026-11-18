@@ -13,8 +13,8 @@ npm i -g @morphixai/mxenv-cli
 ## Commands
 
 - `mxenv-cli shell-init` — generate/remove PATH shims and the marked rc block (global + project shim manifests)
-- `mxenv gui [status|close]` — panel-host session: machine-level keys view and safe single-key reveal (locked by default; values never leave this machine; `reveal`/`unlock` endpoints are for the human-operated panel session only — Agent/automation uses the names-only surface)
-- `gui` / `global` / `host` — reserved for Wave B (not implemented; rejected with guidance)
+- `mxenv gui [status|close|install|uninstall]` — resident-capable React panel for global/project scopes, provider health, names-only keys, single-key reveal, and confirmed local/dotenvx/keychain writes. Locked by default; values stay on this machine, and agent/automation access remains names-only.
+- `mxenv gui serve` — run the loopback panel host directly; `--daemon` is the service-manager entrypoint.
 
 Project commands (`run`/`export`/`edit`/…) come from [`@morphixai/mxenv`](https://www.npmjs.com/package/@morphixai/mxenv) installed as a devDependency — the global face deliberately does not include them.
 

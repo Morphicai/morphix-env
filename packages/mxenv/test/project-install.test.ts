@@ -19,6 +19,8 @@ const BIN_DIR = join(CONSUMER, 'node_modules', '.bin')
 const CLI = join(BIN_DIR, 'mxenv')
 const PKG_MXENV = join(__dirname, '..')
 const PKG_CORE = join(PKG_MXENV, '..', 'mxenv-core')
+const PKG_CLI = join(PKG_MXENV, '..', 'mxenv-cli')
+const PANEL_CLI = join(PKG_CLI, 'dist', 'cli.js')
 
 const manifest = JSON.parse(readFileSync(join(PKG_MXENV, 'package.json'), 'utf8')) as {
   name: string
@@ -76,6 +78,7 @@ function cleanProject() {
 
 beforeAll(() => {
   expect(existsSync(join(PKG_MXENV, 'dist', 'cli.js')), 'dist 未构建（先跑 pnpm build）').toBe(true)
+  expect(existsSync(PANEL_CLI), 'L3 panel dist 未构建（先跑 pnpm -r build）').toBe(true)
   mkdirSync(TARBALLS, { recursive: true })
   mkdirSync(CONSUMER, { recursive: true })
   mkdirSync(HOME, { recursive: true })
@@ -103,6 +106,8 @@ beforeAll(() => {
     '@dotenvx/dotenvx',
   ], { cwd: CONSUMER, encoding: 'utf8', timeout: 240_000 })
   expect(install.status, `npm install 失败\n${install.stdout ?? ''}${install.stderr ?? ''}`).toBe(0)
+  // 面板是独立 L3 包；用消费项目本地 bin 指向本仓真实构建，保持 PATH 无全局 CLI。
+  writeFileSync(join(BIN_DIR, 'mxenv-cli'), `#!/usr/bin/env node\nrequire(${JSON.stringify(PANEL_CLI)})\n`, { mode: 0o755 })
 }, 300_000)
 
 afterEach(() => {
@@ -243,7 +248,7 @@ describe('项目装即完整可用（验收口径①）', () => {
     expect(out).toContain('true')
   })
 
-  it('编辑：--print-editor-url 起会话→索引页→来源视图→关闭', { timeout: 30_000 }, async () => {
+  it('编辑：--print-editor-url 打开项目面板→names-only→关闭', { timeout: 30_000 }, async () => {
     const value = secret('edit')
     writeFileSync(join(CONSUMER, 'editable.env'), `MXTEST_PI_EDIT=${value}\n`)
     writeFileSync(join(CONSUMER, 'mxenv.config.json'), JSON.stringify({
@@ -254,21 +259,23 @@ describe('项目装即完整可用（验收口径①）', () => {
     const result = runCli(['edit', '--profile', 'editable', '--no-infisical', '--print-editor-url'], {
       env: { MX_ENV_NO_OPEN: '1' },
     })
-    const url = result.stdout.match(/Local editor URL: (http:\/\/[^\s]+)/)?.[1]
-    expect(url, `未取得编辑器 URL\n${result.output}`).toBeTruthy()
-    expect(url!).not.toContain(value)
+    const url = new URL(result.stdout.trim())
+    expect(url.searchParams.get('scope')).toMatch(/^project:/)
+    expect(url.searchParams.get('profile')).toBe('editable')
+    expect(url.toString()).not.toContain(value)
 
-    const index = await fetch(url!).then((r) => r.text())
-    expect(index).toContain('<title>mxenv editor</title>')
+    const index = await fetch(url).then((r) => r.text())
+    expect(index).toContain('<title>mxenv panel</title>')
+    const token = url.pathname.split('/')[1]
+    const keys = await fetch(`${url.origin}/keys?scope=${encodeURIComponent(url.searchParams.get('scope')!)}&profile=editable`, {
+      headers: { authorization: `Bearer ${token}` },
+    }).then((r) => r.json()) as { keys: Array<{ key: string }> }
+    expect(keys.keys.map((key: { key: string }) => key.key)).toContain('MXTEST_PI_EDIT')
+    expect(JSON.stringify(keys)).not.toContain(value)
 
-    // 来源管理视图：本地源值仅在浏览器会话内可见（现有语义）
-    const source = await fetch(`${url}/source/local`).then((r) => r.text())
-    expect(source).toContain(value)
-
-    await fetch(url!, {
+    await fetch(`${url.origin}/close`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ action: 'close' }),
+      headers: { authorization: `Bearer ${token}`, 'x-mxenv-panel': '1' },
     })
     // 零全局依赖的正确边界：审计数据（writeAudit → ~/.mxenv/audit，随全局目录
     // 新名）合法存在，但不得合成全局配置或全局密钥库——全局安装/预置目录始终

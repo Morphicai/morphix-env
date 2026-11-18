@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync, spawnSync } from 'child_process'
-import { readFileSync } from 'fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
@@ -38,6 +38,31 @@ describe('mxenv-cli face', () => {
     const r = spawnSync('node', [CLI, 'gui', 'status'], { encoding: 'utf8', env: { ...process.env, HOME: home } })
     expect(r.status).toBe(1)
     expect(r.stdout).toContain('no running host session')
+  })
+
+  it('gui edit opens the requested project scope and rejects an unwired directory', { timeout: 15_000 }, async () => {
+    const home = join(tmpdir(), `mxenv-cli-gui-edit-${randomUUID()}`)
+    const project = join(home, 'project')
+    mkdirSync(project, { recursive: true })
+    const env = { ...process.env, HOME: home, MX_ENV_NO_OPEN: '1' }
+    const missing = spawnSync('node', [CLI, 'gui', 'edit', project, '--print-editor-url'], { encoding: 'utf8', env })
+    expect(missing.status).toBe(1)
+    expect(missing.stderr).toContain('mxenv.config.json')
+
+    writeFileSync(join(project, 'mxenv.config.json'), JSON.stringify({
+      sources: { local: { provider: 'local', files: ['.env.local'], optional: true } },
+      profiles: { default: ['local'] }, defaultProfile: 'default',
+    }))
+    try {
+      const opened = spawnSync('node', [CLI, 'gui', 'edit', project, '--print-editor-url'], { encoding: 'utf8', env })
+      expect(opened.status, opened.stderr).toBe(0)
+      const url = new URL(opened.stdout.trim())
+      expect(url.origin).toMatch(/^http:\/\/127\.0\.0\.1:/)
+      expect(url.searchParams.get('scope')).toBe('project:project')
+      expect((await fetch(url)).status).toBe(200)
+    } finally {
+      spawnSync('node', [CLI, 'gui', 'close'], { encoding: 'utf8', env })
+    }
   })
 
   it('--version matches the package manifest', () => {

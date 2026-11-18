@@ -36,7 +36,7 @@ import {
   isRegistryEligible,
   registerProject,
 } from '@morphixai/mxenv-core'
-import { launchEditor, startEditorServer } from './editor'
+import { startEditorServer } from './editor'
 import {
   discoverPlaintextUnits,
   executeUnit,
@@ -837,13 +837,34 @@ async function cmdInject(args: Args): Promise<number> {
   return 0
 }
 
+/** 项目编辑终态统一交给 L3 面板；L2 只以 argv 调用，不反向 import L3。 */
+async function openProjectPanel(baseDir: string, printEditorUrl: boolean, hasProjectConfig = true, profile?: string): Promise<number> {
+  const localCli = join(__dirname, '..', '..', 'mxenv-cli', 'dist', 'cli.js')
+  const local = existsSync(localCli)
+  const command = local ? process.execPath : 'mxenv-cli'
+  const panelArgs = hasProjectConfig ? ['gui', 'edit', baseDir] : ['gui']
+  const childArgs = local ? [localCli, ...panelArgs] : panelArgs
+  if (profile) childArgs.push('--profile', profile)
+  if (printEditorUrl) childArgs.push('--print-editor-url')
+  return new Promise((resolve) => {
+    const child = spawn(command, childArgs, { stdio: 'inherit', env: process.env })
+    child.once('error', (error: NodeJS.ErrnoException) => {
+      console.error(error.code === 'ENOENT'
+        ? '[mxenv] Install @morphixai/mxenv-cli globally to use the management panel.'
+        : `[mxenv] Unable to start the management panel: ${error.code || 'spawn failed'}`)
+      resolve(1)
+    })
+    child.once('exit', (code) => resolve(code ?? 1))
+  })
+}
+
 async function cmdEdit(args: Args): Promise<number> {
   // Bare `mxenv edit` opens the default composition (the implicit global on
   // config-less machines); --profile/--source narrow the scope.
   const composition = await resolveComposition(args)
+  const layers = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
   registerCurrentProject()
   if (args.source && !composition.sourceEntries.some((entry) => entry.name === args.source)) {
-    const layers = loadConfigLayers({ cwd: process.cwd(), homeDir: homedir() })
     const declared = layers.project.config.sources?.[args.source]
       ? { source: layers.project.config.sources[args.source], baseDir: layers.project.baseDir }
       : (!args.noGlobal && layers.global.config.sources?.[args.source]
@@ -856,12 +877,7 @@ async function cmdEdit(args: Args): Promise<number> {
     composition.sourceEntries.push({ name: args.source, ...declared })
     composition.sourceStatuses.push({ name: args.source, provider: declared.source.provider, availability: 'skipped', keyCount: 0 })
   }
-  const editor = await launchEditor(__filename, composition, args.source || undefined)
-  if (args.printEditorUrl) console.log(`[mxenv] Local editor URL: ${editor.url}`)
-  else if (editor.opened) console.log('[mxenv] Opened local editor in your browser.')
-  else console.log('[mxenv] Local editor started. Run again with --print-editor-url to display its one-time URL.')
-  console.log('[mxenv] Values remain in the provider or browser session and are not printed here.')
-  return 0
+  return openProjectPanel(layers.project.baseDir, args.printEditorUrl, layers.project.exists, args.profile || undefined)
 }
 
 async function cmdDoc(args: Args): Promise<number> {
@@ -884,8 +900,8 @@ Default profile context: \`${composition.profileName}\`.
 
 When a user asks to add, modify, or rotate a credential:
 
-1. Run \`mxenv edit\` (optionally with \`--profile <profile>\` or \`--source <source>\`).
-2. Tell the user to complete the change in the local visual editor or provider UI.
+1. Run \`mxenv edit\` to open this project in the resident management panel (optionally validate \`--profile <profile>\` or \`--source <source>\` first).
+2. Tell the user to complete the reviewed wiring or value change in the local visual panel or provider UI.
 3. Do not ask the user to paste a value into chat.
 4. Do not run \`env\`, \`printenv\`, \`cat .env\`, or any reveal command.
 5. Validate only through \`mxenv inspect --profile <profile>\`; it reports names, source, and status without values.

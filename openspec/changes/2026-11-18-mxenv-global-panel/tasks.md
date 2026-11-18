@@ -3,28 +3,30 @@
 ## 1. L1 能力（mxenv-core）
 
 - [x] `projects.json` 注册表：读/幂等登记（name 冲突后缀）/ lastSeenAt 节流写 / remove / prune / `MXENV_NO_PROJECT_REGISTRY` 旁路；0600（mxenv-core/src/registry.ts；8 例 registry.test.ts）
-- [x] run/edit 首次成功组合登记埋点（仅当目录存在 .mxenv/ 或 package.json mxenv 字段；cli.ts registerCurrentProject；L2 3 例集成测试）
+- [x] run/edit 首次成功组合登记埋点（仅当目录存在 .mxenv/ 或 mxenv.config.json；cli.ts registerCurrentProject；L2 3 例集成测试）
 - [ ] `remotes.json`：登记/删除/列出；0600
-- [ ] `edit-actions` 提取：从 L2 editor.ts 抽白名单 set/delete 动作核（dotenvx 嗅探、文件序、审计事件构造）；L2 `edit` 改为消费之（行为零变化，既有编辑器测试护航）
-- [ ] 测试：edit-actions 与编辑器行为等价（注册表幂等/节流/prune 已随 registry.test.ts 落地）
+- [x] `edit-actions` 提取：从 L2 editor.ts 抽白名单 set/delete 动作核（dotenvx 嗅探、文件序、审计事件构造）；L2 `edit` 改为消费之（行为零变化，既有编辑器测试护航）
+- [x] 测试：edit-actions 与编辑器行为等价（注册表幂等/节流/prune 已随 registry.test.ts 落地）
 
 ## 2. L3 宿主 API 扩展（mxenv-cli）
 
-- [ ] `GET /scopes`：全局 + projects.json 清单 + remotes.json 清单
-- [ ] `GET /wiring?scope=`：源接线与供应商状态（provider 类型/健康/Infisical env 钉定/dotenvx 文件形态/keychain service+keys；names/status only，无接线编辑——见 provider-wiring-edit change）
-- [ ] `/keys?scope=`：`global` / `project:<name>`（baseDir 进程内切换）；无效 scope 404
-- [ ] `POST /set` `/delete`：unlock 窗口门禁 + `x-mxenv-panel` 边界 + edit-actions 执行 + 审计 `via:'host'`；全局基线与项目 local/dotenvx 文件
-- [ ] 静态 UI 服务：`GET /{token}/` token-in-path 校验 → panel bundle；token 失效即 404（与 API 同纪律）
-- [ ] 测试：scopes/keys 隔离、写门禁（锁定态拒绝/边界头缺失拒绝）、审计事件、UI 路径认证
+- [x] `GET /scopes`：全局 + projects.json 清单（remotes.json 清单随 P4 落地，当前显式返回空远程清单）
+- [x] `GET /wiring?scope=`：源接线与供应商状态（provider 类型/健康/Infisical env 钉定/dotenvx 文件形态/keychain service+keys；names/status only，无接线编辑——见 provider-wiring-edit change）
+- [x] 外部供应商 names-only：`/keys` 覆盖 Infisical/Doppler 等 provider，返回 provider/source/inherited，单源故障隔离，响应无值
+- [x] 外部供应商 reveal：复用 `revealSingle` + unlock + scope + no-store；90 秒自动隐藏、无值审计、远程 set/delete 继续拒绝
+- [x] `/keys?scope=`：`global` / `project:<name>`（core 统一解析 profile/legacy，baseDir 进程内切换）；无效 scope 404；reveal 同 scope 隔离与审计归属
+- [x] `POST /set` `/delete`：unlock 窗口门禁 + `x-mxenv-panel` 边界 + edit-actions 执行 + 审计 `via:'host'`；全局基线与项目 local/dotenvx 文件
+- [x] 静态 UI 服务：`GET /{token}/` token-in-path 校验 → panel bundle；token 失效即 404（与 API 同纪律）
+- [x] 测试：scopes/keys 隔离、写门禁（锁定态拒绝/边界头缺失拒绝）、审计事件、UI 路径认证
 
 ## 3. panel-ui（mxenv-cli 自有资产）
 
-- [ ] 脚手架：React + vite + shadcn（组件从 editor-ui 拷贝同源）；构建产物入 `packages/mxenv-cli/panel-ui/`，发布打包
-- [ ] 范围侧栏：全局 / 项目（from /scopes）/ 远程（from /scopes，隧道提示）
-- [ ] 键表：names-only、来源/Provider 列、组合顺序标注；解锁按钮 → 窗口内 reveal（单键、点击复制）
-- [ ] set/delete 对话框（值输入 type=password、二次确认、审计提示文案）
+- [x] 脚手架：React + shadcn + Tailwind + esbuild（组件从 editor-ui 拷贝同源）；`src/panel-ui/` 构建为内容寻址 JS/CSS + SRI，经 generated clientAssets 打进 dist，发布物自包含
+- [x] 范围侧栏：全局 / 项目（from /scopes）已落地；远程（from /scopes，隧道提示）随 P4
+- [x] 键表：names-only、来源/Provider 列、组合顺序标注；解锁按钮 → 窗口内 reveal（单键、点击复制）
+- [x] set/delete 对话框（值输入 type=password、二次确认、审计提示文案）
 - [ ] doctor 摘要卡片（scope 级）
-- [ ] 供应商状态卡片：每源类型/健康/env 钉定/文件形态（读视图，接线编辑属 provider-wiring-edit）
+- [x] 供应商状态卡片：每源类型/健康/env 钉定/文件形态（读视图，接线编辑属 provider-wiring-edit）
 
 ## 4. 常驻模式
 
@@ -42,4 +44,5 @@
 
 - [x] guide commands.md / security.md / ux-architecture.md / blog：常驻部分（gui install/uninstall/--daemon/--port、暴露面陈述、Wave B 状态、承诺清单勾选）
 - [ ] guide 文档的远程节 + security.md 远程红线 + SKILL.md 端点边界（随组5/收口一并）
-- [ ] 全门测试（core 148 / L2 189 / cli 62 / 根 13 → 更新后全绿）；openspec 归档准备
+- [x] 全门测试：core 166 / L2 192 / cli 81 / 根 13 全绿；真实 daemon 的全局 dotenvx 与项目 local 合成键写删、token 404、写边界复验通过；本机 Edge 验证 global/project 切换、unlock、合成写确认后取消、lock，JS/CSS 200 且 console/page error 为 0
+- [ ] openspec 归档准备（待正式 React UI、doctor 摘要与远程范围完成）

@@ -22,7 +22,7 @@
 
 ### Requirement: 面板 UI 服务与认证
 
-宿主 SHALL 在 `GET /{token}/` 校验 path 内 token 后返回面板静态资产；资产内嵌会话 token 供后续 API 以 Bearer 携带；token 缺失/错误 SHALL 404 且不区分"无此路径"与"token 错"。面板资产 SHALL NOT 内含任何密钥值；bundle 发布 SHALL 经构建产物哈希校验。
+宿主 SHALL 在 `GET /{token}/` 校验 path 内 token 后返回面板 HTML；通用 React bundle SHALL 在浏览器运行时从当前 path 取会话 token，后续 API 以 Bearer 携带，HTML/bundle SHALL NOT 内嵌 token、密钥值或序列化 API 状态。HTML SHALL 引用内容寻址的外置 JS/CSS，JS SHALL 带 SHA-256 integrity，资源路由 SHALL 重新校验 token + hash，CSP SHALL 由响应头发送。token 缺失/错误 SHALL 404 且不区分"无此路径"与"token 错"；bundle 发布 SHALL 经构建产物哈希校验。
 
 #### Scenario: 错误 token 不泄露存在性
 
@@ -31,12 +31,12 @@
 
 ### Requirement: 多范围 names-only 读
 
-`GET /scopes` SHALL 返回全局、projects.json 项目、remotes.json 远程三类范围；`/keys?scope=global|project:<name>` SHALL 返回该范围的 names-only 键模型（源→键名），项目读 SHALL 在宿主进程内以项目 `baseDir` 完成；无效或未登记 scope SHALL 404。跨范围读 SHALL NOT 合并返回（保持范围隔离，防组合面泄漏）。
+`GET /scopes` SHALL 返回全局、projects.json 项目、remotes.json 远程三类范围；`/keys?scope=global|project:<name>` SHALL 返回该范围的 names-only 键模型（源→键名），包含 Infisical/Doppler 等外部供应商，并为每行返回 `provider`、`source` 与继承标记；项目读 SHALL 在宿主进程内以项目 `baseDir` 完成；无效或未登记 scope SHALL 404。跨范围读 SHALL NOT 合并返回（保持范围隔离，防组合面泄漏）。
 
-#### Scenario: 项目范围不串全局键
+#### Scenario: 项目范围不串其他项目键
 
 - **WHEN** `GET /keys?scope=project:demo`
-- **THEN** 仅返回 demo 项目声明的源与键名；全局基线键不出现（它们属 `scope=global`）
+- **THEN** 返回 demo 默认 profile 的声明源与键名；继承的全局基线键明确标记 `inherited`，其他项目的 local/provider 键不出现
 
 ### Requirement: 供应商读视图（providers as first-class）
 
@@ -47,14 +47,35 @@
 - **WHEN** 面板查看某项目的供应商视图
 - **THEN** 可见每源类型/健康/env 钉定/文件形态；不提供任何修改接线的入口（编辑属 provider-wiring-edit）
 
+### Requirement: 外部供应商 names-only 与逐键揭示
+
+`/keys` SHALL 通过 L1 同一来源加载器枚举所有已配置 provider 的键名，包括 Infisical/Doppler；响应 SHALL NOT 包含值。单个外部来源不可用 SHALL NOT 阻塞其他来源的键名与健康卡片返回。
+
+外部 provider 的 `POST /reveal` SHALL 复用 `revealSingle` 与现有面板边界头、unlock 窗口、scope 隔离、单值驻留和 `no-store`；UI SHALL 90 秒自动隐藏，审计 SHALL 只记键名/来源/结果。远程 provider 的 set/delete SHALL 继续拒绝。
+
+#### Scenario: Infisical 键名可见且响应无值
+
+- **WHEN** 已配置且可用的 Infisical 来源参与某项目 profile
+- **THEN** `/keys` 返回其键名、provider=`infisical` 与 source，响应不包含任何上游值
+
+#### Scenario: 解锁后逐键查看外部值
+
+- **WHEN** 人类面板在有效 unlock 窗口内 reveal 一个 Infisical 键
+- **THEN** 仅该键值以 `no-store` 返回，90 秒自动隐藏并记录无值审计；锁定或其他范围请求不能复用该结果
+
+#### Scenario: 外部读取不扩大为远程写
+
+- **WHEN** 外部 provider 键出现在 Keys 表
+- **THEN** 可 reveal，但不出现 set/delete 控件，直接调用远程写端点仍被拒绝
+
 ### Requirement: 解锁窗口内的写回管理
 
-`POST /set`/`POST /delete` SHALL 仅在解锁窗口内且请求携带面板客户端标识头时执行，动作核 = L1 `edit-actions`（文件嗅探、文件序、审计构造）；适用面 = 全局基线与项目的 local/dotenvx 文件源；每个写动作 SHALL 记审计（`via: 'host'`，含 scope/key/action，不含值）。锁定态或边界缺失 SHALL 403 并审计。写端点 SHALL NOT 接受远程 provider（Infisical/Doppler）目标。
+`POST /set`/`POST /delete` SHALL 仅在解锁窗口内且请求携带面板客户端标识头时执行，动作核 = L1 `edit-actions`（文件嗅探、文件序、审计构造）；适用面 = 全局基线与项目的 local/dotenvx 文件源及 os-keychain 已声明键；每个写动作 SHALL 记审计（`via: 'host'`，含 scope/key/action，不含值）。锁定态 SHALL 423、边界缺失 SHALL 403并审计。写端点 SHALL NOT 接受远程 provider（Infisical/Doppler）目标。
 
 #### Scenario: 锁定态写被拒
 
 - **WHEN** 面板未解锁时 POST /set
-- **THEN** 403，审计记录拒绝，文件系统无变更
+- **THEN** 423，审计记录拒绝，文件系统无变更
 
 ### Requirement: 常驻生命周期
 

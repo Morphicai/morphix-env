@@ -2,24 +2,19 @@ import { execFileSync, spawn } from 'child_process'
 import { createServer, type IncomingMessage, type ServerResponse } from 'http'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
-import { isAbsolute, dirname, join, resolve } from 'path'
+import { isAbsolute, resolve } from 'path'
 import { randomBytes } from 'crypto'
 import {
+  applyEditAction,
   resolveAuditConfigPath,
-  deleteKeychainValue,
-  ensureCommand,
   expandHomePath,
-  isDotenvxEncrypted,
-  loadKeyring,
   parseEnvFile,
   revealResidenceRelease,
   revealSingle,
   writeAudit,
-  writeKeychainValue,
   type EnvironmentComposition,
   type SourceEntry,
 } from '@morphixai/mxenv-core'
-import { verificationEnv } from './migrate'
 import { renderEditorHtml } from './editor-ui/render'
 import type { EditorUiState } from './editor-ui/types'
 import pkg from '../package.json'
@@ -71,44 +66,6 @@ function envFileKeyNames(file: string): string[] {
     .sort((a, b) => a.localeCompare(b))
 }
 
-/**
- * Environment for the editor's dotenvx calls, chosen per file's key model:
- * - `.env.keys` beside the file, or a new/plaintext file → file model
- *   (`DOTENVX_NO_NATIVE`): preserve the portable layout and create new key
- *   material beside the file — never in the launch cwd. Combined with the
- *   pinned `cwd: dirname(file)` on every call this mirrors migrate, which
- *   pins cwd for exactly this reason.
- * - An encrypted file without `.env.keys` (private key custodied in the OS
- *   keychain — e.g. created by plain `dotenvx set`) → drop the flag so the
- *   custodian key stays reachable.
- * The allowlisted environment itself (migrate's verificationEnv) keeps
- * same-named shell exports from shadowing file values and inline
- * `DOTENV_PRIVATE_KEY*` material from substituting for the key file.
- */
-function dotenvxEnv(file: string): NodeJS.ProcessEnv {
-  const env = { ...verificationEnv() }
-  const keychainKeyed = !existsSync(join(dirname(file), '.env.keys')) && isDotenvxEncrypted(file)
-  if (keychainKeyed) delete env.DOTENVX_NO_NATIVE
-  return env
-}
-
-let dotenvxCliCache: string | null = null
-function dotenvxCli(): string {
-  if (!dotenvxCliCache) dotenvxCliCache = ensureCommand('dotenvx', 'editor', 'dotenvx')
-  return dotenvxCliCache
-}
-
-function dotenvxMutate(action: 'set' | 'del', key: string, value: string | undefined, file: string): void {
-  // `--` keeps dash-leading values (e.g. `-f`) from being parsed as dotenvx
-  // options (verified on 2.30). Known limitation: the value travels as a CLI
-  // argv element, briefly visible in the local process table (dotenvx offers
-  // no stdin/env channel for `set`; probes 2026-11-06). The read path is
-  // unaffected.
-  const args = action === 'set' ? ['set', key, '-f', file, '--', value ?? ''] : ['del', key, '-f', file]
-  // Never logs CLI output; per-file env keeps dotenvx's .env.keys lookup stable.
-  execFileSync(dotenvxCli(), args, { env: dotenvxEnv(file), cwd: dirname(file), stdio: ['ignore', 'ignore', 'ignore'] })
-}
-
 /** Clamp a user-supplied file index into the source's file range. */
 function fileIndexParam(raw: string | null, files: string[]): number {
   const parsed = Number(raw || '0')
@@ -133,6 +90,23 @@ function actionErrorState(state: EditorState, action: 'set' | 'delete' | 'reveal
   return action === 'delete'
     ? errorUiState(state, 400, 'Unable to delete this key', 'The key could not be removed. No value was returned to the terminal.')
     : errorUiState(state, 400, 'Unable to save this source', 'No value was returned to the terminal.')
+}
+
+/** 共享动作核的可信错误码映射为具体表单反馈；provider 原始错误永不渲染。 */
+function editActionErrorState(state: EditorState, action: 'set' | 'delete' | 'reveal', error: unknown): EditorUiState {
+  const code = (error as { code?: string } | null)?.code
+  if (code === 'invalid-key') {
+    return errorUiState(state, 400, 'Invalid key name', 'Key names must match [A-Za-z_][A-Za-z0-9_.]*; no value was processed.')
+  }
+  if (code === 'invalid-value' || code === 'unsupported-value') {
+    return errorUiState(state, 400, 'Invalid value', code === 'unsupported-value'
+      ? 'dotenvx expands $name sequences on load, so this value cannot be stored faithfully.'
+      : 'A non-empty value is required for set; delete is a separate action.')
+  }
+  if (code === 'invalid-file-index') {
+    return errorUiState(state, 400, 'Invalid file', 'The selected file is outside this source; no value was processed.')
+  }
+  return actionErrorState(state, action)
 }
 
 /** Value-free audit for editor actions: key names and action kinds only. */
@@ -197,12 +171,6 @@ function localUiState(state: EditorState, entry: SourceEntry, fileIndex: number,
   const file = localFile(entry, fileIndex)
   const content = existsSync(file) ? readFileSync(file, 'utf8') : ''
   return { ...uiBase(state), page: 'local', sourceName: entry.name, files: source.files, fileIndex, content }
-}
-
-async function requireKeyring() {
-  const keyring = await loadKeyring()
-  if (!keyring) throw new Error('[mxenv] Keychain editing needs the optional native module "@napi-rs/keyring", which is not usable on this machine.')
-  return keyring
 }
 
 function keychainPageState(state: EditorState, entry: SourceEntry, accounts: string[], revealed?: { key: string; value: string }): EditorUiState {
@@ -336,19 +304,10 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
       if (match[2] === 'dotenvx' && entry.source.provider === 'dotenvx') {
         const started = Date.now()
         const fileIndex = fileIndexParam(body.get('fileIndex'), entry.source.files)
-        const file = localFile(entry, fileIndex)
         const key = body.get('key') || ''
         const action = parseEditAction(body)
         if (!action) {
           return respond(res, 400, renderEditorHtml('Invalid request', errorUiState(state, 400, 'Invalid request', 'Unknown or incomplete edit action; nothing was processed.')))
-        }
-        if (!/^[A-Za-z_][A-Za-z0-9_.]*$/.test(key)) {
-          return respond(res, 400, renderEditorHtml('Invalid key', errorUiState(state, 400, 'Invalid key name', 'Key names must match [A-Za-z_][A-Za-z0-9_.]*; no value was processed.')))
-        }
-        if (action === 'set' && (body.get('value') || '').includes('$')) {
-          // Every dotenvx load path expands `$name` sequences (no opt-out), so
-          // storing one changes what consumers see — migrate refuses these too.
-          return respond(res, 400, renderEditorHtml('Invalid value', errorUiState(state, 400, 'Value contains $', 'dotenvx expands $name sequences on every load path, so this value cannot be stored faithfully. Remove the $ sequence first; nothing was processed.')))
         }
         try {
           if (action === 'reveal') {
@@ -356,20 +315,13 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
             const revealed = await revealSingle({ key, entry, fileIndex, subject: 'editor', slotId: state.token, authorized: true, profileName: state.profileName, options: { homeDir: state.homeDir } })
             return respond(res, 200, renderEditorHtml('Edit dotenvx source', localUiState(state, entry, fileIndex, { revealed: { key, value: revealed.value } })))
           }
-          if (action === 'delete') {
-            dotenvxMutate('del', key, undefined, file)
-            auditEditor(state, entry, 'delete', [key], 'success', started)
-            return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, 'delete', key, fileIndex)))
-          }
-          dotenvxMutate('set', key, body.get('value') || '', file)
-          auditEditor(state, entry, 'set', [key], 'success', started)
-          return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, 'set', key, fileIndex)))
+          await applyEditAction({ action, key, value: body.get('value') || '', entry, fileIndex, subject: 'editor', profileName: state.profileName, options: { homeDir: state.homeDir } })
+          return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, action, key, fileIndex)))
         } catch (editorErr) {
-          // reveal 的能力内失败已由 revealSingle 记账（audited 标）；其余补记，保证每次请求恰一条事件。
-          if (action !== 'reveal' || !(editorErr as { audited?: boolean } | null)?.audited) {
-            auditEditor(state, entry, action, [key], 'failure', started)
-          }
-          return respond(res, 400, renderEditorHtml(action === 'reveal' ? 'Read failed' : 'Edit failed', actionErrorState(state, action)))
+          // revealSingle/applyEditAction 都已值无关记账；只兜底未审计的意外错误。
+          if (!(editorErr as { audited?: boolean } | null)?.audited) auditEditor(state, entry, action, [key], 'failure', started)
+          const failure = editActionErrorState(state, action, editorErr)
+          return respond(res, 400, renderEditorHtml(failure.page === 'error' ? failure.title : 'Edit failed', failure))
         }
       }
       if (match[2] === 'keychain' && entry.source.provider === 'os-keychain') {
@@ -385,26 +337,18 @@ export async function createEditorServer(encodedState: string): Promise<RunningE
           return respond(res, 400, renderEditorHtml('Invalid key', errorUiState(state, 400, 'Invalid account name', 'Account names must not be empty; no value was processed.')))
         }
         try {
-          const keyring = await requireKeyring()
           if (action === 'reveal') {
             // 值揭示唯一实现（value-reveal spec）：取值走能力（含 not-found 语义），
             // 列表=声明键名（配置就在手里，不做原生读）。
             const revealed = await revealSingle({ key: account, entry, subject: 'editor', slotId: state.token, authorized: true, profileName: state.profileName, options: { homeDir: state.homeDir } })
             return respond(res, 200, renderEditorHtml('Edit Keychain source', keychainPageState(state, entry, entry.source.keys ?? [], { key: account, value: revealed.value })))
           }
-          if (action === 'delete') {
-            deleteKeychainValue(keyring, entry.source, account)
-            auditEditor(state, entry, 'delete', [account], 'success', started)
-            return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, 'delete', account, 0)))
-          }
-          writeKeychainValue(keyring, entry.source, account, body.get('value') || '')
-          auditEditor(state, entry, 'set', [account], 'success', started)
-          return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, 'set', account, 0)))
+          await applyEditAction({ action, key: account, value: body.get('value') || '', entry, subject: 'editor', profileName: state.profileName, options: { homeDir: state.homeDir } })
+          return respond(res, 200, renderEditorHtml('Saved', savedUiState(state, entry.name, action, account, 0)))
         } catch (editorErr) {
-          if (action !== 'reveal' || !(editorErr as { audited?: boolean } | null)?.audited) {
-            auditEditor(state, entry, action, [account], 'failure', started)
-          }
-          return respond(res, 400, renderEditorHtml(action === 'reveal' ? 'Read failed' : 'Edit failed', actionErrorState(state, action)))
+          if (!(editorErr as { audited?: boolean } | null)?.audited) auditEditor(state, entry, action, [account], 'failure', started)
+          const failure = editActionErrorState(state, action, editorErr)
+          return respond(res, 400, renderEditorHtml(failure.page === 'error' ? failure.title : 'Edit failed', failure))
         }
       }
       return respond(res, 400, renderEditorHtml('Invalid edit', errorUiState(state, 400, 'Invalid edit request', 'This edit action does not match the source provider.')))

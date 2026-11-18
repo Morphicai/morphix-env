@@ -101,7 +101,7 @@ async function resolveInfisical(entry: SourceEntry, source: InfisicalSource, con
       `[mxenv] Infisical source "${entry.name}" has no environment specified; refusing to default to "prod". Pass --env/-e <name>, set INFISICAL_ENV or DEPLOY_ENV, or declare "env" on the source.`,
     )
   }
-  const projectId = source.projectId || process.env.INFISICAL_PROJECT_ID || readInfisicalJson().workspaceId || ''
+  const projectId = source.projectId || process.env.INFISICAL_PROJECT_ID || readInfisicalJson(entry.baseDir).workspaceId || ''
   const clientId = process.env.INFISICAL_CLIENT_ID || ''
   const clientSecret = process.env.INFISICAL_CLIENT_SECRET || ''
 
@@ -131,7 +131,7 @@ async function resolveInfisical(entry: SourceEntry, source: InfisicalSource, con
     throw new SourceError(entry.name, source.provider, `[mxenv] Infisical source "${entry.name}" is not logged in; run infisical login.`)
   }
 
-  const result = fetchSecretsViaCLI(environment, source.paths, source.envPrefix)
+  const result = fetchSecretsViaCLI(environment, source.paths, source.envPrefix, entry.baseDir)
   const firstError = result.errors[0]
   if (firstError) {
     if (entry.legacy) return { name: entry.name, provider: source.provider, values: {}, availability: 'skipped', detail: `infisical export failed (${firstError.kind})` }

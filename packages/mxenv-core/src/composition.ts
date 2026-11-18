@@ -213,6 +213,14 @@ function resolveEntries(layers: ConfigLayers, options: ComposeOptions): { name: 
 }
 
 /**
+ * 值无关的组合解析面：只解析 profile/legacy 与来源顺序，不加载任何来源值。
+ * 面板多范围读复用此入口，避免另写一套 defaultProfile/legacy 规则而漂移。
+ */
+export function resolveCompositionEntries(layers: ConfigLayers, options: ComposeOptions = {}): { name: string; entries: SourceEntry[] } {
+  return resolveEntries(layers, options)
+}
+
+/**
  * Resolves sources in precedence order without mutating global process.env.
  * A caller receives an environment object suitable for exactly one child run.
  */

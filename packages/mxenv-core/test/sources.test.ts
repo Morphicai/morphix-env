@@ -177,6 +177,32 @@ describe('provider source adapters', () => {
     }
   })
 
+  it('runs Infisical project discovery and export in the source baseDir', async () => {
+    const previous = {
+      id: process.env.INFISICAL_CLIENT_ID,
+      secret: process.env.INFISICAL_CLIENT_SECRET,
+      project: process.env.INFISICAL_PROJECT_ID,
+    }
+    delete process.env.INFISICAL_CLIENT_ID
+    delete process.env.INFISICAL_CLIENT_SECRET
+    delete process.env.INFISICAL_PROJECT_ID
+    try {
+      mocks.readInfisicalJson.mockReturnValue({})
+      mocks.hasInfisicalCLI.mockReturnValue(true)
+      mocks.isInfisicalLoggedIn.mockReturnValue(true)
+      mocks.fetchSecretsViaCLI.mockReturnValue({ values: { MXTEST_INFISICAL: value('cwd') }, count: 1, errors: [] })
+      const loaded = await loadSource(entry('team', { provider: 'infisical', paths: ['/ai'], env: 'dev' }), context())
+      expect(loaded.availability).toBe('loaded')
+      expect(mocks.readInfisicalJson).toHaveBeenCalledWith(ROOT)
+      expect(mocks.fetchSecretsViaCLI).toHaveBeenCalledWith('dev', ['/ai'], undefined, ROOT)
+    } finally {
+      for (const [key, original] of Object.entries({ INFISICAL_CLIENT_ID: previous.id, INFISICAL_CLIENT_SECRET: previous.secret, INFISICAL_PROJECT_ID: previous.project })) {
+        if (original === undefined) delete process.env[key]
+        else process.env[key] = original
+      }
+    }
+  })
+
   it('legacy skip paths carry a value-free reason in detail', async () => {
     const legacyEntry = (name = '__mx_legacy_infisical'): SourceEntry => ({
       name,

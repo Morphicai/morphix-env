@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'fs'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, chmodSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { startHostSession, hostStatus, type HostRuntime } from '../src/host'
-import { clearHostSession, readHostSession, type SourceEntry } from '@morphixai/mxenv-core'
+import { clearHostSession, readHostSession, registerProject, type SourceEntry } from '@morphixai/mxenv-core'
+import { panelBundleHash, panelCss, panelJs, panelJsIntegrity } from '../src/panel-ui/generated/clientAssets'
 
 // 临时 HOME + local 假来源（哨兵假值）；in-process 宿主，直接打 127.0.0.1。
 let HOME: string
@@ -68,8 +69,205 @@ describe('auth and names-only surface', () => {
     const keys = res.body.keys as Array<{ key: string; status: string }>
     expect(keys.map((k) => k.key).sort()).toEqual(['VR_A', 'VR_B'])
     expect(keys.every((k) => k.status === 'present')).toBe(true)
+    expect(keys.every((k: any) => k.provider === 'local')).toBe(true)
     expect(JSON.stringify(res.body)).not.toContain('mxenv_test_')
     expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+})
+
+describe('multi-scope names-only reads', () => {
+  function registerCurrentProject(): string {
+    writeFileSync(join(ROOT, 'mxenv.config.json'), JSON.stringify({
+      sources: { local: { provider: 'local', files: ['project.env'] } },
+      profiles: { default: ['local'] },
+      defaultProfile: 'default',
+    }))
+    registerProject(ROOT, HOME)
+    return ROOT.split('/').pop() as string
+  }
+
+  it('lists global plus registered projects, without values', async () => {
+    const name = registerCurrentProject()
+    const res = await api('/scopes')
+    expect(res.status).toBe(200)
+    expect(res.body.scopes.map((s: any) => s.id)).toEqual(['global', `project:${name}`])
+    expect(res.body.remotes).toEqual([])
+    expect(JSON.stringify(res.body)).not.toContain('mxenv_test_')
+  })
+
+  it('isolates global and project key lists and rejects arbitrary/unregistered scopes', async () => {
+    const name = registerCurrentProject()
+    const projectValue = value('project-scope')
+    writeFileSync(join(ROOT, 'project.env'), `PROJECT_ONLY=${projectValue}\n`)
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), `GLOBAL_ONLY=${value('global-scope')}\n`, { mode: 0o600 })
+    chmodSync(join(HOME, '.mxenv', '.env'), 0o600)
+
+    const global = await api('/keys?scope=global')
+    expect(global.status).toBe(200)
+    expect(global.body.keys.map((k: any) => k.key)).toEqual(['GLOBAL_ONLY'])
+    expect(global.body.profile).toBe('legacy')
+
+    const project = await api(`/keys?scope=project:${encodeURIComponent(name)}`)
+    expect(project.status).toBe(200)
+    // 项目范围反映真实组合：全局基线 + 项目来源，但不混入会话默认来源 VR_A/VR_B。
+    expect(project.body.keys.map((k: any) => k.key)).toEqual(['GLOBAL_ONLY', 'PROJECT_ONLY'])
+    expect(project.body.keys.find((k: any) => k.key === 'GLOBAL_ONLY')).toMatchObject({ provider: 'local', inherited: true })
+    expect(project.body.keys.find((k: any) => k.key === 'PROJECT_ONLY')).toMatchObject({ provider: 'local' })
+    expect(project.body.keys.find((k: any) => k.key === 'PROJECT_ONLY').inherited).toBeUndefined()
+    expect(project.body.profile).toBe('default')
+    expect(JSON.stringify(project.body)).not.toContain(projectValue)
+
+    expect((await api('/keys?scope=project:unregistered')).status).toBe(404)
+    expect((await api(`/keys?scope=${encodeURIComponent(ROOT)}`)).status).toBe(404)
+  })
+
+  it('reports provider wiring and health as names/status only', async () => {
+    const name = registerCurrentProject()
+    const sentinel = value('wiring')
+    writeFileSync(join(ROOT, 'project.env'), `PROJECT_ONLY=${sentinel}\n`)
+    mkdirSync(join(HOME, '.mxenv'), { recursive: true })
+    writeFileSync(join(HOME, '.mxenv', '.env'), `GLOBAL_ONLY=${value('wiring-global')}\n`, { mode: 0o600 })
+    chmodSync(join(HOME, '.mxenv', '.env'), 0o600)
+
+    const project = await api(`/wiring?scope=project:${encodeURIComponent(name)}`)
+    expect(project.status).toBe(200)
+    expect(project.body.sources).toHaveLength(2) // 全局基线 + 项目 local
+    expect(project.body.sources[1]).toMatchObject({
+      name: 'local', provider: 'local', status: 'loaded', keyCount: 1, order: 1,
+      details: { files: [{ file: 'project.env', exists: true, encrypted: false }] },
+    })
+    expect(JSON.stringify(project.body)).not.toContain(sentinel)
+
+    const global = await api('/wiring?scope=global')
+    expect(global.body.sources).toHaveLength(1) // 同一个 .env 不得作为项目 legacy 尾重复出现
+    expect(global.body.sources[0].name).toBe('__mx_global_dotenv')
+    expect((await api('/wiring?scope=project:nope')).status).toBe(404)
+  })
+
+  it('scopes reveal and its audit to the selected registered project', async () => {
+    const name = registerCurrentProject()
+    const sentinel = value('scoped-reveal')
+    writeFileSync(join(ROOT, 'project.env'), `PROJECT_ONLY=${sentinel}\n`)
+    expect((await api('/unlock', { method: 'POST', panel: true })).status).toBe(200)
+
+    const revealed = await api('/reveal', {
+      method: 'POST', panel: true,
+      body: { key: 'PROJECT_ONLY', source: 'local', scope: `project:${name}` },
+    })
+    expect(revealed.status).toBe(200)
+    expect(revealed.body.value).toBe(sentinel)
+    expect(revealed.headers.get('cache-control')).toBe('no-store')
+
+    // 同一个源名不能跨 scope 偷读：全局范围里没有这个声明。
+    const wrongScope = await api('/reveal', {
+      method: 'POST', panel: true,
+      body: { key: 'PROJECT_ONLY', source: 'local', scope: 'global' },
+    })
+    expect(wrongScope.status).toBe(404)
+    const revealEvent = auditEvents().find((e) => e.action === 'reveal' && e.outcome === 'success')
+    expect(revealEvent.profile).toBe('default')
+    expect(revealEvent.configPath).toBe(join(ROOT, 'mxenv.config.json'))
+    expect(JSON.stringify(auditEvents())).not.toContain(sentinel)
+  })
+})
+
+describe('scoped set/delete writes', () => {
+  it('requires both the panel marker and an active unlock window', async () => {
+    const original = readFileSync(join(ROOT, 'a.env'), 'utf8')
+    const locked = await api('/set', {
+      method: 'POST', panel: true,
+      body: { key: 'VR_A', value: value('locked-write'), source: 'local' },
+    })
+    expect(locked.status).toBe(423)
+    const machine = await api('/set', {
+      method: 'POST',
+      body: { key: 'VR_A', value: value('machine-write'), source: 'local', scope: 'global' },
+    })
+    expect(machine.status).toBe(403)
+    expect(readFileSync(join(ROOT, 'a.env'), 'utf8')).toBe(original)
+    expect(auditEvents().some((e) => e.reason === 'consumer-boundary')).toBe(true)
+    expect(auditEvents().some((e) => e.reason === 'locked')).toBe(true)
+  })
+
+  it('sets and deletes local keys without returning or auditing values', async () => {
+    const sentinel = value('panel-set')
+    expect((await api('/unlock', { method: 'POST', panel: true })).status).toBe(200)
+    const before = runtime.state.lastActionAt
+    const set = await api('/set', {
+      method: 'POST', panel: true,
+      body: { key: 'VR_A', value: sentinel, source: 'local', fileIndex: 0 },
+    })
+    expect(set.status).toBe(200)
+    expect(set.body).toEqual({ action: 'set', key: 'VR_A', source: 'local', provider: 'local', fileIndex: 0 })
+    expect(JSON.stringify(set.body)).not.toContain(sentinel)
+    expect(runtime.state.lastActionAt).toBeGreaterThanOrEqual(before)
+    expect(readFileSync(join(ROOT, 'a.env'), 'utf8')).toContain(`VR_A=${JSON.stringify(sentinel)}`)
+
+    const added = await api('/set', {
+      method: 'POST', panel: true,
+      body: { key: 'VR_C', value: value('panel-add'), source: 'local' },
+    })
+    expect(added.status).toBe(200)
+    expect((await api('/keys')).body.keys.map((k: any) => k.key)).toContain('VR_C')
+
+    const deleted = await api('/delete', {
+      method: 'POST', panel: true,
+      body: { key: 'VR_B', source: 'local' },
+    })
+    expect(deleted.status).toBe(200)
+    expect(deleted.body.action).toBe('delete')
+    expect(readFileSync(join(ROOT, 'a.env'), 'utf8')).not.toContain('VR_B=')
+    const events = auditEvents().filter((e) => e.action === 'set' || e.action === 'delete')
+    expect(events).toHaveLength(3)
+    expect(events.every((e) => e.via === 'host' && e.outcome === 'success')).toBe(true)
+    expect(JSON.stringify(events)).not.toContain('mxenv_test_')
+  })
+
+  it('writes only inside the selected project scope', async () => {
+    writeFileSync(join(ROOT, 'mxenv.config.json'), JSON.stringify({
+      sources: { local: { provider: 'local', files: ['project.env'] } },
+      profiles: { default: ['local'] }, defaultProfile: 'default',
+    }))
+    registerProject(ROOT, HOME)
+    const name = ROOT.split('/').pop() as string
+    const projectSentinel = value('project-write')
+    const globalSentinel = value('global-write')
+    await api('/unlock', { method: 'POST', panel: true })
+    const scoped = await api('/set', {
+      method: 'POST', panel: true,
+      body: { key: 'SCOPED', value: projectSentinel, source: 'local', scope: `project:${name}` },
+    })
+    expect(scoped.status).toBe(200)
+    expect(readFileSync(join(ROOT, 'project.env'), 'utf8')).toContain(`SCOPED=${JSON.stringify(projectSentinel)}`)
+    expect(readFileSync(join(ROOT, 'a.env'), 'utf8')).not.toContain('SCOPED=')
+    expect((await api('/set', {
+      method: 'POST', panel: true,
+      body: { key: 'SCOPED', value: globalSentinel, source: 'local', scope: 'project:missing' },
+    })).status).toBe(404)
+    const event = auditEvents().find((e) => e.action === 'set' && e.outcome === 'success')
+    expect(event.configPath).toBe(join(ROOT, 'mxenv.config.json'))
+    expect(JSON.stringify(auditEvents())).not.toContain(projectSentinel)
+  })
+
+  it('fails closed for remote providers and invalid requests', async () => {
+    runtime.entries.push({ name: 'remote', source: { provider: 'infisical', paths: ['/'], env: 'dev' }, baseDir: ROOT })
+    await api('/unlock', { method: 'POST', panel: true })
+    const remote = await api('/set', {
+      method: 'POST', panel: true,
+      body: { key: 'REMOTE', value: value('remote-write'), source: 'remote' },
+    })
+    expect(remote.status).toBe(400)
+    expect(remote.body.code).toBe('unsupported-provider')
+    expect((await api('/set', {
+      method: 'POST', panel: true,
+      body: { key: 'VR_A', value: value('bad-index'), source: 'local', fileIndex: 99 },
+    })).status).toBe(400)
+    const res = await fetch(`${base}/set`, {
+      method: 'POST', headers: { authorization: `Bearer ${runtime.state.token}`, 'x-mxenv-panel': '1', 'content-type': 'application/json' }, body: '{',
+    })
+    expect(res.status).toBe(400)
+    expect(auditEvents().some((e) => e.reason === 'invalid-request')).toBe(true)
   })
 })
 
@@ -81,19 +279,52 @@ describe('panel page (token-in-path)', () => {
     expect(res.headers.get('cache-control')).toBe('no-store')
     const html = await res.text()
     expect(html).toContain('mxenv') // 品牌 wordmark
-    expect(html).toContain('/unlock') // 面板交互面
+    expect(html).toContain('id="root"') // React 挂载点
+    expect(html).toContain(`panel-${panelBundleHash}.js`)
+    expect(html).toContain(`panel-${panelBundleHash}.css`)
+    expect(html).toContain(`integrity="${panelJsIntegrity}"`)
+    expect(res.headers.get('content-security-policy')).toContain("script-src 'self'")
+    expect(res.headers.get('content-security-policy')).toContain("frame-ancestors 'none'")
     expect(html).not.toContain(runtime.state.token) // token 不内嵌页面（取自 URL）
+    expect(html).not.toContain('VR_A') // 初始 HTML 不序列化键名
+  })
+
+  it('serves only the current hashed React assets inside the session path', async () => {
+    const js = await fetch(`${base}/${runtime.state.token}/panel-${panelBundleHash}.js`)
+    expect(js.status).toBe(200)
+    expect(js.headers.get('content-type')).toContain('text/javascript')
+    expect(js.headers.get('cache-control')).toBe('private, max-age=3600')
+    const jsBody = await js.text()
+    expect(jsBody).toBe(panelJs)
+    expect(jsBody).toContain('/scopes')
+    expect(jsBody).toContain('/wiring')
+    expect(jsBody).toContain('/set')
+    expect(jsBody).toContain('/delete')
+    expect(jsBody).not.toContain(runtime.state.token)
+
+    const css = await fetch(`${base}/${runtime.state.token}/panel-${panelBundleHash}.css`)
+    expect(css.status).toBe(200)
+    expect(css.headers.get('content-type')).toContain('text/css')
+    expect(await css.text()).toBe(panelCss)
+
+    expect((await fetch(`${base}/${runtime.state.token}/panel-000000000000000000000000.js`)).status).toBe(404)
+    expect((await fetch(`${base}/wrong-token/panel-${panelBundleHash}.js`)).status).toBe(404)
+    expect((await fetch(`${base}/${runtime.state.token}/panel-${panelBundleHash}.js`, { method: 'POST' })).status).toBe(401)
   })
 
   it('serves the same page with a trailing slash', async () => {
+    const redirect = await fetch(`${base}/${runtime.state.token}`, { redirect: 'manual' })
+    expect(redirect.status).toBe(308)
+    expect(redirect.headers.get('location')).toBe(`/${runtime.state.token}/`)
     const res = await fetch(`${base}/${runtime.state.token}/`)
     expect(res.status).toBe(200)
   })
 
-  it('a wrong token path is not a page (401, session existence not disclosed)', async () => {
+  it('a wrong token path is indistinguishable from a missing page (404)', async () => {
     const res = await fetch(`${base}/not-the-token`)
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(404)
     expect(res.headers.get('content-type')).toContain('application/json')
+    expect(await res.json()).toEqual({ error: 'not found' })
   })
 
   it('bare / serves the static landing page with no session info', async () => {
@@ -217,6 +448,122 @@ describe('audit scope and session lifecycle', () => {
     if ('runtime' in (started[0] as object & { runtime?: unknown })) {
       await (started[0] as { runtime: HostRuntime }).runtime.close()
     }
+  })
+})
+
+describe('project wiring preview and confirmed writes', () => {
+  function registerModernProject(): string {
+    writeFileSync(join(ROOT, 'mxenv.config.json'), JSON.stringify({
+      sources: { local: { provider: 'local', files: ['project.env'], optional: true } },
+      profiles: { default: ['local'] }, defaultProfile: 'default',
+    }))
+    registerProject(ROOT, HOME)
+    return ROOT.split('/').pop() as string
+  }
+
+  const addSource = {
+    type: 'add-source', name: 'dotenvx',
+    source: { provider: 'dotenvx', files: ['.env'], optional: true, override: true },
+  }
+
+  it('enforces the human boundary, unlock window and explicit project scope', async () => {
+    const name = registerModernProject()
+    const body = { scope: `project:${name}`, action: addSource, fingerprint: '0'.repeat(64) }
+    expect((await api('/wiring-preview', { method: 'POST', body })).status).toBe(403)
+    expect((await api('/wiring-preview', { method: 'POST', body, panel: true })).status).toBe(423)
+    await api('/unlock', { method: 'POST', panel: true })
+    expect((await api('/wiring-preview', { method: 'POST', body: { action: addSource }, panel: true })).status).toBe(400)
+    expect((await api('/wiring-preview', { method: 'POST', body: { ...body, scope: 'global' }, panel: true })).status).toBe(400)
+    expect((await api('/wiring-preview', { method: 'POST', body: { ...body, scope: 'project:missing' }, panel: true })).status).toBe(404)
+  })
+
+  it('previews without writing and commits only with the matching fingerprint', async () => {
+    const name = registerModernProject()
+    const configPath = join(ROOT, 'mxenv.config.json')
+    const original = readFileSync(configPath, 'utf8')
+    await api('/unlock', { method: 'POST', panel: true })
+    const preview = await api('/wiring-preview', {
+      method: 'POST', panel: true, body: { scope: `project:${name}`, action: addSource },
+    })
+    expect(preview.status).toBe(200)
+    expect(preview.body.fingerprint).toMatch(/^[a-f0-9]{64}$/)
+    expect(preview.body.after.map((source: any) => source.name)).toEqual(['local', 'dotenvx'])
+    expect(readFileSync(configPath, 'utf8')).toBe(original)
+
+    const missing = await api('/wiring-write', {
+      method: 'POST', panel: true, body: { scope: `project:${name}`, action: addSource },
+    })
+    expect(missing.status).toBe(400)
+    const committed = await api('/wiring-write', {
+      method: 'POST', panel: true,
+      body: { scope: `project:${name}`, action: addSource, fingerprint: preview.body.fingerprint },
+    })
+    expect(committed.status).toBe(200)
+    expect(committed.body.backupPath).toBe(`${configPath}.bak`)
+    expect(readFileSync(`${configPath}.bak`, 'utf8')).toBe(original)
+    const written = JSON.parse(readFileSync(configPath, 'utf8'))
+    expect(written.sources.dotenvx.provider).toBe('dotenvx')
+    expect(written.profiles.default).toEqual(['local', 'dotenvx'])
+    const events = auditEvents().filter((event) => event.action === 'wiring-write')
+    expect(events.some((event) => event.outcome === 'success' && event.sources[0] === 'dotenvx')).toBe(true)
+    expect(JSON.stringify(committed.body)).not.toContain('mxenv_test_')
+  })
+
+  it('returns 409 and preserves concurrent edits when the preview is stale', async () => {
+    const name = registerModernProject()
+    const configPath = join(ROOT, 'mxenv.config.json')
+    await api('/unlock', { method: 'POST', panel: true })
+    const preview = await api('/wiring-preview', {
+      method: 'POST', panel: true, body: { scope: `project:${name}`, action: addSource },
+    })
+    const concurrent = JSON.stringify({
+      sources: { local: { provider: 'local', files: ['concurrent.env'], optional: true } },
+      profiles: { default: ['local'] }, defaultProfile: 'default',
+    })
+    writeFileSync(configPath, concurrent)
+    const stale = await api('/wiring-write', {
+      method: 'POST', panel: true,
+      body: { scope: `project:${name}`, action: addSource, fingerprint: preview.body.fingerprint },
+    })
+    expect(stale.status).toBe(409)
+    expect(stale.body.code).toBe('stale-fingerprint')
+    expect(readFileSync(configPath, 'utf8')).toBe(concurrent)
+  })
+
+  it('runs a names-only doctor check for one source without exposing values', async () => {
+    const name = registerModernProject()
+    writeFileSync(join(ROOT, 'project.env'), `PROJECT_ONLY=${value('project')}\n`, { mode: 0o600 })
+    const result = await api(`/doctor?scope=project:${name}&source=local`)
+    expect(result.status, JSON.stringify(result.body)).toBe(200)
+    expect(result.body).toMatchObject({ source: 'local', provider: 'local', status: 'loaded', keyCount: 1 })
+    expect(result.body.value).toBeUndefined()
+    expect(JSON.stringify(result.body)).not.toContain(value('project'))
+    expect((await api(`/doctor?scope=project:${name}&source=missing`)).status).toBe(404)
+    expect((await api(`/doctor?scope=project:${name}`)).status).toBe(400)
+  })
+
+  it('previews and commits actual legacy migration through the same guarded API', async () => {
+    writeFileSync(join(ROOT, 'mxenv.config.json'), JSON.stringify({
+      infisical: { paths: ['/ai'], env: 'dev' }, envFiles: ['.env.local'],
+    }))
+    registerProject(ROOT, HOME)
+    const name = ROOT.split('/').pop() as string
+    await api('/unlock', { method: 'POST', panel: true })
+    const action = { type: 'migrate-legacy' }
+    const preview = await api('/wiring-preview', {
+      method: 'POST', panel: true, body: { scope: `project:${name}`, action },
+    })
+    expect(preview.status).toBe(200)
+    expect(preview.body.before).toEqual([])
+    expect(preview.body.after.map((source: any) => source.name)).toEqual(['infisical', 'local'])
+    const committed = await api('/wiring-write', {
+      method: 'POST', panel: true,
+      body: { scope: `project:${name}`, action, fingerprint: preview.body.fingerprint },
+    })
+    expect(committed.status).toBe(200)
+    const written = JSON.parse(readFileSync(join(ROOT, 'mxenv.config.json'), 'utf8'))
+    expect(written.sources.infisical.env).toBe('dev')
+    expect(written.envFiles).toBeUndefined()
   })
 })
 

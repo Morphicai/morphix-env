@@ -339,9 +339,8 @@ describe('config file integration', () => {
     expect(out).not.toContain('from-config')
   })
 
-  it('edit opens a value-free profile page and only exposes local values in the browser session', async () => {
+  it('edit opens a value-free management panel scoped to the current project', async () => {
     const initial = `mxenv_test_editor_${Date.now()}_initial`
-    const replacement = `mxenv_test_editor_${Date.now()}_replacement`
     writeFileSync(join(TMP, 'editable.env'), `MXTEST_EDITOR=${initial}\n`)
     writeFileSync(join(TMP, 'mxenv.config.json'), JSON.stringify({
       sources: { local: { provider: 'local', files: ['editable.env'] } },
@@ -349,49 +348,38 @@ describe('config file integration', () => {
     }))
 
     const output = run(['edit', '--profile', 'editable', '--no-infisical', '--print-editor-url'], { MX_ENV_NO_OPEN: '1' })
-    const url = output.match(/Local editor URL: (http:\/\/[^\s]+)/)?.[1]
-    expect(url).toBeTruthy()
-    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\//)
+    const url = new URL(output.trim())
+    expect(url.origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
+    expect(url.searchParams.get('scope')).toMatch(/^project:/)
+    expect(url.searchParams.get('profile')).toBe('editable')
     expect(output).not.toContain(initial)
 
-    const profile = await fetch(url!).then((response) => response.text())
-    expect(profile).toContain('MXTEST_EDITOR')
-    expect(profile).not.toContain(initial)
+    const token = url.pathname.split('/')[1]
+    const keys = await fetch(`${url.origin}/keys?scope=${encodeURIComponent(url.searchParams.get('scope')!)}&profile=${encodeURIComponent(url.searchParams.get('profile')!)}`, {
+      headers: { authorization: `Bearer ${token}` },
+    }).then((response) => response.json()) as { keys: Array<{ key: string }> }
+    expect(keys.keys.map((key: { key: string }) => key.key)).toContain('MXTEST_EDITOR')
+    expect(JSON.stringify(keys)).not.toContain(initial)
+    const index = await fetch(url).then((response) => response.text())
+    expect(index).toContain('<title>mxenv panel</title>')
+    expect(index).not.toContain(initial)
 
-    const source = await fetch(`${url}/source/local`).then((response) => response.text())
-    expect(source).toContain(initial)
-
-    const saved = await fetch(`${url}/source/local/local`, {
+    await fetch(`${url.origin}/close`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ fileIndex: '0', content: `MXTEST_EDITOR=${replacement}\n` }),
-    }).then((response) => response.text())
-    expect(saved).toContain('Saved')
-    expect(readFileSync(join(TMP, 'editable.env'), 'utf8')).toContain(replacement)
-
-    // The session stays open after a save; end it explicitly to avoid leaking
-    // a detached editor until its TTL.
-    await fetch(url!, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ action: 'close' }),
+      headers: { authorization: `Bearer ${token}`, 'x-mxenv-panel': '1' },
     })
   })
 
-  it('bare edit opens the default composition without --profile/--source', async () => {
+  it('bare edit opens the global panel when no project config exists', async () => {
     const output = run(['edit', '--no-infisical', '--print-editor-url'], { MX_ENV_NO_OPEN: '1' })
-    const url = output.match(/Local editor URL: (http:\/\/[^\s]+)/)?.[1]
-    expect(url).toBeTruthy()
-
-    const index = await fetch(url!).then((response) => response.text())
-    // Assert the server-rendered <title>: component copy is inlined in every
-    // page's client bundle and cannot discriminate pages.
-    expect(index).toContain('<title>mxenv editor</title>')
-
-    await fetch(url!, {
+    const url = new URL(output.trim())
+    expect(url.searchParams.get('scope')).toBeNull()
+    const index = await fetch(url).then((response) => response.text())
+    expect(index).toContain('<title>mxenv panel</title>')
+    const token = url.pathname.split('/')[1]
+    await fetch(`${url.origin}/close`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ action: 'close' }),
+      headers: { authorization: `Bearer ${token}`, 'x-mxenv-panel': '1' },
     })
   })
 

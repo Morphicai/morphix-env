@@ -11,5 +11,6 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true
   },
-  "include": ["src", "test", "tsup.config.ts", "vitest.config.ts"]
+  "include": ["src", "test", "tsup.config.ts", "vitest.config.ts"],
+  "exclude": ["src/panel-ui/client", "src/panel-ui/client.tsx"]
 }
