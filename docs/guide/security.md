@@ -55,6 +55,8 @@ When the consumer is an agent, prefer `run --serve` — the agent fetches values
 
 `mxenv gui` serves a machine-level keys view where `/reveal` and `/unlock` accept only human-driven panel sessions (a header marker agents cannot claim). Agents and scripts are confined to the names-only surface; their reveal/unlock attempts are rejected **and audited**. Sessions: 4-hour TTL, 30-minute idle auto-close; unlock windows: 15 minutes against the wall clock, 5-minute idle auto-lock that only explicit actions extend. The session token lives in `~/.mxenv/host/runtime.json` (0600, created and cleared with the session).
 
+**Resident mode** (`mxenv gui install`) trades auto-close for availability: the host runs from login onward under launchd/systemd and its session never expires — idleness locks the panel instead of closing it. The security posture does not change: the server stays loopback-only, the token stays in a 0600 runtime file, and values remain behind the unlock window at all times. Pinning `--port` adds a predictable endpoint; leave it random unless a firewall/proxy setup requires otherwise.
+
 ## Verified migration
 
 `mxenv migrate` never rewrites config or removes plaintext on faith: every unit gets a 0600 backup, encryption is verified by decrypting/reading back and comparing against the plaintext snapshot (through `dotenvx decrypt`, never `run`, so a same-named shell export cannot shadow the check), and any failure restores plaintext and config from backup, reporting restoration truthfully. Failure messages stay value-free. Backups remain until you delete them.

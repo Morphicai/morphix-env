@@ -169,7 +169,7 @@ mxenv 做的是**泄露最小化，不是密码学边界**：
 
 **承诺中（按优先级）**
 
-- [ ] **面板常驻化**：`gui` 会话已有，launchd 托管 + 稳定端点消费者随真实需求落地（契约零变更）
+- [x] **面板常驻化**（0.17.0）：`mxenv gui install|uninstall`——launchd（macOS）/ systemd --user 托管，开机自启、崩溃重启，daemon 会话不过期、空闲只锁不关；端口默认随机经 `~/.mxenv/host/runtime.json` 发现，`--port` 可固定
 - [ ] **remote source 真编辑**：Infisical / Doppler 的键值编辑目前跳转 provider 自己的 UI，改为经 provider API 就地编辑
 
 **明确不做**

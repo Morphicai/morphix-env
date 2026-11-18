@@ -91,8 +91,8 @@ Generate PATH shims for commands declared under `shims` in either config layer (
 
 **Boundary.** Shims buy convenience, not concealment — injected values live in the child's environment. When the consumer is an agent you do not trust with the values, use `run --serve`.
 
-### `mxenv gui [status|close]`
+### `mxenv gui [status|close|serve|install|uninstall]`
 
 Panel-host session: a machine-level keys view and safe single-key reveal. Loopback server, 4-hour session TTL, 30-minute idle auto-close; repeat invocations attach idempotently; `status` reports run state / port / lock state; `close` shuts the session down. Default locked — names-only until an explicit human unlock (15-minute window, 5-minute idle auto-lock). `/reveal` and `/unlock` accept only human-driven panel sessions; agents and scripts are confined to the names-only surface. Token lives in `~/.mxenv/host/runtime.json` (0600, created and cleared with the session).
 
-`gui` / `global` / `host` are reserved for upcoming machine-level faces and currently rejected with guidance.
+**Resident mode.** `gui install` registers a user-level service unit (launchd `dev.mxenv.panel` on macOS, systemd --user elsewhere) that starts the host at login and restarts it if it dies; `gui uninstall` stops it and removes the unit. In resident mode the session never expires — idleness locks the panel instead of closing it — so values stay behind the unlock window at all times. Ports are random per start and rediscovered via `~/.mxenv/host/runtime.json`; `--port` pins a fixed port for firewalls/proxies (documented larger exposure surface: a predictable endpoint), and `serve --daemon` runs the resident loop directly without touching service managers.

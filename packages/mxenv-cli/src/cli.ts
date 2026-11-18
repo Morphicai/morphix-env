@@ -14,6 +14,7 @@ import {
 } from './shims'
 import { spawn } from 'child_process'
 import { collectEntries, hostLockState, hostStatus, startHostSession } from './host'
+import { installDaemon, uninstallDaemon, installSummary } from './daemon'
 import { clearHostSession, readHostSession, releaseHostLock } from '@morphixai/mxenv-core'
 import pkg from '../package.json'
 
@@ -44,6 +45,10 @@ interface Args {
   /** migrate: 全局目录一次性迁移（~/.mx-env → ~/.mxenv）。 */
   home: boolean
   serve: boolean
+  /** gui serve：常驻模式（TTL 无限、空闲只锁不关；launchd/systemd 单元用）。 */
+  daemon: boolean
+  /** gui serve/install：固定端口（默认随机；固定=可预测端点，更大暴露面）。 */
+  port: number | null
   write: boolean
   remove: boolean
   warnPlaintext: boolean
@@ -64,6 +69,7 @@ function parseArgs(argv: string[]): Args {
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
     target: null, hermesCategory: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
+    daemon: false, port: null,
     write: false, remove: false, warnPlaintext: false, help: false, unknownFlags: [],
   }
 
@@ -121,6 +127,14 @@ function parseArgs(argv: string[]): Args {
       args.remove = true
     } else if (arg === '--serve') {
       args.serve = true
+    } else if (arg === '--daemon') {
+      args.daemon = true
+    } else if (arg === '--port') {
+      const raw = argv[++i]
+      if (raw) {
+        const port = Number(raw)
+        if (Number.isInteger(port) && port > 0 && port < 65536) args.port = port
+      }
     } else if (arg === '--warn-plaintext') {
       args.warnPlaintext = true
     } else if (arg === '--help' || arg === '-h') {
@@ -267,6 +281,12 @@ mxenv gui [status|close]   Panel-host session (machine-level keys view & safe
                            reveal; values never leave this machine; opens the
                            panel in a browser — distinct from the project
                            editor \`mxenv edit\`)
+mxenv gui install [--port N]
+                           Install the resident daemon (launchd on macOS,
+                           systemd --user on Linux): no session TTL, idle only
+                           locks. Port defaults to random per start; a fixed
+                           --port is a predictable endpoint (tunnels only).
+mxenv gui uninstall        Stop the daemon and remove its unit
 
 Project-level commands (run, export, inspect, edit, migrate, …) come from the
 project-local install (node_modules/.bin); this CLI manages the machine only.
@@ -276,10 +296,12 @@ project-local install (node_modules/.bin); this CLI manages the machine only.
 /**
  * `mxenv gui`：面板宿主会话（panel-host）。无会话则起（detached 子进程
  * `gui serve`）并开浏览器；有会话则附着打印 URL。`gui status`/`gui close`
- * 管理生命周期。值红线：输出永不含值与 token。
+ * 管理生命周期；`gui install|uninstall` 常驻化（launchd/systemd 单元）。
+ * 值红线：输出永不含值与 token。
  */
 async function cmdGui(args: Args): Promise<number> {
-  const sub = args.subArgs[0] || ''
+  // 子命令词落在 positionals（parseArgs 与 L2 逐字节 parity，仅 run 有 subArgs 语义）。
+  const sub = args.positionals[0] || args.subArgs[0] || ''
   const homeDir = homedir()
 
   if (sub === 'status') {
@@ -314,10 +336,50 @@ async function cmdGui(args: Args): Promise<number> {
     return 0
   }
 
+  if (sub === 'install') {
+    try {
+      const result = installDaemon({ homeDir, port: args.port ?? undefined })
+      console.log(installSummary(result, args.port ?? undefined))
+      return 0
+    } catch (error) {
+      console.error((error as Error).message)
+      return 1
+    }
+  }
+
+  if (sub === 'uninstall') {
+    try {
+      uninstallDaemon({ homeDir })
+      console.log('[mxenv] daemon uninstalled (unit removed, session cleared)')
+      return 0
+    } catch (error) {
+      console.error((error as Error).message)
+      return 1
+    }
+  }
+
   if (sub === 'serve') {
-    // 内部模式：detached 子进程持有会话（TTL/空闲/close 到期自清）。
+    // 内部模式：detached 子进程持有会话（TTL/空闲/close 到期自清；
+    // --daemon=常驻（TTL 无限、空闲只锁不关），--port=固定端口（默认随机）。
+    if (args.port !== null && !args.daemon) {
+      console.error('[mxenv] --port is only meaningful with --daemon (transient sessions use a random port)')
+      return 1
+    }
     const layers = loadConfigLayers({ homeDir })
-    const started = await startHostSession({ homeDir, cwd: process.cwd(), entries: collectEntries(layers) })
+    let started: Awaited<ReturnType<typeof startHostSession>>
+    try {
+      started = await startHostSession({
+        homeDir,
+        cwd: process.cwd(),
+        entries: collectEntries(layers),
+        daemon: args.daemon,
+        port: args.port ?? undefined,
+      })
+    } catch (error) {
+      const message = (error as Error).message
+      console.error(args.port !== null ? `[mxenv] cannot listen on port ${args.port}: ${message}` : `[mxenv] ${message}`)
+      return 1
+    }
     if (!('runtime' in started)) return 0 // 竞态下已有会话：子进程即退（幂等）
     await new Promise<void>((resolve) => started.runtime.server.on('close', () => resolve()))
     return 0

@@ -71,7 +71,7 @@ L2 mxenv   ──┘
 
 ### 2.3 常驻 host + 本地面板（Wave B）
 
-> 2026-11-09 架构评审定案（用户拍板）：**会话式面板宿主**先行（`mxenv gui`，复用编辑器会话机；暴露面随使用生灭），常驻化（launchd 托管、TTL 翻无限、稳定端点消费者）后置为契约零变更的独立 change——触发器：云 relay 定案 / Agent 轮询真实需求 / 用户反馈敲命令是摩擦。下方 daemon 行保留为终局形态描述，实施入口见 change `mxenv-panel-host`。
+> 2026-11-09 架构评审定案（用户拍板）：**会话式面板宿主**先行（`mxenv gui`，复用编辑器会话机；暴露面随使用生灭），常驻化（launchd 托管、TTL 翻无限、稳定端点消费者）后置为契约零变更的独立 change。**2026-11-18 已落地常驻**：`gui install|uninstall`（launchd `dev.mxenv.panel` / systemd --user）、daemon 会话 TTL 无限、空闲只锁不关、端口默认随机（`runtime.json` 发现，`--port` 可固定）——契约零变更承诺兑现，见 change `mxenv-global-panel`。下方 daemon 行保留为终局形态描述。
 
 
 - **daemon**：loopback HTTP（127.0.0.1，每会话一次性 token，文件 0600），launchd 可选托管（`mxenv host install`）+ 手动启动并存。
@@ -137,7 +137,7 @@ flowchart TB
 | 波次 | 内容 | 备注 |
 |---|---|---|
 | **A 命名与品牌基础** ✅ 已完成 | 改名全切（含 `mxenv://`，同步 Trellis W2 change 文案）+ 三包拆分（`mxenv` / `mxenv-cli` / `mxenv-core`）+ LICENSE/SECURITY | 三个 change 已归档，0.13.x–0.15.0 发布 |
-| **B 常驻 host + 面板** 🟡 首片已发 | daemon、面板、审计 `configPath`、reveal API、注册视图 | `mxenv-panel-host` 已归档（0.14.0：会话式面板 + revealSingle）；launchd 常驻化与注册视图后置 |
+| **B 常驻 host + 面板** 🟡 会话+常驻已发 | daemon、面板、审计 `configPath`、reveal API、注册视图 | 0.14.0 会话式面板 + revealSingle；0.17.0 常驻（`gui install`，launchd/systemd，空闲只锁不关）；多范围面板 UI 与注册视图在 `mxenv-global-panel` 进行中 |
 | **C 开源收尾 + 1.0** 🟡 大半完成 | 新 icon（SVG 源 + favicon + 单色版）、README 重排、gitleaks 历史扫描、blog 收编 | icon/README/blog 宣传正文已完成（2026-11-17）；gitleaks 历史扫描与 CONTRIBUTING/issue 模板挂账 |
 
 ## 五、决策记录

@@ -41,6 +41,8 @@ export interface HostSessionState {
   lastActionAt: number // 显式动作（reveal/unlock/lock）
   unlockAt: number | null
   closing: boolean
+  /** 常驻（gui serve --daemon）：TTL/空闲关一律不触发（KeepAlive 语义下自杀不自洽），空闲只锁不关。 */
+  daemon?: boolean
 }
 
 function windowOpen(s: HostSessionState, now: number): boolean {
@@ -52,6 +54,7 @@ function windowOpen(s: HostSessionState, now: number): boolean {
 }
 
 function sessionExpired(s: HostSessionState, now: number): boolean {
+  if (s.daemon) return false // 常驻：不判 TTL/空闲（终结只经显式 shutdown/uninstall）
   return now - s.startedAt > SESSION_TTL_MS || now - s.lastActivityAt > SESSION_IDLE_MS
 }
 
@@ -330,6 +333,10 @@ export interface StartHostOptions {
   cwd: string
   profileName?: string
   entries?: SourceEntry[]
+  /** 常驻模式（gui serve --daemon / launchd / systemd）：无 TTL、空闲只锁不关。 */
+  daemon?: boolean
+  /** 固定端口（默认随机）。端口占用即启动失败（fail-closed，不静默改随机）。 */
+  port?: number
 }
 
 /** pid 存活校验（design 决策 2 的崩溃残留自愈）：死 pid 的发现文件/锁即陈旧。 */
@@ -371,6 +378,7 @@ export async function startHostSession(options: StartHostOptions): Promise<{ run
     lastActionAt: 0,
     unlockAt: null,
     closing: false,
+    ...(options.daemon ? { daemon: true } : {}),
   }
 
   const runtime: HostRuntime = {
@@ -397,24 +405,27 @@ export async function startHostSession(options: StartHostOptions): Promise<{ run
 
   await new Promise<void>((resolve, reject) => {
     runtime.server.once('error', reject)
-    runtime.server.listen(0, '127.0.0.1', () => resolve())
+    runtime.server.listen(options.port ?? 0, '127.0.0.1', () => resolve())
   })
   const port = (runtime.server.address() as { port: number }).port
   writeHostSession({ port, pid: process.pid, token, startedAt: new Date().toISOString() }, homeDir)
   auditHost(
     { homeDir, profileName: runtime.profileName, configPath: resolveAuditConfigPath({ homeDir }, cwd) },
-    { keys: [], outcome: 'success', action: 'start' },
+    { keys: [], outcome: 'success', action: 'start', ...(options.daemon ? { reason: 'daemon' } : {}) },
     state.startedAt,
   )
 
-  // TTL/空闲兜底定时器（墙钟判定在请求路径逐次校验——定时器只兜底）
-  const timer = setInterval(() => {
-    if (sessionExpired(state, Date.now()) && !state.closing) {
-      state.closing = true
-      void runtime.close().finally(() => clearInterval(timer))
-    }
-  }, 60_000)
-  timer.unref?.()
+  // TTL/空闲兜底定时器（墙钟判定在请求路径逐次校验——定时器只兜底）；
+  // daemon 模式无过期语义，不装定时器。
+  if (!state.daemon) {
+    const timer = setInterval(() => {
+      if (sessionExpired(state, Date.now()) && !state.closing) {
+        state.closing = true
+        void runtime.close().finally(() => clearInterval(timer))
+      }
+    }, 60_000)
+    timer.unref?.()
+  }
 
   return { runtime, url: `http://127.0.0.1:${port}/${token}` }
 }

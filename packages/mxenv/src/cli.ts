@@ -86,6 +86,10 @@ interface Args {
   /** migrate: 全局目录一次性迁移（~/.mx-env → ~/.mxenv）。 */
   home: boolean
   serve: boolean
+  /** gui serve：常驻模式（TTL 无限、空闲只锁不关；launchd/systemd 单元用）。 */
+  daemon: boolean
+  /** gui serve/install：固定端口（默认随机；固定=可预测端点，更大暴露面）。 */
+  port: number | null
   write: boolean
   remove: boolean
   warnPlaintext: boolean
@@ -101,6 +105,7 @@ function parseArgs(argv: string[]): Args {
     filter: null, noInfisical: false, env: null, profile: null, noGlobal: false,
     allowInsecureGlobal: false, printEditorUrl: false, source: null,
     target: null, hermesCategory: null, to: null, service: null, force: false, dryRun: false, home: false, serve: false,
+    daemon: false, port: null,
     write: false, remove: false, warnPlaintext: false, help: false, unknownFlags: [],
   }
 
@@ -158,6 +163,14 @@ function parseArgs(argv: string[]): Args {
       args.remove = true
     } else if (arg === '--serve') {
       args.serve = true
+    } else if (arg === '--daemon') {
+      args.daemon = true
+    } else if (arg === '--port') {
+      const raw = argv[++i]
+      if (raw) {
+        const port = Number(raw)
+        if (Number.isInteger(port) && port > 0 && port < 65536) args.port = port
+      }
     } else if (arg === '--warn-plaintext') {
       args.warnPlaintext = true
     } else if (arg === '--help' || arg === '-h') {

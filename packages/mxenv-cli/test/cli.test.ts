@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { execFileSync, spawnSync } from 'child_process'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { tmpdir } from 'os'
+import { randomUUID } from 'crypto'
 
 // Wave B：gui 已落地（panel-host）；global/host 仍骨架预留，--help 不得暴露它们。
 
@@ -26,6 +28,16 @@ describe('mxenv-cli face', () => {
     // dispatch 里拦）。gate 按行首匹配，不做子串禁令。
     expect(out).toMatch(/^mxenv gui\b/m)
     expect(out).not.toMatch(/^\s+(global|host)\b/m)
+  })
+
+  it('routes gui subcommands (words land in positionals, not subArgs)', () => {
+    // 回归：parseArgs 是 L2 逐字节 parity 拷贝（仅 run 有 subArgs 语义），
+    // cmdGui 必须从 positionals 取子命令——否则 gui status 落进默认附着分支
+    // 并派生 detached serve 链（0.16.0 实发缺陷）。
+    const home = join(tmpdir(), `mxenv-cli-gui-route-${randomUUID()}`)
+    const r = spawnSync('node', [CLI, 'gui', 'status'], { encoding: 'utf8', env: { ...process.env, HOME: home } })
+    expect(r.status).toBe(1)
+    expect(r.stdout).toContain('no running host session')
   })
 
   it('--version matches the package manifest', () => {

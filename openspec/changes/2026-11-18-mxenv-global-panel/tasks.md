@@ -26,9 +26,9 @@
 
 ## 4. 常驻模式
 
-- [ ] `gui serve --daemon`：TTL 无限、空闲只锁不关
-- [ ] `gui install|uninstall`：launchd plist / systemd --user 单元生成、装载、卸载；`--port` 可选固定；install 输出安全摘要
-- [ ] 测试：单元文件生成快照、daemon 语义（空闲→locked 非 closed）
+- [x] `gui serve --daemon`：TTL 无限、空闲只锁不关
+- [x] `gui install|uninstall`：launchd plist / systemd --user 单元生成、装载、卸载；`--port` 可选固定；install 输出安全摘要
+- [x] 测试：单元文件生成快照、daemon 语义（空闲→locked 非 closed）（16 例 daemon.test.ts + cli 路由回归；真机 install→kill→KeepAlive 重拉→uninstall 全清验证）
 
 ## 5. 远程范围（打开远程网页管理）
 
@@ -38,8 +38,6 @@
 
 ## 6. 文档与收口
 
-- [ ] guide commands.md：gui 子命令全量（install/uninstall/--daemon/--port）、panel add/remove
-- [ ] security.md：常驻暴露面陈述、远程管理红线
-- [ ] ux-architecture.md：Wave B 状态更新（B2 面板落地、常驻落地、远程契约先行）
-- [ ] blog 承诺清单核对（面板常驻 → 已交付）；SKILL.md 红线补写端点边界
-- [ ] 全门测试（core 146 / L2 189 / cli 45 / 根 13 → 更新后全绿）；openspec 归档准备
+- [x] guide commands.md / security.md / ux-architecture.md / blog：常驻部分（gui install/uninstall/--daemon/--port、暴露面陈述、Wave B 状态、承诺清单勾选）
+- [ ] guide 文档的远程节 + security.md 远程红线 + SKILL.md 端点边界（随组5/收口一并）
+- [ ] 全门测试（core 148 / L2 189 / cli 62 / 根 13 → 更新后全绿）；openspec 归档准备
