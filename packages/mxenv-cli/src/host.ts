@@ -8,7 +8,7 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { randomBytes } from 'crypto'
-import { panelPage } from './panel-page'
+import { panelPage, panelLandingPage } from './panel-page'
 import {
   acquireHostLock,
   clearHostSession,
@@ -198,6 +198,12 @@ export function createHostHandler(runtime: HostRuntime) {
     }
 
     const url = new URL(req.url || '/', 'http://127.0.0.1')
+
+    // 引导页：无 token 直接访问根路径 → 静态指路页（零会话信息泄露，唯一交互是本地跳转）。
+    if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '')) {
+      send(res, 200, panelLandingPage(), { 'content-type': 'text/html; charset=utf-8' })
+      return
+    }
 
     // 面板页（P2 第一片）：token-in-path 一次换 HTML。浏览器首访无 Bearer，
     // 故须在认证检查前精确匹配当前会话 token；其余路径照旧走认证（不泄露会话存在性）。

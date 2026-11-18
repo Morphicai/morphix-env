@@ -95,6 +95,16 @@ describe('panel page (token-in-path)', () => {
     expect(res.status).toBe(401)
     expect(res.headers.get('content-type')).toContain('application/json')
   })
+
+  it('bare / serves the static landing page with no session info', async () => {
+    const res = await fetch(`${base}/`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    const html = await res.text()
+    expect(html).toContain('mxenv gui') // 指路命令
+    expect(html).not.toContain(runtime.state.token) // 不泄露当前 token
+    expect(html).not.toContain('VR_A') // 不泄露键名
+  })
 })
 
 describe('consumer boundary (reveal/unlock are panel-session only)', () => {
